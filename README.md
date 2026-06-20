@@ -1,0 +1,222 @@
+# Weave
+
+> Code-first object abstraction over PostgreSQL. Think in nested objects, never write SQL.
+
+Weave lets you model your data as **objects** — nested as deep as you like — and
+translates that into a real relational schema (tables, foreign keys, indexes). It
+materializes the DDL for you, and **weaves** flat rows back into object trees on
+read. Underneath it's 100% relational: you get referential integrity, ACID
+transactions, and the Postgres optimizer for free — you just never see SQL.
+
+> **Status:** pre-release / alpha. The API may still change.
+
+## Why
+
+The object–relational impedance mismatch forces a bad trade:
+
+- **MongoDB** — great object ergonomics, weak relational guarantees; embeds
+  everything by default, which becomes consistency debt.
+- **ORMs** (Prisma, TypeORM) — hide SQL behind heavy layers and their own schema
+  languages.
+- **Query builders** (Kysely, Drizzle) — excellent, but keep you glued to SQL and
+  the row/table model.
+
+Weave aims at the missing spot: **Postgres' relational guarantees + Mongo's object
+ergonomics + zero SQL in application code.**
+
+## The model: two relationships, both foreign keys
+
+Everything is relational. What differs between two relationships isn't *where* the
+data lives — it's **who owns it** and **who controls its lifecycle**.
+
+| | `owned` (composition) | `reference` (association) |
+|---|---|---|
+| Ownership | exclusive to the parent | independent / shareable |
+| Lifecycle | dies with the parent (**cascade**) | lives on its own (**no cascade**) |
+| Writes | managed by the parent | read-only from this side |
+| Storage | dedicated, path-prefixed table | FK column / join table |
+| Reads | automatic (part of the aggregate) | on demand (`expand` / `select`) |
+
+## Requirements
+
+- **PostgreSQL 18+** (Weave uses the native `uuidv7()` for ordered, index-friendly ids).
+- Node 20+.
+
+## Install
+
+```bash
+npm install @mauroandre/weave postgres
+```
+
+## Quick start
+
+```ts
+import { defineEntity, text, int4, bool, array, owned, reference, weave } from "@mauroandre/weave";
+
+const author = defineEntity("authors", {
+  name:  text().notNull(),
+  email: text().notNull().unique(),
+});
+
+const tag = defineEntity("tags", { label: text().notNull() });
+
+const post = defineEntity("posts", {
+  title:     text().notNull(),
+  published: bool().notNull().default(false),
+  views:     int4().notNull().default(0),
+  keywords:  array(text()),            // text[]
+  author:    reference(author),        // N:1  → author_id
+  tags:      reference(array(tag)),    // N:N  → post_tags join table
+  comments: owned(array({              // 1:N  → post_comments table (cascade)
+    body:     text().notNull(),
+    approved: bool().notNull().default(false),
+  })),
+});
+
+const db = weave({ url: process.env.DATABASE_URL, entities: { author, tag, post } });
+
+await db.sync(); // creates authors, tags, posts, post_tags, post_comments
+```
+
+`InferEntity<typeof post>` is inferred automatically — `id`, `createdAt`,
+`updatedAt` are managed for you.
+
+## Writing
+
+`save` shreds the object into rows and upserts the whole aggregate in one
+transaction. You set references by id; the referenced table is never touched.
+
+```ts
+const ts = await db.save(tag, { label: "typescript" });
+
+const p = await db.save(post, {
+  title: "Why Weave",
+  authorId: someAuthorId,        // N:1 reference, by id
+  tagsIds: [ts.id],              // N:N reference, by id set (replaces the set)
+  comments: [{ body: "great!" }] // owned children, written in cascade
+});
+```
+
+- `owned` children are **replaced** on save (the object is the source of truth).
+- `reference` is set via `<field>Id` (N:1) or `<field>Ids` (N:N) — Weave never
+  writes the target entity.
+
+## Reading
+
+`owned` comes back automatically. `reference` comes only when you ask for it.
+
+```ts
+const posts = await db.find(post, {
+  where:  { published: true },
+  expand: { author: true, tags: true },   // follow references
+});
+// posts[0].comments[]   → owned, nested automatically
+// posts[0].author       → reference, because it was expanded
+// posts[0].tags[]        → N:N targets, because expanded
+```
+
+### Filtering — the whole tree, compiled to indexed `EXISTS`
+
+```ts
+await db.find(post, {
+  where: {
+    published: true,
+    views:   { gte: 1000 },                  // operators
+    keywords:{ has: "typescript" },          // array column
+    author:  { name: { ilike: "mauro%" } },  // reference target  → EXISTS
+    tags:    { some: { label: "postgres" } },// N:N quantifier     → EXISTS
+    comments:{ every: { approved: true } },  // owned quantifier
+    or: [ /* ... */ ],                        // and / or / not
+  },
+  orderBy: { views: "desc" },
+});
+```
+
+- **Operators:** `eq` (bare value), `ne`, `gt`/`gte`/`lt`/`lte`, `in`/`notIn`,
+  `like`/`ilike`, `isNull`.
+- **Array columns:** `has`, `hasSome`, `hasEvery`, `isEmpty`.
+- **Quantifiers** (1:N owned, N:N reference): `some` / `every` / `none`.
+- **Logic:** `and` / `or` / `not`, nestable at any level.
+- Filtering by a reference's raw FK: `{ authorId: "..." }`.
+
+### Pagination
+
+```ts
+const page = await db.paginate(post, {
+  where: { published: true },
+  orderBy: { views: "desc" },
+  page: 2, perPage: 20,
+});
+// { docs, docsQuantity, pageQuantity, currentPage }
+
+await db.count(post, { where: { published: true } });
+```
+
+## Projection — `select` prunes the object *and* the type
+
+```ts
+const rows = await db.find(post, {
+  select: { title: true, author: { name: true }, comments: { body: true } },
+});
+// rows[0]: { id; title; author: { id; name } | null; comments: { id; body }[] }
+rows[0].views; // ❌ compile error — not selected, doesn't exist on the type
+```
+
+Because a non-selected field doesn't exist in the result type, projection is a
+typed base for **field-level permissions** in your app. Define a view per role:
+
+```ts
+import { projection } from "@mauroandre/weave";
+
+const publicEmployee = projection(employee, { name: true });           // no salary
+const hrEmployee     = projection(employee, { name: true, salary: true });
+
+const view = req.user.isHR ? hrEmployee : publicEmployee;
+const rows = await db.find(view, { where: { /* ... */ } });
+// rows[0].salary is a compile error unless the view includes it
+```
+
+> Projection is response *shaping* (opt-in), not enforced security. For
+> default-deny, use Postgres RLS underneath.
+
+## Migrations
+
+Code-first: you never write DDL. Weave diffs your shape against the live database.
+
+```ts
+await db.sync();        // apply additive changes (create table, add column/index)
+const cs = await db.diff();         // structured change set
+const { sql, warnings } = await db.generate(); // reviewable migration SQL (not applied)
+```
+
+`sync` applies **additive** changes in a transaction (behind an advisory lock, so
+it's multi-instance safe). Destructive/altering drift (dropped columns, type
+changes) is **reported, never applied** — that's the honest residual tax of
+code-first on a real relational database.
+
+### CLI
+
+Point it at a config that default-exports your `weave({ ... })` instance:
+
+```bash
+weave status     # show pending additive changes and drift warnings
+weave generate --out migrations/0001.sql   # write reviewable SQL
+weave sync       # apply additive changes
+```
+
+```js
+// weave.config.mjs
+import { db } from "./src/db.js";
+export default db;
+```
+
+## Design references
+
+Weave's architecture (object on top, relational underneath, a compiler in the
+middle) is validated by **Gel / EdgeDB**. The "type as object" design and nested
+reads are inspired by **Drizzle `pg-core`**; PG→TS mappings by **Kanel / pg-types**.
+None are dependencies.
+
+## License
+
+MIT
