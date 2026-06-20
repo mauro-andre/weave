@@ -3,7 +3,9 @@
 # Derrubar: podman-compose down        (mantém os dados)
 #           podman-compose down -v     (apaga o volume)
 #
-# Postgres 18 → tem uuidv7() nativo (o id v7 do PRD).
+# Dois servidores: PG 18 (porta 5432) e PG 17 (porta 5433). O Weave gera o id
+# v7 no lado da lib, então roda igual nos dois — o PG 17 prova essa compat.
+# Rodar a suíte contra o 17:  DATABASE_URL=postgres://weave:weave@localhost:5433/weave npm test
 services:
   postgres:
     image: postgres:18-alpine
@@ -25,5 +27,24 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres17:
+    image: postgres:17-alpine
+    container_name: weave-postgres17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weave
+      POSTGRES_PASSWORD: weave
+      POSTGRES_DB: weave
+    ports:
+      - "5433:5432"
+    volumes:
+      - weave-pgdata17:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   weave-pgdata:
+  weave-pgdata17:

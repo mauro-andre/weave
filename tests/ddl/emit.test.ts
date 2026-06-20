@@ -26,7 +26,7 @@ describe("emitCreateTable", () => {
     expect(emitCreateTable(user)).toBe(
       [
         "CREATE TABLE users (",
-        "  id uuid PRIMARY KEY DEFAULT uuidv7(),",
+        "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
         "  name text NOT NULL,",
         "  email text NOT NULL UNIQUE,",
         "  bio text,",

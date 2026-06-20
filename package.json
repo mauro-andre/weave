@@ -22,7 +22,9 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "npm run test:pg18 && npm run test:pg17",
+    "test:pg18": "DATABASE_URL=postgres://weave:weave@localhost:5432/weave vitest run",
+    "test:pg17": "DATABASE_URL=postgres://weave:weave@localhost:5433/weave vitest run",
     "test:watch": "vitest",
     "test:types": "vitest typecheck --run"
   },

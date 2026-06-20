@@ -124,7 +124,7 @@ function collect(
   parent: ParentLink | undefined,
 ): TableSpec[] {
   const columns: ColumnSpec[] = [
-    { name: "id", sqlType: "uuid", notNull: true, primaryKey: true, default: "uuidv7()" },
+    { name: "id", sqlType: "uuid", notNull: true, primaryKey: true, default: "gen_random_uuid()" },
   ];
   const indexes: IndexSpec[] = [];
   const children: TableSpec[] = [];

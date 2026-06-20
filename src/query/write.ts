@@ -26,6 +26,7 @@ import {
   joinTargetFk,
 } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
+import { uuidv7 } from "../util/uuid.js";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
 export interface Executor {
@@ -72,8 +73,10 @@ async function writeNode(
   input: Record<string, unknown>,
   parent: ParentLink | undefined,
 ): Promise<string> {
-  const columns: string[] = [];
-  const values: unknown[] = [];
+  // Generate the id app-side (works on any Postgres; see util/uuid).
+  const id = typeof input["id"] === "string" ? input["id"] : uuidv7();
+  const columns: string[] = ["id"];
+  const values: unknown[] = [id];
 
   if (parent) {
     columns.push(parent.fkColumn);
@@ -93,14 +96,11 @@ async function writeNode(
     }
   }
 
-  let id: string;
+  // Root with a provided id → upsert (it may already exist); else insert.
   if (!parent && typeof input["id"] === "string") {
-    const query = renderUpsert(table, ["id", ...columns]);
-    const rows = await exec.unsafe(query, [input["id"], ...values]);
-    id = rows[0]!["id"] as string;
+    await exec.unsafe(renderUpsert(table, columns), values);
   } else {
-    const rows = await exec.unsafe(renderInsert(table, columns), values);
-    id = rows[0]!["id"] as string;
+    await exec.unsafe(renderInsert(table, columns), values);
   }
 
   for (const [field, value] of Object.entries(shape)) {
