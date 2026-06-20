@@ -119,10 +119,29 @@ type WhereShape<TShape, D extends unknown[] = WBudget> = {
  */
 export type WhereInput<E> = E extends Entity<string, infer TShape> ? WhereShape<TShape> : never;
 
+/** Sort direction. */
+export type SortDir = "asc" | "desc";
+
+type OrderByShape<TShape> = {
+  id?: SortDir;
+  createdAt?: SortDir;
+  updatedAt?: SortDir;
+} & {
+  [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: SortDir;
+};
+
+/** Order by the entity's `id`, timestamps, or root scalar columns. */
+export type OrderByInput<E> = E extends Entity<string, infer TShape>
+  ? OrderByShape<TShape>
+  : never;
+
 export interface FindOptions<E> {
   where?: WhereInput<E>;
+  orderBy?: OrderByInput<E>;
   /** Map of `reference`/`owned` fields to follow; see `ExpandInput`. */
   expand?: ExpandMap;
+  limit?: number;
+  offset?: number;
 }
 
 /** A runtime expand map: field → `true` or a nested expand map. */
@@ -416,7 +435,37 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
 
   const lines = [`SELECT ${obj} AS data`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
-  lines.push(`ORDER BY ${table}.created_at`);
+  lines.push(`ORDER BY ${compileOrderBy(table, options.orderBy)}`);
+  if (options.limit != null) lines.push(`LIMIT ${bind(params, options.limit)}`);
+  if (options.offset != null) lines.push(`OFFSET ${bind(params, options.offset)}`);
 
   return { text: lines.join("\n"), params };
+}
+
+/** Render the `ORDER BY` body (defaults to `created_at` when none given). */
+function compileOrderBy(table: string, orderBy: Record<string, unknown> | undefined): string {
+  const entries = Object.entries(orderBy ?? {});
+  if (entries.length === 0) return `${table}.created_at`;
+  return entries
+    .map(([col, dir]) => `${table}.${camelToSnake(col)} ${dir === "desc" ? "DESC" : "ASC"}`)
+    .join(", ");
+}
+
+/** Compile a `count` into parameterized SQL. */
+export function compileCount<E extends Entity<string, ShapeRecord>>(
+  entity: E,
+  where?: WhereInput<E>,
+): CompiledQuery {
+  const table = entity.name;
+  const params: unknown[] = [];
+  const whereSql = compileWhere(
+    table,
+    singularize(table),
+    entity.columns,
+    (where ?? {}) as Record<string, unknown>,
+    params,
+  );
+  let text = `SELECT count(*)::int AS n FROM ${table}`;
+  if (whereSql) text += ` WHERE ${whereSql}`;
+  return { text, params };
 }

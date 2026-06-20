@@ -24,7 +24,13 @@ import type {
   InferInsert,
   ExpandInput,
 } from "../schema/entity.js";
-import { compileFind, type FindOptions, type WhereInput } from "../query/read.js";
+import {
+  compileFind,
+  compileCount,
+  type FindOptions,
+  type WhereInput,
+  type OrderByInput,
+} from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
 
@@ -125,7 +131,10 @@ export class Weave {
     entity: Entity<TName, TShape>,
     options: {
       where?: WhereInput<Entity<TName, TShape>>;
+      orderBy?: OrderByInput<Entity<TName, TShape>>;
       expand?: X & ExpandInput<Entity<TName, TShape>>;
+      limit?: number;
+      offset?: number;
     } = {},
   ): Promise<InferRead<Entity<TName, TShape>, X>[]> {
     const { text, params } = compileFind(
@@ -136,6 +145,57 @@ export class Weave {
     return rows.map((row) =>
       rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
     ) as InferRead<Entity<TName, TShape>, X>[];
+  }
+
+  /** Count rows matching a filter. */
+  async count<TName extends string, TShape extends ShapeRecord>(
+    entity: Entity<TName, TShape>,
+    options: { where?: WhereInput<Entity<TName, TShape>> } = {},
+  ): Promise<number> {
+    const { text, params } = compileCount(entity, options.where);
+    const rows = await this.sql.unsafe(text, params as never[]);
+    return (rows[0] as unknown as { n: number }).n;
+  }
+
+  /**
+   * Paginated read. Returns the page plus totals, in `zodmongo` ergonomics:
+   * `docs` / `docsQuantity` (total matching) / `pageQuantity` / `currentPage`.
+   * `page` is 1-based.
+   */
+  async paginate<TName extends string, TShape extends ShapeRecord, X = {}>(
+    entity: Entity<TName, TShape>,
+    options: {
+      where?: WhereInput<Entity<TName, TShape>>;
+      orderBy?: OrderByInput<Entity<TName, TShape>>;
+      expand?: X & ExpandInput<Entity<TName, TShape>>;
+      page?: number;
+      perPage?: number;
+    } = {},
+  ): Promise<{
+    docs: InferRead<Entity<TName, TShape>, X>[];
+    docsQuantity: number;
+    pageQuantity: number;
+    currentPage: number;
+  }> {
+    const page = Math.max(1, options.page ?? 1);
+    const perPage = Math.max(1, options.perPage ?? 20);
+    const docsQuantity = await this.count(
+      entity,
+      options.where !== undefined ? { where: options.where } : {},
+    );
+    const docs = await this.find<TName, TShape, X>(entity, {
+      ...(options.where !== undefined ? { where: options.where } : {}),
+      ...(options.orderBy !== undefined ? { orderBy: options.orderBy } : {}),
+      ...(options.expand !== undefined ? { expand: options.expand } : {}),
+      limit: perPage,
+      offset: (page - 1) * perPage,
+    });
+    return {
+      docs,
+      docsQuantity,
+      pageQuantity: Math.max(1, Math.ceil(docsQuantity / perPage)),
+      currentPage: page,
+    };
   }
 
   /**
