@@ -216,11 +216,19 @@ export function renderCreateTable(spec: TableSpec): string {
   return `CREATE TABLE ${spec.name} (\n${lines.join(",\n")}\n);`;
 }
 
+/** Render a single column definition (for `CREATE TABLE` / `ALTER TABLE ADD COLUMN`). */
+export function renderColumnDef(c: ColumnSpec): string {
+  return renderColumnSpec(c);
+}
+
+/** Render one `CREATE INDEX` statement. */
+export function renderIndexStmt(table: string, index: IndexSpec): string {
+  return `CREATE INDEX ${index.name} ON ${table} (${index.column});`;
+}
+
 /** Render the `CREATE INDEX`es for a single spec. */
 export function renderIndexes(spec: TableSpec): string[] {
-  return spec.indexes.map(
-    (i) => `CREATE INDEX ${i.name} ON ${spec.name} (${i.column});`,
-  );
+  return spec.indexes.map((i) => renderIndexStmt(spec.name, i));
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────

@@ -15,7 +15,13 @@
 
 import process from "node:process";
 import postgres from "postgres";
-import { collectTables, planTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
+import { collectTables, planTables } from "../ddl/emit.js";
+import {
+  diffSchema,
+  emitChanges,
+  type ActualSchema,
+  type ChangeSet,
+} from "../ddl/diff.js";
 import type {
   Entity,
   ShapeRecord,
@@ -70,12 +76,16 @@ export interface Page<T> {
   currentPage: number;
 }
 
-/** Outcome of a {@link Weave.sync} call. */
+/** Outcome of a {@link Weave.sync} call (additive changes applied). */
 export interface SyncResult {
   /** Tables created this run. */
   created: string[];
-  /** Tables that already existed and were left untouched. */
-  skipped: string[];
+  /** Columns added to existing tables (`table.column`). */
+  columnsAdded: string[];
+  /** Indexes created on existing tables. */
+  indexesAdded: string[];
+  /** Drift detected but not applied (destructive/altering); see {@link Weave.diff}. */
+  warnings: string[];
 }
 
 export class Weave {
@@ -107,40 +117,91 @@ export class Weave {
     return this.sql.begin(fn) as Promise<T>;
   }
 
+  /** The desired schema across all entities, ordered for creation. */
+  private desiredSpecs() {
+    return planTables(this.entities.flatMap((entity) => collectTables(entity)));
+  }
+
+  /** Introspect the live `public` schema (tables, columns, indexes). */
+  private async introspect(q: Sql | TransactionSql): Promise<ActualSchema> {
+    const cols = await q<
+      {
+        table_name: string;
+        column_name: string;
+        udt_name: string;
+        data_type: string;
+        is_nullable: string;
+      }[]
+    >`
+      select table_name, column_name, udt_name, data_type, is_nullable
+      from information_schema.columns
+      where table_schema = 'public'
+    `;
+    const idx = await q<{ tablename: string; indexname: string }[]>`
+      select tablename, indexname from pg_indexes where schemaname = 'public'
+    `;
+
+    const schema: ActualSchema = new Map();
+    const table = (name: string) => {
+      let t = schema.get(name);
+      if (!t) {
+        t = { name, columns: new Map(), indexes: new Set() };
+        schema.set(name, t);
+      }
+      return t;
+    };
+    for (const c of cols) {
+      const isArray = c.data_type === "ARRAY";
+      table(c.table_name).columns.set(c.column_name, {
+        name: c.column_name,
+        udtName: isArray ? c.udt_name.replace(/^_/, "") : c.udt_name,
+        isArray,
+        notNull: c.is_nullable === "NO",
+      });
+    }
+    for (const i of idx) table(i.tablename).indexes.add(i.indexname);
+    return schema;
+  }
+
+  /** Compute the diff between the registered shape and the live database. */
+  async diff(): Promise<ChangeSet> {
+    return diffSchema(this.desiredSpecs(), await this.introspect(this.sql));
+  }
+
   /**
-   * Create any registered table that doesn't exist yet, in one transaction.
-   * Idempotent: existing tables are skipped (not altered). See class note.
+   * Generate the additive migration SQL (and any drift warnings) without
+   * applying it — the reviewable artifact for production (apply is delegated).
+   */
+  async generate(): Promise<{ sql: string; warnings: string[] }> {
+    const { statements, warnings } = emitChanges(await this.diff());
+    return { sql: statements.join("\n\n"), warnings };
+  }
+
+  /**
+   * Apply the **additive** diff (create tables, add columns/indexes) in one
+   * transaction, behind an advisory lock. Destructive/altering drift is NOT
+   * applied — it's returned in `warnings` (use {@link diff}/{@link generate}).
    */
   async sync(): Promise<SyncResult> {
     const created: string[] = [];
-    const skipped: string[] = [];
+    const columnsAdded: string[] = [];
+    const indexesAdded: string[] = [];
+    let warnings: string[] = [];
 
     await this.sql.begin(async (tx) => {
       await tx`select pg_advisory_xact_lock(${SYNC_LOCK_KEY})`;
+      const changes = diffSchema(this.desiredSpecs(), await this.introspect(tx));
+      warnings = changes.warnings;
 
-      const rows = await tx<{ table_name: string }[]>`
-        select table_name from information_schema.tables
-        where table_schema = 'public'
-      `;
-      const existing = new Set(rows.map((r) => r.table_name));
+      const { statements } = emitChanges(changes);
+      for (const stmt of statements) await tx.unsafe(stmt);
 
-      // Gather every table (root + owned + join) across entities, then order
-      // them so referenced tables are created before the tables referencing them.
-      const allSpecs = this.entities.flatMap((entity) => collectTables(entity));
-      for (const spec of planTables(allSpecs)) {
-        if (existing.has(spec.name)) {
-          skipped.push(spec.name);
-          continue;
-        }
-        await tx.unsafe(renderCreateTable(spec));
-        for (const idx of renderIndexes(spec)) {
-          await tx.unsafe(idx);
-        }
-        created.push(spec.name);
-      }
+      created.push(...changes.createTables.map((s) => s.name));
+      columnsAdded.push(...changes.addColumns.map((c) => `${c.table}.${c.column.name}`));
+      indexesAdded.push(...changes.addIndexes.map((i) => i.index.name));
     });
 
-    return { created, skipped };
+    return { created, columnsAdded, indexesAdded, warnings };
   }
 
   /**

@@ -40,7 +40,7 @@ describe.skipIf(noDb)("driver", () => {
       "weave_it_categories",
       "weave_it_products",
     ]);
-    expect(result.skipped).toEqual([]);
+    expect(result.warnings).toEqual([]);
 
     const rows = await db.sql<{ table_name: string }[]>`
       select table_name from information_schema.tables
@@ -52,13 +52,11 @@ describe.skipIf(noDb)("driver", () => {
     ]);
   });
 
-  it("sync() is idempotent — second run skips existing tables", async () => {
+  it("sync() is idempotent — second run is a no-op", async () => {
     const result = await db.sync();
     expect(result.created).toEqual([]);
-    expect(result.skipped.sort()).toEqual([
-      "weave_it_categories",
-      "weave_it_products",
-    ]);
+    expect(result.columnsAdded).toEqual([]);
+    expect(result.indexesAdded).toEqual([]);
   });
 
   it("the table works end to end (defaults, array, uuid v7)", async () => {
