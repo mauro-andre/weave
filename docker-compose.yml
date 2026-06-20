@@ -1,0 +1,29 @@
+# Postgres local para desenvolvimento e testes do Weave.
+# Subir:    podman-compose up -d
+# Derrubar: podman-compose down        (mantém os dados)
+#           podman-compose down -v     (apaga o volume)
+#
+# Postgres 18 → tem uuidv7() nativo (o id v7 do PRD).
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: weave-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weave
+      POSTGRES_PASSWORD: weave
+      POSTGRES_DB: weave
+    ports:
+      - "5432:5432"
+    volumes:
+      # PG 18+ quer o mount na raiz (cria subdir por versão lá dentro),
+      # não mais em /var/lib/postgresql/data.
+      - weave-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  weave-pgdata:
