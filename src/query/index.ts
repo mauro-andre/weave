@@ -5,3 +5,4 @@ export {
   type CompiledQuery,
 } from "./read.js";
 export { rehydrate } from "./rehydrate.js";
+export { shred, renderInsert, renderUpsert, type Executor } from "./write.js";

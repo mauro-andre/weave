@@ -21,4 +21,5 @@ export {
   type ShapeRecord,
   type SystemColumns,
   type InferEntity,
+  type InferInsert,
 } from "./entity.js";

@@ -23,11 +23,11 @@ import { Owned, type OwnedShape } from "../schema/owned.js";
 import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
-/** Equality filter over an entity's root scalar columns. */
+/** Equality filter over an entity's `id` and root scalar columns (owned excluded). */
 export type WhereInput<E> =
   E extends Entity<string, infer TShape>
-    ? {
-        [K in keyof TShape as TShape[K] extends Column<unknown, boolean> ? K : never]?:
+    ? { id?: string } & {
+        [K in keyof TShape as [InferColumn<TShape[K]>] extends [never] ? never : K]?:
           InferColumn<TShape[K]>;
       }
     : never;

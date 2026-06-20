@@ -16,7 +16,7 @@ import { Column } from "./column.js";
 export type OwnedCardinality = "one" | "many";
 
 /** A sub-shape: named columns and/or further owned relationships. */
-export type OwnedShape = Record<string, Column<unknown, boolean> | AnyOwned>;
+export type OwnedShape = Record<string, Column<unknown, boolean, boolean> | AnyOwned>;
 
 /** Options for an owned relationship. */
 export interface OwnedOptions {

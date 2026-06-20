@@ -1,18 +1,17 @@
 /**
- * Column builder (Phase 1a).
+ * Column builder (Phase 1a; `hasDefault` added at the type level in Phase 2c).
  *
  * A `Column` wraps a {@link PgType} from the catalog and layers column-level
  * modifiers on top. It is **immutable**: every modifier returns a *new* column,
  * so type narrowing is correct and config never leaks between uses.
  *
- * Only **nullability** is tracked at the type level (it changes the read type:
- * `notNull → T`, otherwise `T | null`). `default`/`unique`/`index` are
- * runtime-only config for now — they affect DDL, not the read type. They rejoin
- * the type level when we build `save()`'s insert type (Phase 2/3).
+ * Two facts are tracked at the type level:
+ *   - **nullability** (`TNotNull`): changes the *read* type (`T` vs `T | null`).
+ *   - **hasDefault** (`THasDefault`): changes the *insert* type — a notNull
+ *     column with a default becomes optional on insert (the DB fills it).
  */
 
-import type { PgType } from "../types/pg-type.js";
-import type { Infer } from "../types/pg-type.js";
+import type { PgType, Infer } from "../types/pg-type.js";
 
 /** Runtime description of a column, consumed by the DDL layer. */
 export interface ColumnConfig {
@@ -33,57 +32,62 @@ export interface ColumnConfig {
 }
 
 /**
- * A column over data type `TData`, tracking nullability in `TNotNull`.
+ * A column over data type `TData`.
  *
- * @typeParam TData    - the TS value type (e.g. `string`, `string[]`).
- * @typeParam TNotNull - `true` once `.notNull()` (or an array default) applies.
+ * @typeParam TData       - the TS value type (e.g. `string`, `string[]`).
+ * @typeParam TNotNull    - `true` once `.notNull()` (or an array default) applies.
+ * @typeParam THasDefault - `true` once a default exists (`.default()` or array).
  */
-export class Column<TData, TNotNull extends boolean = false> {
-  /** Phantom carrier so the compiler can recover `TData`/`TNotNull`. No runtime field. */
-  declare readonly _types: { data: TData; notNull: TNotNull };
+export class Column<
+  TData,
+  TNotNull extends boolean = false,
+  THasDefault extends boolean = false,
+> {
+  /** Phantom carrier so the compiler can recover the type params. No runtime field. */
+  declare readonly _types: { data: TData; notNull: TNotNull; hasDefault: THasDefault };
 
   constructor(readonly config: ColumnConfig) {}
 
   /** Mark the column `NOT NULL` — narrows the read type from `T | null` to `T`. */
-  notNull(): Column<TData, true> {
+  notNull(): Column<TData, true, THasDefault> {
     return new Column({ ...this.config, notNull: true });
   }
 
   /** Mark the column nullable — widens the read type back to `T | null`. */
-  nullable(): Column<TData, false> {
+  nullable(): Column<TData, false, THasDefault> {
     return new Column({ ...this.config, notNull: false });
   }
 
-  /** Declare a default value (literal). Does not change the read type. */
-  default(value: TData): Column<TData, TNotNull> {
+  /** Declare a default value — makes the column optional on insert. */
+  default(value: TData): Column<TData, TNotNull, true> {
     return new Column({ ...this.config, hasDefault: true, default: value });
   }
 
   /** Add a single-column `UNIQUE`. */
-  unique(): Column<TData, TNotNull> {
+  unique(): Column<TData, TNotNull, THasDefault> {
     return new Column({ ...this.config, unique: true });
   }
 
   /** Add a single-column index. */
-  index(): Column<TData, TNotNull> {
+  index(): Column<TData, TNotNull, THasDefault> {
     return new Column({ ...this.config, index: true });
   }
 }
 
 /** A column of any shape — for constraints where the data type is irrelevant. */
-export type AnyColumn = Column<unknown, boolean>;
+export type AnyColumn = Column<unknown, boolean, boolean>;
 
 /** The TS type a column reads as, accounting for nullability. */
 export type InferColumn<C> =
-  C extends Column<infer TData, infer TNotNull>
+  C extends Column<infer TData, infer TNotNull, boolean>
     ? TNotNull extends true
       ? TData
       : TData | null
     : never;
 
 /** Build a fresh scalar column from a catalog type (nullable, no default). */
-export function scalarColumn<T extends PgType>(pgType: T): Column<Infer<T>, false> {
-  return new Column<Infer<T>, false>({
+export function scalarColumn<T extends PgType>(pgType: T): Column<Infer<T>, false, false> {
+  return new Column<Infer<T>, false, false>({
     pgType,
     isArray: false,
     notNull: false,

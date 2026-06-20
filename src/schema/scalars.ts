@@ -51,15 +51,15 @@ export const bytea = () => scalarColumn(catalog.bytea);
  * Scalar arrays default to **`NOT NULL DEFAULT '{}'`** (you always get `[]`,
  * never `null`); opt out with `array(text()).nullable()`.
  */
-export function array<TData, TNotNull extends boolean>(
-  inner: Column<TData, TNotNull>,
-): Column<TData[], true>;
+export function array<TData>(
+  inner: Column<TData, boolean, boolean>,
+): Column<TData[], true, true>;
 export function array<TShape extends OwnedShape>(shape: TShape): OwnedArray<TShape>;
 export function array(
-  arg: Column<unknown, boolean> | OwnedShape,
-): Column<unknown[], true> | OwnedArray<OwnedShape> {
+  arg: Column<unknown, boolean, boolean> | OwnedShape,
+): Column<unknown[], true, true> | OwnedArray<OwnedShape> {
   if (arg instanceof Column) {
-    return new Column<unknown[], true>({
+    return new Column<unknown[], true, true>({
       pgType: arg.config.pgType,
       isArray: true,
       notNull: true,

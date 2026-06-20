@@ -12,7 +12,7 @@ import type { Column, InferColumn } from "./column.js";
 import type { AnyOwned, OwnedShape, Owned } from "./owned.js";
 
 /** A record of named fields — columns and/or owned relationships. */
-export type ShapeRecord = Record<string, Column<unknown, boolean> | AnyOwned>;
+export type ShapeRecord = Record<string, Column<unknown, boolean, boolean> | AnyOwned>;
 
 /** The managed system columns every (sub-)entity carries. */
 export interface SystemColumns {
@@ -32,7 +32,7 @@ export interface Entity<TName extends string, TShape extends ShapeRecord> {
 
 /** Read type of a single field — a scalar column or a nested owned relationship. */
 type InferField<V> =
-  V extends Column<unknown, boolean>
+  V extends Column<unknown, boolean, boolean>
     ? InferColumn<V>
     : V extends Owned<infer TShape, infer TCard>
       ? TCard extends "many"
@@ -56,6 +56,39 @@ export type InferEntity<E> =
           InferBody<TShape> &
           Pick<SystemColumns, "createdAt" | "updatedAt">
       >
+    : never;
+
+// ── Insert type (Phase 2c) ───────────────────────────────────────────────────
+
+/** Write value of one field. */
+type InsertField<V> =
+  V extends Column<infer TData, infer TNotNull, boolean>
+    ? TNotNull extends true
+      ? TData
+      : TData | null
+    : V extends Owned<infer TShape, infer TCard>
+      ? TCard extends "many"
+        ? InsertOwned<TShape>[]
+        : InsertOwned<TShape>
+      : never;
+
+/** A field is required on insert only if it is `notNull` AND has no default. */
+type IsRequired<V> = V extends Column<unknown, true, false> ? true : false;
+
+/** Split a shape into required and optional insert keys. */
+type InsertBody<TShape> = Prettify<
+  { [K in keyof TShape as IsRequired<TShape[K]> extends true ? K : never]: InsertField<TShape[K]> } & {
+    [K in keyof TShape as IsRequired<TShape[K]> extends true ? never : K]?: InsertField<TShape[K]>;
+  }
+>;
+
+/** Insert type of an owned sub-entity: optional id, body, no timestamps. */
+type InsertOwned<TShape extends OwnedShape> = Prettify<{ id?: string } & InsertBody<TShape>>;
+
+/** The object accepted by `save`: optional id (upsert), body, no managed timestamps. */
+export type InferInsert<E> =
+  E extends Entity<string, infer TShape>
+    ? Prettify<{ id?: string } & InsertBody<TShape>>
     : never;
 
 /**

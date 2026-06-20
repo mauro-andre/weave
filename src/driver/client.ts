@@ -16,9 +16,10 @@
 import process from "node:process";
 import postgres from "postgres";
 import { collectTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
-import type { Entity, ShapeRecord, InferEntity } from "../schema/entity.js";
-import { compileFind, type FindOptions } from "../query/read.js";
+import type { Entity, ShapeRecord, InferEntity, InferInsert } from "../schema/entity.js";
+import { compileFind, type FindOptions, type WhereInput } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
+import { shred, type Executor } from "../query/write.js";
 
 type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;
@@ -122,6 +123,23 @@ export class Weave {
     return rows.map((row) =>
       rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
     ) as InferEntity<Entity<TName, TShape>>[];
+  }
+
+  /**
+   * Write an aggregate transactionally: shred the object into rows, upsert the
+   * root, and replace its `owned` subtree. Returns the saved tree, re-read.
+   */
+  async save<TName extends string, TShape extends ShapeRecord>(
+    entity: Entity<TName, TShape>,
+    input: InferInsert<Entity<TName, TShape>>,
+  ): Promise<InferEntity<Entity<TName, TShape>>> {
+    const id = await this.transaction((tx) =>
+      shred(tx as unknown as Executor, entity, input as Record<string, unknown>),
+    );
+    const [saved] = await this.find(entity, {
+      where: { id } as WhereInput<Entity<TName, TShape>>,
+    });
+    return saved!;
   }
 
   /** Close the underlying connection (only if this instance created it). */
