@@ -1,6 +1,6 @@
 # Weave — PRD (Product Requirements Document)
 
-> **Status:** rascunho · **Versão:** 0.3 · **Data:** 2026-06-20
+> **Status:** rascunho · **Versão:** 0.4 · **Data:** 2026-06-20
 > Documento de planejamento interno. Docs públicas (README) serão em inglês depois.
 
 ---
@@ -111,6 +111,10 @@ mecanismo de relacionamento.)
 6. **Escrita transacional** (`shred`) — despedaça o objeto, faz upsert da árvore
    `owned` em cascata, tudo em transação ACID.
 7. **Convenções automáticas** — `id`, `createdAt`, `updatedAt` gerenciados.
+8. **Busca avançada** — filtro objeto-literal que desce na árvore (`owned`,
+   `reference`, arrays) com quantificadores, compilado a `EXISTS` indexado (§9.1).
+9. **Projeção tipada** — `select` que poda o objeto **e o tipo** de retorno, mais
+   projeções nomeadas reutilizáveis (§9.2).
 
 ### Não-objetivos (v1)
 
@@ -121,6 +125,13 @@ mecanismo de relacionamento.)
 - **Não** reimplementa motor de migrations do zero na v1 (ver decisões abertas).
 - **Não** mira paridade com Prisma/Drizzle — mira o nicho objeto-recursivo +
   zero-SQL + relacional-por-default.
+- **Não é OLAP.** É orientado a **agregado** (achar/ler/escrever árvores de
+  objeto). Agregação analítica (`group by`, `sum`/`avg` cross-entidade) estranha o
+  modelo "só objetos" → fica fora; para isso, escotilha de SQL cru.
+- **Não impõe segurança de campo/linha** na v1. Projeção (§9.2) é *shaping*
+  opt-in (ótima base p/ permissão na app, com garantia de compilação), **não**
+  default-deny. Segurança imposta = responsabilidade da aplicação + **Postgres
+  RLS** por baixo; políticas declarativas ficam pra depois.
 
 ---
 
@@ -381,7 +392,8 @@ const users = await find(user, {
 - `reference` só vem com `expand` (evita arrastar o banco atrás de cada FK).
 - Compila pra **subqueries + agregação JSON**, devolvendo a árvore já aninhada,
   `id` como string, tipos rehidratados.
-- Ciclos em `reference` seguem truncagem (herdado do `zodmongo`).
+- A recursão dos tipos tem **cap de profundidade** (rede de segurança). Ciclos
+  *reais* (A↔B) só serão construíveis com alvos `reference` lazy — adiado (§11).
 
 ### Escrita (`shred`)
 
@@ -397,6 +409,68 @@ transação**. `id`/`createdAt`/`updatedAt` automáticos.
 
 Herdar a ergonomia do `zodmongo` (`docs`/`docsQuantity`/`pageQuantity`/
 `currentPage`), agora sobre SQL (`LIMIT`/`OFFSET` + `COUNT`).
+
+### 9.1 Busca avançada (Fase 5)
+
+O `where` continua objeto-literal e **desce na árvore espelhando a shape**. Cada
+nível aninhado compila a um `EXISTS` correlacionado — que bate exatamente nos
+índices de FK auto-criados (§8). Não há SQL no código de aplicação.
+
+```ts
+await find(post, {
+  where: {
+    published: true,
+    views:  { gte: 1000 },                         // operadores escalares
+    keywords: { has: "typescript" },               // coluna text[]
+    author: { name: { ilike: "mauro%" } },         // reference N:1 → EXISTS em authors
+    tags:   { some: { label: "postgres" } },       // N:N → EXISTS via join
+    comments: { every: { approved: true } },       // owned 1:N (quantificador)
+    or: [ /* … */ ],                               // lógica and/or/not
+  },
+  orderBy: { views: "desc" },
+});
+```
+
+- **Operadores escalares:** `eq` (atalho: valor direto), `ne`, `gt`/`gte`/`lt`/
+  `lte`, `in`/`notIn`, `like`/`ilike`, `isNull`.
+- **Lógica:** `and`/`or`/`not` combináveis em qualquer nível.
+- **Aninhado:** `owned` 1:1 e `reference` N:1 → `{ campo: { …filtro do alvo… } }`;
+  `owned` 1:N e `reference` N:N → quantificadores **`some` / `every` / `none`**
+  (→ `EXISTS` / `NOT EXISTS(… AND NOT …)` / `NOT EXISTS`). Recursivo.
+- **Coluna-array:** `has` / `hasSome` / `hasEvery` / `isEmpty` (`= ANY`, `&&`,
+  `@>`, `cardinality`).
+- Profundidade da recursão dos tipos é limitada por um cap (rede de segurança,
+  como a truncagem de ciclos do `zodmongo`).
+
+### 9.2 Projeção (`select`, Fase 6)
+
+`select` poda **o objeto e o tipo de retorno** — um mecanismo só para "o que
+trazer e o que manter". Sem `select`, vale o default (owned inteiro, reference só
+no `expand`).
+
+```ts
+const rows = await find(post, {
+  select: {
+    title: true,
+    author: { name: true },     // reference: selecionar = expandir + podar
+    comments: { body: true },   // owned podado
+  },
+});
+// rows[0]: { id; title; author: { id; name } | null; comments: { id; body }[] }
+// rows[0].views → erro de compilação: não foi selecionado, não existe no tipo
+```
+
+**Projeções nomeadas** centralizam "o que cada papel vê" — base tipada para
+permissão na aplicação (o campo não-selecionado **não existe no tipo**, então não
+vaza):
+
+```ts
+const publicAuthor = projection(author, { name: true });            // sem salary
+const hrAuthor     = projection(author, { name: true, salary: true });
+await find(req.user.isHR ? hrAuthor : publicAuthor, { where: { … } });
+```
+
+> Projeção é *shaping* opt-in, **não** segurança imposta (ver §4 não-objetivos).
 
 ---
 
@@ -425,17 +499,32 @@ Herdar a ergonomia do `zodmongo` (`docs`/`docsQuantity`/`pageQuantity`/
 
 ## 11. Roadmap (fases)
 
-- **Fase 0 — Fundação:** catálogo de tipos do Postgres (objeto TS) + inferência
+- ✅ **Fase 0 — Fundação:** catálogo de tipos do Postgres (objeto TS) + inferência
   de tipo TS a partir da shape.
-- **Fase 1 — Materialização básica:** `defineEntity` + DDL de escalares e arrays.
-  Conexão + transação.
-- **Fase 2 — `owned` recursivo:** tabelas dedicadas, cascade em cadeia, N níveis;
+- ✅ **Fase 1 — Materialização básica:** `defineEntity` + DDL de escalares e arrays.
+  Conexão + transação + `sync()`.
+- ✅ **Fase 2 — `owned` recursivo:** tabelas dedicadas, cascade em cadeia, N níveis;
   weave/shred da árvore owned.
-- **Fase 3 — `reference`:** FK N:1/1:1, leitura com `expand`, escrita.
-- **Fase 4 — N:N e ciclos:** tabela de associação + truncagem de ciclos.
-- **Fase 5 — Busca avançada:** filtros ricos, ordenação, paginação.
-- **Fase 6 — Migrations & DX:** diff de shape → migration, CLI, validação de
-  borda opcional.
+- ✅ **Fase 3 — `reference` N:1:** coluna FK (sem cascade), leitura com `expand`
+  (`cityId` sempre, `city` sob demanda), escrita por FK (`cityId`).
+- ✅ **Fase 4 — N:N:** tabela de associação (PK composta, cascade do vínculo),
+  `expand` agregado, escrita por `<campo>Ids`; ordenação topológica do `sync()`;
+  cap de profundidade nos tipos (rede de segurança p/ ciclos — ver nota abaixo).
+- **Fase 5 — Busca avançada:** filtro objeto-literal rico (ver §9.1) — operadores
+  escalares, lógica `and`/`or`/`not`, filtro **aninhado** em `owned`/`reference`
+  com quantificadores `some`/`every`/`none`, operadores de coluna-array; mais
+  `orderBy`, paginação (ergonomia `zodmongo`) e `count`.
+- **Fase 6 — Projeção:** `select` que **poda o objeto e o tipo de retorno** (ver
+  §9.2) + **projeções nomeadas** reutilizáveis (base tipada p/ permissão na app).
+- **Fase 7 — Migrations & DX:** diff de shape → migration, CLI, validação de
+  borda opcional (Zod gerado).
+
+**Adiado (pós-v1, opt-in documentado):** políticas de campo impostas
+(default-deny); full-text (`tsvector`) e trigram (`pg_trgm`); query dentro de
+`jsonb`; agregados/`group by` (ver fronteira "não-OLAP" no §4); paginação por
+cursor/keyset; lock de linha (`FOR UPDATE`) / optimistic locking; escrita por
+filtro (`updateWhere`/`deleteWhere`/upsert por chave única); alvos de `reference`
+**lazy** (`reference(() => entity)`) — pré-requisito de ciclos reais.
 
 ---
 
