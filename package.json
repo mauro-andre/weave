@@ -1,0 +1,39 @@
+{
+  "name": "@mauroandre/weave",
+  "version": "0.0.0",
+  "description": "Code-first object abstraction over PostgreSQL: think in nested objects, never write SQL.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mauro André",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:types": "vitest typecheck --run"
+  },
+  "keywords": [
+    "postgres",
+    "postgresql",
+    "orm",
+    "code-first",
+    "object-relational",
+    "typescript"
+  ],
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
