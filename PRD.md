@@ -1,6 +1,6 @@
 # Weave — PRD (Product Requirements Document)
 
-> **Status:** rascunho · **Versão:** 0.2 · **Data:** 2026-06-19
+> **Status:** rascunho · **Versão:** 0.3 · **Data:** 2026-06-20
 > Documento de planejamento interno. Docs públicas (README) serão em inglês depois.
 
 ---
@@ -286,6 +286,73 @@ CREATE TABLE user_addresses_landmarks (
 inteira nasce, é escrita e morre como um bloco, numa transação. É o *aggregate
 boundary* do DDD, materializado.
 
+### Índices
+
+O Postgres indexa **só** a PK e constraints `unique`. Ele **não** indexa a coluna
+que *referencia* (o lado filho da FK). Isso é crítico pro Weave: toda leitura de
+agregado `owned` passa por `WHERE <pai>_id = …` e todo `expand` de `reference`
+segue um `<alvo>_id`. Sem índice nessas FKs, vira *sequential scan* — e o cascade
+do delete também sofre.
+
+**Decisão: auto-índice de FK, por padrão.** Toda coluna FK gerada por um
+relacionamento — o `<pai>_id` de um `owned` e o `<alvo>_id` de um `reference` —
+ganha um índice automaticamente. Honra a promessa "você só pensa em objeto": o
+dev não precisa lembrar que o Postgres não indexa FK. Escotilha de opt-out:
+`reference(city, { index: false })`.
+
+**Declaração (DX híbrida):** índice mora em dois lugares, cada um pro que lê
+melhor.
+
+- **Fluente na coluna** — caso comum de coluna única:
+
+  ```ts
+  email:    text().notNull().unique(),   // unique de 1 coluna
+  username: text().notNull().index(),    // índice btree simples
+  ```
+
+- **Bloco no 3º argumento de `defineEntity`** — composto, parcial, método
+  especial (recebe as colunas como handle):
+
+  ```ts
+  const user = defineEntity("users", {
+    lastName:  text().notNull(),
+    firstName: text().notNull(),
+    profile:   jsonb(),
+    deletedAt: timestamptz(),
+  }, (t) => ({
+    fullName:   index().on(t.lastName, t.firstName),            // composto
+    active:     index().on(t.email).where({ deletedAt: null }), // parcial
+    profileGin: index().on(t.profile).using("gin"),             // jsonb/array
+  }));
+  ```
+
+  Regra: **1 coluna → fluente; multi-coluna ou parcial/expressão/método → bloco**
+  (índice composto cruza colunas, não cabe no encadeamento de uma coluna só).
+
+**Convenção de nomes (determinística, pro diff casar "já existe"):**
+
+| Índice | Nome gerado |
+|---|---|
+| unique de coluna | `users_email_key` |
+| índice de coluna | `users_username_idx` |
+| composto | `users_last_name_first_name_idx` |
+| FK auto (owned/reference) | `user_addresses_user_id_idx` |
+
+Override: `index({ name: "…" })`.
+
+**Detalhes:**
+- O `where` de índice parcial **reusa o mesmo filtro objeto-literal** do `find()`
+  — um compilador de filtro só.
+- `id` já vem indexado (é PK, de graça); `createdAt`/`updatedAt` sem índice por
+  padrão.
+- Índices entram no **diff**: o `sync()`/`generate` compara a shape contra
+  `pg_indexes` e gera `CREATE INDEX`/`DROP INDEX`.
+
+**Escopo v1:** `unique`/`index` fluente (1 coluna), composto (bloco), auto-índice
+de FK, parcial (`where`) e método (`using("gin")` p/ jsonb/array). Ficam pra
+depois: índice por **expressão**, *covering* (`INCLUDE`), `opclass` e
+`collation`.
+
 ### DDL e migrations
 
 Code-first: o dev nunca escreve DDL. A camada faz diff entre a shape e o estado
@@ -349,6 +416,10 @@ Herdar a ergonomia do `zodmongo` (`docs`/`docsQuantity`/`pageQuantity`/
    `relation(..., { owned })`. *Tendência:* verbos separados.
 7. **N:N (`reference` array):** ergonomia de declaração da tabela de associação.
 8. **Validação de estrutura / borda:** gerar Zod no núcleo vs plugin separado.
+
+> **Resolvido em 0.3 — Índices** (ver §8 "Índices"): DX híbrida (fluente +
+> bloco), **auto-índice de FK por padrão** (opt-out), escopo v1 com parcial +
+> método `gin`. Expressão / *covering* / `opclass` / `collation` adiados.
 
 ---
 
