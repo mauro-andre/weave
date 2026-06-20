@@ -30,8 +30,17 @@ import {
 } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
+// Field discriminators / extractors (by phantom / kind tag).
 type IsColumn<V> = V extends { _types: unknown } ? true : false;
+type IsOwned<V> = V extends { kind: "owned" } ? true : false;
+type IsRefOne<V> = V extends { _phantom: { cardinality: "one" } } ? true : false;
+type IsRefMany<V> = V extends { _phantom: { cardinality: "many" } } ? true : false;
 type ColumnData<V> = V extends { _types: { data: infer D } } ? D : never;
+type RefTargetShape<V> = V extends { _phantom: { target: Entity<string, infer TS> } } ? TS : never;
+
+/** Recursion-depth budget for nested filters (cyclic/deep guard). */
+type WBudget = [unknown, unknown, unknown, unknown, unknown, unknown];
+type WDrop<D extends unknown[]> = D extends [unknown, ...infer R] ? R : [];
 
 /** String-only operators, added when the column's data type is `string`. */
 type StringOps = { like?: string; ilike?: string };
@@ -49,23 +58,64 @@ type ScalarOps<T> = {
   isNull?: boolean;
 } & ([T] extends [string] ? StringOps : {});
 
-/** A column filter: a bare value (eq shorthand) or an operator object. */
+/** A scalar column filter: a bare value (eq shorthand) or an operator object. */
 export type Filter<T> = T | ScalarOps<T>;
 
-type WhereShape<TShape> = {
-  /** Filter by the system id. */
-  id?: Filter<string>;
-  and?: WhereShape<TShape>[];
-  or?: WhereShape<TShape>[];
-  not?: WhereShape<TShape>;
-} & {
-  [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: Filter<ColumnData<TShape[K]>>;
+/** Operators for a scalar-array column (`text[]`, …). */
+export type ArrayFilter<E> = {
+  has?: E;
+  hasSome?: E[];
+  hasEvery?: E[];
+  isEmpty?: boolean;
 };
 
+/** A column's filter — array operators for `type[]`, scalar operators otherwise. */
+type ColumnFilter<V> = ColumnData<V> extends (infer E)[] ? ArrayFilter<E> : Filter<ColumnData<V>>;
+
+/** Quantifiers over a to-many relationship (owned 1:N / reference N:N). */
+type Quantifier<W> = { some?: W; every?: W; none?: W };
+
+type WhereShape<TShape, D extends unknown[] = WBudget> = {
+  id?: Filter<string>;
+  and?: WhereShape<TShape, D>[];
+  or?: WhereShape<TShape, D>[];
+  not?: WhereShape<TShape, D>;
+} & (D extends []
+  ? {}
+  : {
+      // scalar / array columns
+      [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: ColumnFilter<TShape[K]>;
+    } & {
+      // owned 1:1 → nested filter; owned 1:N → quantifier
+      [K in keyof TShape as IsOwned<TShape[K]> extends true ? K : never]?: TShape[K] extends Owned<
+        infer S,
+        infer C
+      >
+        ? C extends "many"
+          ? Quantifier<WhereShape<S, WDrop<D>>>
+          : WhereShape<S, WDrop<D>>
+        : never;
+    } & {
+      // reference N:1 → nested filter on the target
+      [K in keyof TShape as IsRefOne<TShape[K]> extends true ? K : never]?: WhereShape<
+        RefTargetShape<TShape[K]>,
+        WDrop<D>
+      >;
+    } & {
+      // reference N:1 → also filter by the FK directly
+      [K in keyof TShape as IsRefOne<TShape[K]> extends true ? `${K & string}Id` : never]?: Filter<string>;
+    } & {
+      // reference N:N → quantifier over linked targets
+      [K in keyof TShape as IsRefMany<TShape[K]> extends true ? K : never]?: Quantifier<
+        WhereShape<RefTargetShape<TShape[K]>, WDrop<D>>
+      >;
+    });
+
 /**
- * Filter over an entity's `id` and root scalar columns, with operators
- * (`gt`/`in`/`ilike`/…) and logical `and`/`or`/`not`. Nested filtering over
- * `owned`/`reference` is Phase 5b.
+ * Filter over an entity. Scalar operators (`gt`/`in`/`ilike`/…), array operators
+ * (`has`/`hasSome`/…), logical `and`/`or`/`not`, and **nested** filtering over
+ * `owned`/`reference` with quantifiers `some`/`every`/`none` — compiled to
+ * indexed `EXISTS` subqueries.
  */
 export type WhereInput<E> = E extends Entity<string, infer TShape> ? WhereShape<TShape> : never;
 
@@ -201,7 +251,7 @@ function renderOperator(col: string, op: string, v: unknown, params: unknown[]):
   }
 }
 
-/** Render one column field's filter (eq shorthand or operator object). */
+/** Render one scalar column field's filter (eq shorthand or operator object). */
 function compileFieldFilter(col: string, val: unknown, params: unknown[]): string {
   if (!isOperatorMap(val)) {
     return val === null ? `${col} IS NULL` : `${col} = ${bind(params, val)}`;
@@ -210,22 +260,138 @@ function compileFieldFilter(col: string, val: unknown, params: unknown[]): strin
   return conds.length ? conds.join(" AND ") : "TRUE";
 }
 
-/** Compile a where object into a SQL condition (recursive for and/or/not). */
-function compileWhere(table: string, where: Record<string, unknown>, params: unknown[]): string {
+/** Render an array literal `ARRAY[$1, $2, …]` binding each element. */
+function arrayLiteral(arr: unknown[], params: unknown[]): string {
+  return `ARRAY[${arr.map((v) => bind(params, v)).join(", ")}]`;
+}
+
+/** Render a scalar-array column filter (`has`/`hasSome`/`hasEvery`/`isEmpty`). */
+function compileArrayFilter(col: string, val: unknown, params: unknown[]): string {
+  if (val === null) return `${col} IS NULL`;
+  if (typeof val !== "object") return `${col} = ${bind(params, val)}`;
+  const conds: string[] = [];
+  for (const [op, v] of Object.entries(val as Record<string, unknown>)) {
+    switch (op) {
+      case "has":
+        conds.push(`${bind(params, v)} = ANY(${col})`);
+        break;
+      case "hasSome":
+        conds.push(Array.isArray(v) && v.length ? `${col} && ${arrayLiteral(v, params)}` : "FALSE");
+        break;
+      case "hasEvery":
+        conds.push(Array.isArray(v) && v.length ? `${col} @> ${arrayLiteral(v, params)}` : "TRUE");
+        break;
+      case "isEmpty":
+        conds.push(v ? `cardinality(${col}) = 0` : `cardinality(${col}) > 0`);
+        break;
+      default:
+        throw new Error(`weave: unknown array operator '${op}'.`);
+    }
+  }
+  return conds.length ? conds.join(" AND ") : "TRUE";
+}
+
+/** `EXISTS`/`NOT EXISTS (SELECT 1 FROM <from> WHERE <correlate> [AND <inner>])`. */
+function existsClause(from: string, correlate: string, inner: string, negate: boolean): string {
+  const cond = inner ? `${correlate} AND ${inner}` : correlate;
+  return `${negate ? "NOT EXISTS" : "EXISTS"} (SELECT 1 FROM ${from} WHERE ${cond})`;
+}
+
+/** Compile a `some`/`every`/`none` quantifier over a to-many relationship. */
+function compileQuantifier(
+  from: string,
+  alias: string,
+  prefix: string,
+  shape: ShapeRecord | OwnedShape,
+  val: unknown,
+  params: unknown[],
+  correlate: string,
+): string {
+  const out: string[] = [];
+  for (const [q, w] of Object.entries(val as Record<string, unknown>)) {
+    const inner = compileWhere(alias, prefix, shape, w as Record<string, unknown>, params);
+    if (q === "some") {
+      out.push(existsClause(from, correlate, inner, false));
+    } else if (q === "none") {
+      out.push(existsClause(from, correlate, inner, true));
+    } else if (q === "every") {
+      const notInner = inner ? `NOT (${inner})` : "FALSE";
+      out.push(`NOT EXISTS (SELECT 1 FROM ${from} WHERE ${correlate} AND ${notInner})`);
+    } else {
+      throw new Error(`weave: unknown quantifier '${q}' (use some/every/none).`);
+    }
+  }
+  return out.length ? out.join(" AND ") : "TRUE";
+}
+
+/**
+ * Compile a where object into a SQL condition. Descends into `owned`/`reference`
+ * via correlated `EXISTS` subqueries. Recursive for `and`/`or`/`not`.
+ */
+function compileWhere(
+  table: string,
+  prefix: string,
+  shape: ShapeRecord | OwnedShape,
+  where: Record<string, unknown>,
+  params: unknown[],
+): string {
   const conds: string[] = [];
   for (const [key, val] of Object.entries(where)) {
     if (val === undefined) continue;
+
     if (key === "and" || key === "or") {
       if (!Array.isArray(val)) continue;
       const subs = val
-        .map((w) => compileWhere(table, w as Record<string, unknown>, params))
+        .map((w) => compileWhere(table, prefix, shape, w as Record<string, unknown>, params))
         .filter((s) => s.length > 0);
       if (subs.length) conds.push(`(${subs.join(key === "and" ? " AND " : " OR ")})`);
-    } else if (key === "not") {
-      const s = compileWhere(table, val as Record<string, unknown>, params);
+      continue;
+    }
+    if (key === "not") {
+      const s = compileWhere(table, prefix, shape, val as Record<string, unknown>, params);
       if (s) conds.push(`NOT (${s})`);
+      continue;
+    }
+    if (key === "id") {
+      conds.push(compileFieldFilter(`${table}.id`, val, params));
+      continue;
+    }
+
+    const field = shape[key];
+    if (field instanceof Column) {
+      const col = `${table}.${camelToSnake(key)}`;
+      conds.push(field.config.isArray ? compileArrayFilter(col, val, params) : compileFieldFilter(col, val, params));
+    } else if (field instanceof Owned) {
+      const childTable = ownedChildTable(prefix, camelToSnake(key), field.options.table);
+      const fk = ownedFkColumn(prefix);
+      const correlate = `${childTable}.${fk} = ${table}.id`;
+      if (field.cardinality === "many") {
+        conds.push(compileQuantifier(childTable, childTable, childTable, field.shape, val, params, correlate));
+      } else {
+        const inner = compileWhere(childTable, childTable, field.shape, val as Record<string, unknown>, params);
+        conds.push(existsClause(childTable, correlate, inner, false));
+      }
+    } else if (field instanceof Reference && field.cardinality === "one") {
+      const t = field.target.name;
+      const inner = compileWhere(t, singularize(t), field.target.columns, val as Record<string, unknown>, params);
+      conds.push(existsClause(t, `${t}.id = ${table}.${camelToSnake(key)}_id`, inner, false));
+    } else if (field instanceof Reference) {
+      const t = field.target.name;
+      const join = joinTableName(prefix, camelToSnake(key));
+      const from = `${t} JOIN ${join} ON ${join}.${joinTargetFk(camelToSnake(key))} = ${t}.id`;
+      const correlate = `${join}.${ownedFkColumn(prefix)} = ${table}.id`;
+      conds.push(compileQuantifier(from, t, singularize(t), field.target.columns, val, params, correlate));
+    } else if (key.endsWith("Id")) {
+      // `<field>Id` — filter a reference's FK directly, without a join.
+      const base = key.slice(0, -2);
+      const ref = shape[base];
+      if (ref instanceof Reference && ref.cardinality === "one") {
+        conds.push(compileFieldFilter(`${table}.${camelToSnake(base)}_id`, val, params));
+      } else {
+        throw new Error(`weave: unknown filter field '${key}'.`);
+      }
     } else {
-      conds.push(compileFieldFilter(`${table}.${camelToSnake(key)}`, val, params));
+      throw new Error(`weave: unknown filter field '${key}'.`);
     }
   }
   return conds.join(" AND ");
@@ -240,7 +406,13 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   const obj = buildObject(table, singularize(table), entity.columns, options.expand);
 
   const params: unknown[] = [];
-  const whereSql = compileWhere(table, (options.where ?? {}) as Record<string, unknown>, params);
+  const whereSql = compileWhere(
+    table,
+    singularize(table),
+    entity.columns,
+    (options.where ?? {}) as Record<string, unknown>,
+    params,
+  );
 
   const lines = [`SELECT ${obj} AS data`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
