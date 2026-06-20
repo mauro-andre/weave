@@ -15,8 +15,10 @@
 
 import process from "node:process";
 import postgres from "postgres";
-import { emitCreateTable, emitIndexes } from "../ddl/emit.js";
-import type { Entity, ShapeRecord } from "../schema/entity.js";
+import { collectTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
+import type { Entity, ShapeRecord, InferEntity } from "../schema/entity.js";
+import { compileFind, type FindOptions } from "../query/read.js";
+import { rehydrate } from "../query/rehydrate.js";
 
 type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;
@@ -88,20 +90,38 @@ export class Weave {
       `;
       const existing = new Set(rows.map((r) => r.table_name));
 
+      // Each entity expands to its full owned tree (parent-first).
       for (const entity of this.entities) {
-        if (existing.has(entity.name)) {
-          skipped.push(entity.name);
-          continue;
+        for (const spec of collectTables(entity)) {
+          if (existing.has(spec.name)) {
+            skipped.push(spec.name);
+            continue;
+          }
+          await tx.unsafe(renderCreateTable(spec));
+          for (const idx of renderIndexes(spec)) {
+            await tx.unsafe(idx);
+          }
+          created.push(spec.name);
         }
-        await tx.unsafe(emitCreateTable(entity));
-        for (const idx of emitIndexes(entity)) {
-          await tx.unsafe(idx);
-        }
-        created.push(entity.name);
       }
     });
 
     return { created, skipped };
+  }
+
+  /**
+   * Read entities as a nested object tree. `owned` relationships come back
+   * automatically; types are rehydrated from the wire JSON.
+   */
+  async find<TName extends string, TShape extends ShapeRecord>(
+    entity: Entity<TName, TShape>,
+    options: FindOptions<Entity<TName, TShape>> = {},
+  ): Promise<InferEntity<Entity<TName, TShape>>[]> {
+    const { text, params } = compileFind(entity, options);
+    const rows = await this.sql.unsafe(text, params as never[]);
+    return rows.map((row) =>
+      rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
+    ) as InferEntity<Entity<TName, TShape>>[];
   }
 
   /** Close the underlying connection (only if this instance created it). */

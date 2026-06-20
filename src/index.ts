@@ -4,7 +4,10 @@ export * from "./schema/index.js";
 // DDL emission (shape → CREATE TABLE / CREATE INDEX).
 export * from "./ddl/index.js";
 
-// Driver: connection, transaction, sync().
+// Query: read compiler (weave) + rehydration.
+export * from "./query/index.js";
+
+// Driver: connection, transaction, sync(), find().
 export * from "./driver/index.js";
 
 // Catalog metadata (the raw PgType objects live under `catalog.*`, not at top

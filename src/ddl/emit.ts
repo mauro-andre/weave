@@ -18,8 +18,8 @@
 import { Column, type ColumnConfig } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
-import { camelToSnake, indexName } from "../util/naming.js";
-import { lastSegment, singularize } from "../util/inflect.js";
+import { camelToSnake, indexName, ownedChildTable, ownedFkColumn } from "../util/naming.js";
+import { singularize } from "../util/inflect.js";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 
@@ -132,8 +132,8 @@ function collect(
 
   for (const [field, value] of Object.entries(shape)) {
     if (value instanceof Owned) {
-      const childTable = value.options.table ?? `${pathPrefix}_${camelToSnake(field)}`;
-      const fkColumn = `${singularize(lastSegment(pathPrefix))}_id`;
+      const childTable = ownedChildTable(pathPrefix, camelToSnake(field), value.options.table);
+      const fkColumn = ownedFkColumn(pathPrefix);
       children.push(
         ...collect(childTable, childTable, value.shape, { table: tableName, fkColumn }),
       );
