@@ -17,6 +17,7 @@
 import { Column } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
+import { Reference } from "../schema/reference.js";
 import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
@@ -76,6 +77,13 @@ async function writeNode(
     if (value instanceof Column && input[field] !== undefined) {
       columns.push(camelToSnake(field));
       values.push(input[field]);
+    } else if (value instanceof Reference) {
+      // Set the FK from `<field>Id`; never touch the target table.
+      const fkValue = input[`${field}Id`];
+      if (fkValue !== undefined) {
+        columns.push(`${camelToSnake(field)}_id`);
+        values.push(fkValue);
+      }
     }
   }
 

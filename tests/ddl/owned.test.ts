@@ -50,11 +50,15 @@ describe("collectTables", () => {
   it("child tables get the parent FK with cascade, named by parent segment", () => {
     const addresses = specs[1]!;
     const fk = addresses.columns.find((c) => c.name === "user_id");
-    expect(fk).toMatchObject({ sqlType: "uuid", notNull: true, references: "users" });
+    expect(fk).toMatchObject({
+      sqlType: "uuid",
+      notNull: true,
+      references: { table: "users", cascade: true },
+    });
 
     const landmarks = specs[2]!;
     const fk2 = landmarks.columns.find((c) => c.name === "address_id");
-    expect(fk2).toMatchObject({ references: "user_addresses" });
+    expect(fk2).toMatchObject({ references: { table: "user_addresses", cascade: true } });
   });
 
   it("auto-indexes each parent FK", () => {

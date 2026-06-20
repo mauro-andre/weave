@@ -20,6 +20,7 @@
 import { Column, type InferColumn } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
+import { Reference } from "../schema/reference.js";
 import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
@@ -34,7 +35,12 @@ export type WhereInput<E> =
 
 export interface FindOptions<E> {
   where?: WhereInput<E>;
+  /** Map of `reference`/`owned` fields to follow; see `ExpandInput`. */
+  expand?: ExpandMap;
 }
+
+/** A runtime expand map: field → `true` or a nested expand map. */
+export type ExpandMap = { [field: string]: true | ExpandMap };
 
 /** A compiled, parameterized query. */
 export interface CompiledQuery {
@@ -48,14 +54,20 @@ export interface CompiledQuery {
  * @param table  - SQL alias for column refs (the actual table name).
  * @param prefix - ownership-path prefix used to name owned children.
  */
-function buildObject(table: string, prefix: string, shape: ShapeRecord | OwnedShape): string {
+function buildObject(
+  table: string,
+  prefix: string,
+  shape: ShapeRecord | OwnedShape,
+  expand: ExpandMap | undefined,
+): string {
   const parts: string[] = [`'id', ${table}.id`];
 
   for (const [field, value] of Object.entries(shape)) {
     if (value instanceof Owned) {
       const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
       const fk = ownedFkColumn(prefix);
-      const childObj = buildObject(childTable, childTable, value.shape);
+      const childExpand = subExpand(expand, field);
+      const childObj = buildObject(childTable, childTable, value.shape, childExpand);
       const correlate = `${childTable}.${fk} = ${table}.id`;
       const sub =
         value.cardinality === "many"
@@ -63,6 +75,15 @@ function buildObject(table: string, prefix: string, shape: ShapeRecord | OwnedSh
             `FROM ${childTable} WHERE ${correlate})`
           : `(SELECT ${childObj} FROM ${childTable} WHERE ${correlate} LIMIT 1)`;
       parts.push(`'${field}', ${sub}`);
+    } else if (value instanceof Reference) {
+      const fkCol = `${camelToSnake(field)}_id`;
+      parts.push(`'${field}Id', ${table}.${fkCol}`); // FK id — always
+      if (expand?.[field]) {
+        const target = value.target;
+        const t = target.name;
+        const targetObj = buildObject(t, singularize(t), target.columns, subExpand(expand, field));
+        parts.push(`'${field}', (SELECT ${targetObj} FROM ${t} WHERE ${t}.id = ${table}.${fkCol} LIMIT 1)`);
+      }
     } else if (value instanceof Column) {
       parts.push(`'${field}', ${table}.${camelToSnake(field)}`);
     }
@@ -72,13 +93,19 @@ function buildObject(table: string, prefix: string, shape: ShapeRecord | OwnedSh
   return `json_build_object(${parts.join(", ")})`;
 }
 
+/** The nested expand map for a field (undefined when not expanded or `true`). */
+function subExpand(expand: ExpandMap | undefined, field: string): ExpandMap | undefined {
+  const next = expand?.[field];
+  return next && next !== true ? next : undefined;
+}
+
 /** Compile a `find` into parameterized SQL returning one `data` column per row. */
 export function compileFind(
   entity: Entity<string, ShapeRecord>,
   options: FindOptions<Entity<string, ShapeRecord>> = {},
 ): CompiledQuery {
   const table = entity.name;
-  const obj = buildObject(table, singularize(table), entity.columns);
+  const obj = buildObject(table, singularize(table), entity.columns, options.expand);
 
   const params: unknown[] = [];
   const conditions: string[] = [];

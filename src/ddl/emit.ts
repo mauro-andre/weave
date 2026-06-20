@@ -18,6 +18,7 @@
 import { Column, type ColumnConfig } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
+import { Reference } from "../schema/reference.js";
 import { camelToSnake, indexName, ownedChildTable, ownedFkColumn } from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
@@ -35,8 +36,8 @@ export interface ColumnSpec {
   unique?: boolean;
   /** Already-rendered SQL default expression (e.g. `0`, `'{}'`, `now()`). */
   default?: string;
-  /** FK target table (always references its `id`), with cascade. */
-  references?: string;
+  /** FK to another table's `id`. `cascade` true for owned, false for reference. */
+  references?: { table: string; cascade: boolean };
 }
 
 /** A single-column (for now) index. */
@@ -124,7 +125,7 @@ function collect(
       name: parent.fkColumn,
       sqlType: "uuid",
       notNull: true,
-      references: parent.table,
+      references: { table: parent.table, cascade: true },
     });
     // Auto-index the parent FK (§8): owned reads filter on it, cascade uses it.
     indexes.push({ name: indexName(tableName, parent.fkColumn), column: parent.fkColumn });
@@ -137,6 +138,16 @@ function collect(
       children.push(
         ...collect(childTable, childTable, value.shape, { table: tableName, fkColumn }),
       );
+    } else if (value instanceof Reference) {
+      // FK column to an independent table — no cascade, auto-indexed (§8).
+      const col = `${camelToSnake(field)}_id`;
+      columns.push({
+        name: col,
+        sqlType: "uuid",
+        notNull: value.isNotNull,
+        references: { table: value.target.name, cascade: false },
+      });
+      indexes.push({ name: indexName(tableName, col), column: col });
     } else if (value instanceof Column) {
       const col = columnSpec(field, value.config);
       columns.push(col);
@@ -167,7 +178,10 @@ function renderColumnSpec(c: ColumnSpec): string {
   else if (c.notNull) parts.push("NOT NULL");
   if (c.default !== undefined) parts.push(`DEFAULT ${c.default}`);
   if (c.unique) parts.push("UNIQUE");
-  if (c.references) parts.push(`REFERENCES ${c.references}(id) ON DELETE CASCADE`);
+  if (c.references) {
+    parts.push(`REFERENCES ${c.references.table}(id)`);
+    if (c.references.cascade) parts.push("ON DELETE CASCADE");
+  }
   return parts.join(" ");
 }
 

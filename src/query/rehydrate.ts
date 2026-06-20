@@ -17,6 +17,7 @@
 import { Column } from "../schema/column.js";
 import type { ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
+import { Reference } from "../schema/reference.js";
 import type { TsLabel } from "../types/pg-type.js";
 
 function rehydrateScalar(label: TsLabel, value: unknown): unknown {
@@ -56,6 +57,14 @@ export function rehydrate<T extends Record<string, unknown>>(
       } else if (value.cardinality === "one" && current != null) {
         obj[field as keyof T] = rehydrate(
           value.shape,
+          current as Record<string, unknown>,
+        ) as T[keyof T];
+      }
+    } else if (value instanceof Reference) {
+      // Only the expanded target object needs rehydration; `<field>Id` stays a string.
+      if (current != null && typeof current === "object") {
+        obj[field as keyof T] = rehydrate(
+          value.target.columns,
           current as Record<string, unknown>,
         ) as T[keyof T];
       }

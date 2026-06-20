@@ -16,7 +16,14 @@
 import process from "node:process";
 import postgres from "postgres";
 import { collectTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
-import type { Entity, ShapeRecord, InferEntity, InferInsert } from "../schema/entity.js";
+import type {
+  Entity,
+  ShapeRecord,
+  InferEntity,
+  InferRead,
+  InferInsert,
+  ExpandInput,
+} from "../schema/entity.js";
 import { compileFind, type FindOptions, type WhereInput } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
@@ -114,15 +121,21 @@ export class Weave {
    * Read entities as a nested object tree. `owned` relationships come back
    * automatically; types are rehydrated from the wire JSON.
    */
-  async find<TName extends string, TShape extends ShapeRecord>(
+  async find<TName extends string, TShape extends ShapeRecord, X = {}>(
     entity: Entity<TName, TShape>,
-    options: FindOptions<Entity<TName, TShape>> = {},
-  ): Promise<InferEntity<Entity<TName, TShape>>[]> {
-    const { text, params } = compileFind(entity, options);
+    options: {
+      where?: WhereInput<Entity<TName, TShape>>;
+      expand?: X & ExpandInput<Entity<TName, TShape>>;
+    } = {},
+  ): Promise<InferRead<Entity<TName, TShape>, X>[]> {
+    const { text, params } = compileFind(
+      entity,
+      options as unknown as FindOptions<Entity<TName, TShape>>,
+    );
     const rows = await this.sql.unsafe(text, params as never[]);
     return rows.map((row) =>
       rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
-    ) as InferEntity<Entity<TName, TShape>>[];
+    ) as InferRead<Entity<TName, TShape>, X>[];
   }
 
   /**

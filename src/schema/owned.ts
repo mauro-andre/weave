@@ -12,11 +12,15 @@
  */
 
 import { Column } from "./column.js";
+import type { AnyReference } from "./reference.js";
 
 export type OwnedCardinality = "one" | "many";
 
-/** A sub-shape: named columns and/or further owned relationships. */
-export type OwnedShape = Record<string, Column<unknown, boolean, boolean> | AnyOwned>;
+/** A sub-shape: columns, further owned relationships, and/or references. */
+export type OwnedShape = Record<
+  string,
+  Column<unknown, boolean, boolean> | AnyOwned | AnyReference
+>;
 
 /** Options for an owned relationship. */
 export interface OwnedOptions {
