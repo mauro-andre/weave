@@ -10,4 +10,5 @@ export {
   type CompiledQuery,
 } from "./read.js";
 export { rehydrate } from "./rehydrate.js";
+export type { ExpandMap, SelectMap } from "./read.js";
 export { shred, renderInsert, renderUpsert, type Executor } from "./write.js";

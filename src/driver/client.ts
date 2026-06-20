@@ -22,7 +22,9 @@ import type {
   InferEntity,
   InferRead,
   InferInsert,
+  InferSelect,
   ExpandInput,
+  SelectInput,
 } from "../schema/entity.js";
 import {
   compileFind,
@@ -30,9 +32,11 @@ import {
   type FindOptions,
   type WhereInput,
   type OrderByInput,
+  type SelectMap,
 } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
+import type { Projection, AnyProjection } from "../schema/projection.js";
 
 type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;
@@ -41,6 +45,13 @@ type AnyEntity = Entity<string, ShapeRecord>;
 /** Arbitrary constant keying the advisory lock that serializes `sync()`. */
 const SYNC_LOCK_KEY = 0x7ea7e_0001;
 
+/** Narrow a find/paginate source to a {@link Projection}. */
+function isProjectionSource(
+  source: Entity<string, ShapeRecord> | AnyProjection,
+): source is AnyProjection {
+  return "kind" in source && source.kind === "projection";
+}
+
 export interface WeaveOptions {
   /** Connection string. Falls back to `process.env.DATABASE_URL`. */
   url?: string;
@@ -48,6 +59,15 @@ export interface WeaveOptions {
   client?: Sql;
   /** Entities to manage. Keys are labels; values are `defineEntity(...)` results. */
   entities?: Record<string, AnyEntity>;
+}
+
+/** A page of results (zodmongo ergonomics). */
+export interface Page<T> {
+  docs: T[];
+  /** Total rows matching the filter, ignoring pagination. */
+  docsQuantity: number;
+  pageQuantity: number;
+  currentPage: number;
 }
 
 /** Outcome of a {@link Weave.sync} call. */
@@ -127,24 +147,45 @@ export class Weave {
    * Read entities as a nested object tree. `owned` relationships come back
    * automatically; types are rehydrated from the wire JSON.
    */
-  async find<TName extends string, TShape extends ShapeRecord, X = {}>(
+  /** Read through a named {@link Projection}: select is baked in, result pruned. */
+  find<TName extends string, TShape extends ShapeRecord, S>(
+    projection: Projection<Entity<TName, TShape>, S>,
+    options?: {
+      where?: WhereInput<Entity<TName, TShape>>;
+      orderBy?: OrderByInput<Entity<TName, TShape>>;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<InferSelect<Entity<TName, TShape>, S>[]>;
+  /** Read entities as a nested object tree; `owned` automatic, `reference` via `expand`. */
+  find<TName extends string, TShape extends ShapeRecord, X = {}, S = never>(
     entity: Entity<TName, TShape>,
-    options: {
+    options?: {
       where?: WhereInput<Entity<TName, TShape>>;
       orderBy?: OrderByInput<Entity<TName, TShape>>;
       expand?: X & ExpandInput<Entity<TName, TShape>>;
+      select?: S & SelectInput<Entity<TName, TShape>>;
       limit?: number;
       offset?: number;
-    } = {},
-  ): Promise<InferRead<Entity<TName, TShape>, X>[]> {
-    const { text, params } = compileFind(
-      entity,
-      options as unknown as FindOptions<Entity<TName, TShape>>,
-    );
+    },
+  ): Promise<
+    ([S] extends [never]
+      ? InferRead<Entity<TName, TShape>, X>
+      : InferSelect<Entity<TName, TShape>, S>)[]
+  >;
+  async find(
+    source: Entity<string, ShapeRecord> | AnyProjection,
+    options: FindOptions<Entity<string, ShapeRecord>> = {},
+  ): Promise<unknown[]> {
+    const entity = isProjectionSource(source) ? source.entity : source;
+    const merged: FindOptions<Entity<string, ShapeRecord>> = isProjectionSource(source)
+      ? { ...options, select: source.select as SelectMap }
+      : options;
+    const { text, params } = compileFind(entity, merged);
     const rows = await this.sql.unsafe(text, params as never[]);
     return rows.map((row) =>
       rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
-    ) as InferRead<Entity<TName, TShape>, X>[];
+    );
   }
 
   /** Count rows matching a filter. */
@@ -162,34 +203,64 @@ export class Weave {
    * `docs` / `docsQuantity` (total matching) / `pageQuantity` / `currentPage`.
    * `page` is 1-based.
    */
-  async paginate<TName extends string, TShape extends ShapeRecord, X = {}>(
+  /** Paginated read through a named {@link Projection}. */
+  paginate<TName extends string, TShape extends ShapeRecord, S>(
+    projection: Projection<Entity<TName, TShape>, S>,
+    options?: {
+      where?: WhereInput<Entity<TName, TShape>>;
+      orderBy?: OrderByInput<Entity<TName, TShape>>;
+      page?: number;
+      perPage?: number;
+    },
+  ): Promise<Page<InferSelect<Entity<TName, TShape>, S>>>;
+  /** Paginated read; `zodmongo` envelope: docs / docsQuantity / pageQuantity / currentPage. */
+  paginate<TName extends string, TShape extends ShapeRecord, X = {}, S = never>(
     entity: Entity<TName, TShape>,
-    options: {
+    options?: {
       where?: WhereInput<Entity<TName, TShape>>;
       orderBy?: OrderByInput<Entity<TName, TShape>>;
       expand?: X & ExpandInput<Entity<TName, TShape>>;
+      select?: S & SelectInput<Entity<TName, TShape>>;
       page?: number;
       perPage?: number;
-    } = {},
-  ): Promise<{
-    docs: InferRead<Entity<TName, TShape>, X>[];
-    docsQuantity: number;
-    pageQuantity: number;
-    currentPage: number;
-  }> {
+    },
+  ): Promise<
+    Page<
+      [S] extends [never]
+        ? InferRead<Entity<TName, TShape>, X>
+        : InferSelect<Entity<TName, TShape>, S>
+    >
+  >;
+  async paginate(
+    source: Entity<string, ShapeRecord> | AnyProjection,
+    options: FindOptions<Entity<string, ShapeRecord>> & { page?: number; perPage?: number } = {},
+  ): Promise<Page<unknown>> {
+    const entity = isProjectionSource(source) ? source.entity : source;
+    const select: SelectMap | undefined = isProjectionSource(source)
+      ? (source.select as SelectMap)
+      : options.select;
+
     const page = Math.max(1, options.page ?? 1);
     const perPage = Math.max(1, options.perPage ?? 20);
     const docsQuantity = await this.count(
       entity,
       options.where !== undefined ? { where: options.where } : {},
     );
-    const docs = await this.find<TName, TShape, X>(entity, {
+
+    const findOpts: FindOptions<Entity<string, ShapeRecord>> = {
       ...(options.where !== undefined ? { where: options.where } : {}),
       ...(options.orderBy !== undefined ? { orderBy: options.orderBy } : {}),
       ...(options.expand !== undefined ? { expand: options.expand } : {}),
+      ...(select !== undefined ? { select } : {}),
       limit: perPage,
       offset: (page - 1) * perPage,
-    });
+    };
+    const { text, params } = compileFind(entity, findOpts);
+    const rows = await this.sql.unsafe(text, params as never[]);
+    const docs = rows.map((row) =>
+      rehydrate(entity.columns, (row as unknown as { data: Record<string, unknown> }).data),
+    );
+
     return {
       docs,
       docsQuantity,

@@ -37,10 +37,12 @@ export function rehydrate<T extends Record<string, unknown>>(
   shape: ShapeRecord | OwnedShape,
   obj: T,
 ): T {
-  obj["createdAt" as keyof T] = new Date(obj["createdAt"] as string) as T[keyof T];
-  obj["updatedAt" as keyof T] = new Date(obj["updatedAt"] as string) as T[keyof T];
+  // System timestamps (absent under a projection that didn't select them).
+  if ("createdAt" in obj) obj["createdAt" as keyof T] = new Date(obj["createdAt"] as string) as T[keyof T];
+  if ("updatedAt" in obj) obj["updatedAt" as keyof T] = new Date(obj["updatedAt"] as string) as T[keyof T];
 
   for (const [field, value] of Object.entries(shape)) {
+    if (!(field in obj)) continue; // not selected — skip
     const current = obj[field];
     if (value instanceof Column) {
       const { tsLabel } = value.config.pgType;

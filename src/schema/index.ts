@@ -22,6 +22,7 @@ export {
   type AnyReference,
   type ReferenceCardinality,
 } from "./reference.js";
+export { projection, type Projection, type AnyProjection } from "./projection.js";
 export {
   defineEntity,
   type Entity,
@@ -30,5 +31,7 @@ export {
   type InferEntity,
   type InferRead,
   type InferInsert,
+  type InferSelect,
   type ExpandInput,
+  type SelectInput,
 } from "./entity.js";

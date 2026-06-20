@@ -199,6 +199,75 @@ export type InferInsert<E> = E extends Entity<string, infer TShape>
   ? Prettify<{ id?: string } & InsertBody<TShape>>
   : never;
 
+// ── Projection (`select`, Phase 6) ───────────────────────────────────────────
+
+type SelectShape<TShape, D extends unknown[] = Budget> = {
+  id?: true;
+  createdAt?: true;
+  updatedAt?: true;
+} & {
+  [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: true;
+} & {
+  [K in keyof TShape as IsRefOne<TShape[K]> extends true ? `${K & string}Id` : never]?: true;
+} & (D extends []
+  ? {}
+  : {
+      [K in keyof TShape as IsOwned<TShape[K]> extends true ? K : never]?:
+        | true
+        | (TShape[K] extends Owned<infer S, OwnedCardinality> ? SelectShape<S, Drop<D>> : never);
+    } & {
+      [K in keyof TShape as IsRefOne<TShape[K]> extends true
+        ? K
+        : IsRefMany<TShape[K]> extends true
+          ? K
+          : never]?: true | SelectShape<RefTargetShape<TShape[K]>, Drop<D>>;
+    });
+
+/** The shape of the `select` option for an entity. */
+export type SelectInput<E> = E extends Entity<string, infer TShape> ? SelectShape<TShape> : never;
+
+/** Full read of a sub-shape (all fields, references as ids) — used by `true`. */
+type FullRead<TShape> = Prettify<ReadShape<TShape, {}>>;
+
+type SelectSub<SubShape, Sel> = Sel extends true ? FullRead<SubShape> : SelectResultShape<SubShape, Sel>;
+
+type SelectFieldType<TShape, K, Sel> = K extends "id"
+  ? string
+  : K extends "createdAt" | "updatedAt"
+    ? Date
+    : K extends keyof TShape
+      ? IsColumn<TShape[K]> extends true
+        ? InferColumn<TShape[K]>
+        : TShape[K] extends Owned<infer S, infer C>
+          ? C extends "many"
+            ? SelectSub<S, Sel>[]
+            : SelectSub<S, Sel>
+          : IsRefOne<TShape[K]> extends true
+            ? RefNotNull<TShape[K]> extends true
+              ? SelectSub<RefTargetShape<TShape[K]>, Sel>
+              : SelectSub<RefTargetShape<TShape[K]>, Sel> | null
+            : IsRefMany<TShape[K]> extends true
+              ? SelectSub<RefTargetShape<TShape[K]>, Sel>[]
+              : never
+      : K extends `${infer F}Id`
+        ? F extends keyof TShape
+          ? IsRefOne<TShape[F]> extends true
+            ? RefNotNull<TShape[F]> extends true
+              ? string
+              : string | null
+            : never
+          : never
+        : never;
+
+type SelectResultShape<TShape, S> = Prettify<
+  { id: string } & { [K in keyof S]: SelectFieldType<TShape, K, S[K]> }
+>;
+
+/** The pruned read object for an entity, given a `select` map `S`. */
+export type InferSelect<E, S> = E extends Entity<string, infer TShape>
+  ? SelectResultShape<TShape, S>
+  : never;
+
 /** Declare an entity (a first-class table). */
 export function defineEntity<TName extends string, TShape extends ShapeRecord>(
   name: TName,

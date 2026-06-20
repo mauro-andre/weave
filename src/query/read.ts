@@ -140,6 +140,8 @@ export interface FindOptions<E> {
   orderBy?: OrderByInput<E>;
   /** Map of `reference`/`owned` fields to follow; see `ExpandInput`. */
   expand?: ExpandMap;
+  /** Prune the result to selected fields; see `SelectInput`. Subsumes `expand`. */
+  select?: SelectMap;
   limit?: number;
   offset?: number;
 }
@@ -153,8 +155,15 @@ export interface CompiledQuery {
   params: unknown[];
 }
 
+/** A runtime select map: field → `true` or a nested select map. */
+export type SelectMap = { [field: string]: true | SelectMap };
+
 /**
  * Build the `json_build_object(...)` expression for one table level.
+ *
+ * Two modes: with `select`, emit only the selected fields (id always; timestamps
+ * only if selected; `select` subsumes `expand`). Without `select`, the default
+ * read shape (owned automatic, references via `expand`).
  *
  * @param table  - SQL alias for column refs (the actual table name).
  * @param prefix - ownership-path prefix used to name owned children.
@@ -164,15 +173,21 @@ function buildObject(
   prefix: string,
   shape: ShapeRecord | OwnedShape,
   expand: ExpandMap | undefined,
+  select: SelectMap | undefined,
 ): string {
-  const parts: string[] = [`'id', ${table}.id`];
+  const parts: string[] = [`'id', ${table}.id`]; // id always present
+  const wants = (key: string): boolean => select === undefined || Boolean(select[key]);
 
   for (const [field, value] of Object.entries(shape)) {
+    // Child select: nested map when given, undefined when `true` (full sub-read).
+    const childSelect = select && select[field] !== true ? (select[field] as SelectMap) : undefined;
+    const childExpand = select ? undefined : subExpand(expand, field);
+
     if (value instanceof Owned) {
+      if (!wants(field)) continue;
       const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
       const fk = ownedFkColumn(prefix);
-      const childExpand = subExpand(expand, field);
-      const childObj = buildObject(childTable, childTable, value.shape, childExpand);
+      const childObj = buildObject(childTable, childTable, value.shape, childExpand, childSelect);
       const correlate = `${childTable}.${fk} = ${table}.id`;
       const sub =
         value.cardinality === "many"
@@ -182,31 +197,38 @@ function buildObject(
       parts.push(`'${field}', ${sub}`);
     } else if (value instanceof Reference && value.cardinality === "one") {
       const fkCol = `${camelToSnake(field)}_id`;
-      parts.push(`'${field}Id', ${table}.${fkCol}`); // FK id — always
-      if (expand?.[field]) {
+      // FK id: always in expand mode; only if selected in select mode.
+      if (select === undefined ? true : Boolean(select[`${field}Id`])) {
+        parts.push(`'${field}Id', ${table}.${fkCol}`);
+      }
+      const wantObj = select ? select[field] : expand?.[field];
+      if (wantObj) {
         const t = value.target.name;
-        const targetObj = buildObject(t, singularize(t), value.target.columns, subExpand(expand, field));
+        const targetObj = buildObject(t, singularize(t), value.target.columns, childExpand, childSelect);
         parts.push(`'${field}', (SELECT ${targetObj} FROM ${t} WHERE ${t}.id = ${table}.${fkCol} LIMIT 1)`);
       }
     } else if (value instanceof Reference) {
-      // N:N — nothing by default; aggregate linked targets via the join table on expand.
-      if (expand?.[field]) {
+      // N:N — aggregate linked targets via the join table, on expand/select.
+      const wantObj = select ? select[field] : expand?.[field];
+      if (wantObj) {
         const t = value.target.name;
         const join = joinTableName(prefix, camelToSnake(field));
         const owningFk = ownedFkColumn(prefix);
         const targetFk = joinTargetFk(camelToSnake(field));
-        const targetObj = buildObject(t, singularize(t), value.target.columns, subExpand(expand, field));
+        const targetObj = buildObject(t, singularize(t), value.target.columns, childExpand, childSelect);
         parts.push(
           `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${t}.created_at), '[]'::json) ` +
             `FROM ${t} JOIN ${join} ON ${join}.${targetFk} = ${t}.id WHERE ${join}.${owningFk} = ${table}.id)`,
         );
       }
     } else if (value instanceof Column) {
-      parts.push(`'${field}', ${table}.${camelToSnake(field)}`);
+      if (wants(field)) parts.push(`'${field}', ${table}.${camelToSnake(field)}`);
     }
   }
 
-  parts.push(`'createdAt', ${table}.created_at`, `'updatedAt', ${table}.updated_at`);
+  // Timestamps: always in expand mode; only if selected in select mode.
+  if (select === undefined || select["createdAt"]) parts.push(`'createdAt', ${table}.created_at`);
+  if (select === undefined || select["updatedAt"]) parts.push(`'updatedAt', ${table}.updated_at`);
   return `json_build_object(${parts.join(", ")})`;
 }
 
@@ -422,7 +444,7 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   options: FindOptions<E> = {},
 ): CompiledQuery {
   const table = entity.name;
-  const obj = buildObject(table, singularize(table), entity.columns, options.expand);
+  const obj = buildObject(table, singularize(table), entity.columns, options.expand, options.select);
 
   const params: unknown[] = [];
   const whereSql = compileWhere(
