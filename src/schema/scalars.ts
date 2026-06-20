@@ -7,6 +7,7 @@
 
 import { catalog } from "../types/registry.js";
 import { Column, scalarColumn, type AnyColumn } from "./column.js";
+import { OwnedArray, type OwnedShape } from "./owned.js";
 
 // ── Numeric ──────────────────────────────────────────────────────────────────
 export const int2 = () => scalarColumn(catalog.int2);
@@ -42,24 +43,33 @@ export const jsonb = () => scalarColumn(catalog.jsonb);
 export const bytea = () => scalarColumn(catalog.bytea);
 
 /**
- * Wrap a scalar column into an array column (`type[]`).
+ * `array(...)` is overloaded by what it wraps:
  *
- * Per the PRD canonical example, arrays default to **`NOT NULL DEFAULT '{}'`**:
- * you always get `[]`, never `null`. Opt into a nullable array with
- * `array(text()).nullable()`.
+ *   - `array(text())`    → a **scalar array column** (`text[]`).
+ *   - `array({ ... })`   → an **owned 1:N marker** for `owned(array({...}))`.
+ *
+ * Scalar arrays default to **`NOT NULL DEFAULT '{}'`** (you always get `[]`,
+ * never `null`); opt out with `array(text()).nullable()`.
  */
 export function array<TData, TNotNull extends boolean>(
   inner: Column<TData, TNotNull>,
-): Column<TData[], true> {
-  return new Column<TData[], true>({
-    pgType: inner.config.pgType,
-    isArray: true,
-    notNull: true,
-    hasDefault: true,
-    default: [],
-    unique: false,
-    index: false,
-  });
+): Column<TData[], true>;
+export function array<TShape extends OwnedShape>(shape: TShape): OwnedArray<TShape>;
+export function array(
+  arg: Column<unknown, boolean> | OwnedShape,
+): Column<unknown[], true> | OwnedArray<OwnedShape> {
+  if (arg instanceof Column) {
+    return new Column<unknown[], true>({
+      pgType: arg.config.pgType,
+      isArray: true,
+      notNull: true,
+      hasDefault: true,
+      default: [],
+      unique: false,
+      index: false,
+    });
+  }
+  return new OwnedArray(arg);
 }
 
 export type { AnyColumn };
