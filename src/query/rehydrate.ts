@@ -61,8 +61,12 @@ export function rehydrate<T extends Record<string, unknown>>(
         ) as T[keyof T];
       }
     } else if (value instanceof Reference) {
-      // Only the expanded target object needs rehydration; `<field>Id` stays a string.
-      if (current != null && typeof current === "object") {
+      // Only an expanded target needs rehydration; `<field>Id` stays a string.
+      if (Array.isArray(current)) {
+        obj[field as keyof T] = current.map((row) =>
+          rehydrate(value.target.columns, row as Record<string, unknown>),
+        ) as T[keyof T];
+      } else if (current != null && typeof current === "object") {
         obj[field as keyof T] = rehydrate(
           value.target.columns,
           current as Record<string, unknown>,

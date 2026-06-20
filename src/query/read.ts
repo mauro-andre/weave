@@ -21,7 +21,13 @@ import { Column, type InferColumn } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
 import { Reference } from "../schema/reference.js";
-import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
+import {
+  camelToSnake,
+  ownedChildTable,
+  ownedFkColumn,
+  joinTableName,
+  joinTargetFk,
+} from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
 /** Equality filter over an entity's `id` and root scalar columns (owned excluded). */
@@ -75,14 +81,26 @@ function buildObject(
             `FROM ${childTable} WHERE ${correlate})`
           : `(SELECT ${childObj} FROM ${childTable} WHERE ${correlate} LIMIT 1)`;
       parts.push(`'${field}', ${sub}`);
-    } else if (value instanceof Reference) {
+    } else if (value instanceof Reference && value.cardinality === "one") {
       const fkCol = `${camelToSnake(field)}_id`;
       parts.push(`'${field}Id', ${table}.${fkCol}`); // FK id — always
       if (expand?.[field]) {
-        const target = value.target;
-        const t = target.name;
-        const targetObj = buildObject(t, singularize(t), target.columns, subExpand(expand, field));
+        const t = value.target.name;
+        const targetObj = buildObject(t, singularize(t), value.target.columns, subExpand(expand, field));
         parts.push(`'${field}', (SELECT ${targetObj} FROM ${t} WHERE ${t}.id = ${table}.${fkCol} LIMIT 1)`);
+      }
+    } else if (value instanceof Reference) {
+      // N:N — nothing by default; aggregate linked targets via the join table on expand.
+      if (expand?.[field]) {
+        const t = value.target.name;
+        const join = joinTableName(prefix, camelToSnake(field));
+        const owningFk = ownedFkColumn(prefix);
+        const targetFk = joinTargetFk(camelToSnake(field));
+        const targetObj = buildObject(t, singularize(t), value.target.columns, subExpand(expand, field));
+        parts.push(
+          `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${t}.created_at), '[]'::json) ` +
+            `FROM ${t} JOIN ${join} ON ${join}.${targetFk} = ${t}.id WHERE ${join}.${owningFk} = ${table}.id)`,
+        );
       }
     } else if (value instanceof Column) {
       parts.push(`'${field}', ${table}.${camelToSnake(field)}`);

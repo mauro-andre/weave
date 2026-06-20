@@ -1,44 +1,64 @@
 /**
- * `reference` relationship — association (Phase 3).
+ * `reference` relationship — association (Phases 3 & 4).
  *
  * The target is an **independent** entity (its own table), possibly shared by
- * many. This side only **points and reads**: storage is a single FK column
- * (`<field>_id uuid`, no cascade); reads bring the target only on `expand`;
- * writes set the FK and never touch the target table.
+ * many. This side only **points and reads**: it never writes the target table.
  *
- * Declared once as `city: reference(cities)`, it surfaces as:
- *   - column   `city_id`   (the FK, auto-indexed, no cascade)
- *   - read key `cityId`     (always present)
- *   - read key `city`       (only when expanded)
+ *   - `reference(city)`         → N:1. FK column `city_id` (no cascade).
+ *                                 Reads `cityId` always, `city` on expand.
+ *   - `reference(array(city))`  → N:N. A join table (`user_cities`), composite
+ *                                 PK, both FKs cascade the *link*. Reads nothing
+ *                                 by default; `cities: City[]` on expand. Writes
+ *                                 via `citiesIds: string[]` (replaces the set).
  */
 
 import type { Entity, ShapeRecord } from "./entity.js";
 
+export type ReferenceCardinality = "one" | "many";
+
 export class Reference<
   TTarget extends Entity<string, ShapeRecord> = Entity<string, ShapeRecord>,
+  TCard extends ReferenceCardinality = "one",
   TNotNull extends boolean = false,
 > {
   readonly kind = "reference" as const;
-  /** Phantom carrier so the compiler can recover the target/nullability. */
-  declare readonly _phantom: { target: TTarget; notNull: TNotNull };
+  /** Phantom carrier so the compiler can recover target/cardinality/nullability. */
+  declare readonly _phantom: { target: TTarget; cardinality: TCard; notNull: TNotNull };
 
   constructor(
     readonly target: TTarget,
+    readonly cardinality: TCard,
     readonly isNotNull: boolean,
   ) {}
 
-  /** Make the FK `NOT NULL` (the association is required). */
-  notNull(): Reference<TTarget, true> {
-    return new Reference<TTarget, true>(this.target, true);
+  /** Make the FK `NOT NULL` (only meaningful for N:1). */
+  notNull(): Reference<TTarget, TCard, true> {
+    return new Reference<TTarget, TCard, true>(this.target, this.cardinality, true);
   }
 }
 
-/** A reference of any target/nullability. */
-export type AnyReference = Reference<Entity<string, ShapeRecord>, boolean>;
+/** A reference of any target/cardinality/nullability. */
+export type AnyReference = Reference<Entity<string, ShapeRecord>, ReferenceCardinality, boolean>;
 
-/** Declare a reference to an independent entity (nullable by default). */
+/** Marker produced by `array(entity)` to signal an N:N reference. */
+export class ReferenceArray<TTarget extends Entity<string, ShapeRecord>> {
+  readonly kind = "reference_array" as const;
+  constructor(readonly target: TTarget) {}
+}
+
+/** Declare an N:1 reference to an independent entity (nullable by default). */
 export function reference<T extends Entity<string, ShapeRecord>>(
   target: T,
-): Reference<T, false> {
-  return new Reference<T, false>(target, false);
+): Reference<T, "one", false>;
+/** Declare an N:N reference (from `array(entity)`). */
+export function reference<T extends Entity<string, ShapeRecord>>(
+  set: ReferenceArray<T>,
+): Reference<T, "many", false>;
+export function reference(
+  arg: Entity<string, ShapeRecord> | ReferenceArray<Entity<string, ShapeRecord>>,
+): Reference<Entity<string, ShapeRecord>, ReferenceCardinality, false> {
+  if (arg instanceof ReferenceArray) {
+    return new Reference(arg.target, "many", false);
+  }
+  return new Reference(arg, "one", false);
 }

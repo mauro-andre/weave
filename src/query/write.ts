@@ -18,7 +18,13 @@ import { Column } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
 import { Reference } from "../schema/reference.js";
-import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
+import {
+  camelToSnake,
+  ownedChildTable,
+  ownedFkColumn,
+  joinTableName,
+  joinTargetFk,
+} from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
@@ -77,8 +83,8 @@ async function writeNode(
     if (value instanceof Column && input[field] !== undefined) {
       columns.push(camelToSnake(field));
       values.push(input[field]);
-    } else if (value instanceof Reference) {
-      // Set the FK from `<field>Id`; never touch the target table.
+    } else if (value instanceof Reference && value.cardinality === "one") {
+      // N:1 — set the FK from `<field>Id`; never touch the target table.
       const fkValue = input[`${field}Id`];
       if (fkValue !== undefined) {
         columns.push(`${camelToSnake(field)}_id`);
@@ -97,29 +103,49 @@ async function writeNode(
     id = rows[0]!["id"] as string;
   }
 
-  // Owned children: replace (delete then re-insert from the object).
   for (const [field, value] of Object.entries(shape)) {
-    if (!(value instanceof Owned)) continue;
-    const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
-    const fkColumn = ownedFkColumn(prefix);
+    if (value instanceof Owned) {
+      // Owned children: replace (delete then re-insert from the object).
+      const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
+      const fkColumn = ownedFkColumn(prefix);
+      await exec.unsafe(`DELETE FROM ${childTable} WHERE ${fkColumn} = $1`, [id]);
 
-    await exec.unsafe(`DELETE FROM ${childTable} WHERE ${fkColumn} = $1`, [id]);
+      const raw = input[field];
+      const childInputs =
+        value.cardinality === "many"
+          ? Array.isArray(raw)
+            ? raw
+            : []
+          : raw != null
+            ? [raw]
+            : [];
 
-    const raw = input[field];
-    const childInputs =
-      value.cardinality === "many"
-        ? Array.isArray(raw)
-          ? raw
-          : []
-        : raw != null
-          ? [raw]
-          : [];
+      for (const childInput of childInputs) {
+        await writeNode(
+          exec,
+          childTable,
+          childTable,
+          value.shape,
+          childInput as Record<string, unknown>,
+          { parentId: id, fkColumn },
+        );
+      }
+    } else if (value instanceof Reference && value.cardinality === "many") {
+      // N:N — replace the link set; never touch the target table.
+      const join = joinTableName(prefix, camelToSnake(field));
+      const owningFk = ownedFkColumn(prefix);
+      const targetFk = joinTargetFk(camelToSnake(field));
+      await exec.unsafe(`DELETE FROM ${join} WHERE ${owningFk} = $1`, [id]);
 
-    for (const childInput of childInputs) {
-      await writeNode(exec, childTable, childTable, value.shape, childInput as Record<string, unknown>, {
-        parentId: id,
-        fkColumn,
-      });
+      const ids = input[`${field}Ids`];
+      if (Array.isArray(ids)) {
+        for (const targetId of ids) {
+          await exec.unsafe(
+            `INSERT INTO ${join} (${owningFk}, ${targetFk}) VALUES ($1, $2)`,
+            [id, targetId],
+          );
+        }
+      }
     }
   }
 

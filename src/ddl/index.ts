@@ -3,6 +3,7 @@ export {
   emitIndexes,
   emitEntity,
   collectTables,
+  planTables,
   renderCreateTable,
   renderIndexes,
   type TableSpec,

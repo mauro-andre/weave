@@ -44,10 +44,17 @@ export interface Entity<TName extends string, TShape extends ShapeRecord> {
 type IsColumn<V> = V extends { _types: unknown } ? true : false;
 type IsOwned<V> = V extends { kind: "owned" } ? true : false;
 type IsReference<V> = V extends { kind: "reference" } ? true : false;
+type IsRefOne<V> = IsReference<V> extends true ? (RefCard<V> extends "one" ? true : false) : false;
+type IsRefMany<V> = IsReference<V> extends true ? (RefCard<V> extends "many" ? true : false) : false;
 
 type RefTargetShape<V> =
   V extends { _phantom: { target: Entity<string, infer TS> } } ? TS : never;
 type RefNotNull<V> = V extends { _phantom: { notNull: infer NN } } ? NN : false;
+type RefCard<V> = V extends { _phantom: { cardinality: infer C } } ? C : "one";
+
+/** Recursion-depth budget for cyclic schemas (caps nested expand types). */
+type Budget = [unknown, unknown, unknown, unknown, unknown, unknown];
+type Drop<D extends unknown[]> = D extends [unknown, ...infer R] ? R : [];
 
 // ── Read inference (expand-parameterized) ────────────────────────────────────
 
@@ -66,32 +73,40 @@ type ReadBody<TShape, X> = {
     infer C
   >
     ? C extends "many"
-      ? ReadShape<S, ExpandFor<X, K>>[]
-      : ReadShape<S, ExpandFor<X, K>>
+      ? Prettify<ReadShape<S, ExpandFor<X, K>>>[]
+      : Prettify<ReadShape<S, ExpandFor<X, K>>>
     : never;
 } & {
-  // FK id — always present.
-  [K in keyof TShape as IsReference<TShape[K]> extends true
+  // N:1 FK id — always present.
+  [K in keyof TShape as IsRefOne<TShape[K]> extends true
     ? `${K & string}Id`
     : never]: RefNotNull<TShape[K]> extends true ? string : string | null;
 } & {
-  // Expanded target object — only for keys present in the expand map.
-  [K in keyof TShape as IsReference<TShape[K]> extends true
+  // N:1 expanded target — only for keys present in the expand map.
+  [K in keyof TShape as IsRefOne<TShape[K]> extends true
     ? K extends keyof X
       ? K
       : never
     : never]: RefNotNull<TShape[K]> extends true
-    ? ReadShape<RefTargetShape<TShape[K]>, ExpandFor<X, K>>
-    : ReadShape<RefTargetShape<TShape[K]>, ExpandFor<X, K>> | null;
+    ? Prettify<ReadShape<RefTargetShape<TShape[K]>, ExpandFor<X, K>>>
+    : Prettify<ReadShape<RefTargetShape<TShape[K]>, ExpandFor<X, K>>> | null;
+} & {
+  // N:N expanded targets — array, only when expanded (nothing by default).
+  [K in keyof TShape as IsRefMany<TShape[K]> extends true
+    ? K extends keyof X
+      ? K
+      : never
+    : never]: Prettify<ReadShape<RefTargetShape<TShape[K]>, ExpandFor<X, K>>>[];
 };
 
-type ReadShape<TShape, X> = Prettify<
-  Pick<SystemColumns, "id"> & ReadBody<TShape, X> & Pick<SystemColumns, "createdAt" | "updatedAt">
->;
+// Raw intersection (no Prettify here, so the recursive alias stays lazy).
+type ReadShape<TShape, X> = Pick<SystemColumns, "id"> &
+  ReadBody<TShape, X> &
+  Pick<SystemColumns, "createdAt" | "updatedAt">;
 
 /** The read object for an entity, given an `expand` map `X`. */
 export type InferRead<E, X> = E extends Entity<string, infer TShape>
-  ? ReadShape<TShape, X>
+  ? Prettify<ReadShape<TShape, X>>
   : never;
 
 /** The default read object (no expand). */
@@ -99,17 +114,19 @@ export type InferEntity<E> = InferRead<E, {}>;
 
 // ── Expand map ───────────────────────────────────────────────────────────────
 
-type ExpandShape<TShape> = {
-  [K in keyof TShape as IsReference<TShape[K]> extends true
-    ? K
-    : IsOwned<TShape[K]> extends true
-      ? K
-      : never]?: IsReference<TShape[K]> extends true
-    ? true | ExpandShape<RefTargetShape<TShape[K]>>
-    : TShape[K] extends Owned<infer S, OwnedCardinality>
-      ? ExpandShape<S>
-      : never;
-};
+type ExpandShape<TShape, D extends unknown[] = Budget> = D extends []
+  ? {} // depth budget exhausted — stop recursing (cycle guard)
+  : {
+      [K in keyof TShape as IsReference<TShape[K]> extends true
+        ? K
+        : IsOwned<TShape[K]> extends true
+          ? K
+          : never]?: IsReference<TShape[K]> extends true
+        ? true | ExpandShape<RefTargetShape<TShape[K]>, Drop<D>>
+        : TShape[K] extends Owned<infer S, OwnedCardinality>
+          ? ExpandShape<S, Drop<D>>
+          : never;
+    };
 
 /** The shape of the `expand` option for an entity. */
 export type ExpandInput<E> = E extends Entity<string, infer TShape>
@@ -154,19 +171,24 @@ type InsertBody<TShape> = Prettify<
   } & {
     [K in keyof TShape as IsOwned<TShape[K]> extends true ? K : never]?: InsertField<TShape[K]>;
   } & {
-    // notNull reference → required `<field>Id`.
-    [K in keyof TShape as IsReference<TShape[K]> extends true
+    // notNull N:1 reference → required `<field>Id`.
+    [K in keyof TShape as IsRefOne<TShape[K]> extends true
       ? RefNotNull<TShape[K]> extends true
         ? `${K & string}Id`
         : never
       : never]: string;
   } & {
-    // nullable reference → optional `<field>Id`.
-    [K in keyof TShape as IsReference<TShape[K]> extends true
+    // nullable N:1 reference → optional `<field>Id`.
+    [K in keyof TShape as IsRefOne<TShape[K]> extends true
       ? RefNotNull<TShape[K]> extends true
         ? never
         : `${K & string}Id`
       : never]?: string;
+  } & {
+    // N:N reference → optional `<field>Ids` (the link set; absent = empty).
+    [K in keyof TShape as IsRefMany<TShape[K]> extends true
+      ? `${K & string}Ids`
+      : never]?: string[];
   }
 >;
 

@@ -15,7 +15,13 @@ export {
   type OwnedCardinality,
   type OwnedOptions,
 } from "./owned.js";
-export { reference, Reference, type AnyReference } from "./reference.js";
+export {
+  reference,
+  Reference,
+  ReferenceArray,
+  type AnyReference,
+  type ReferenceCardinality,
+} from "./reference.js";
 export {
   defineEntity,
   type Entity,

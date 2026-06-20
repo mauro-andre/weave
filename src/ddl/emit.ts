@@ -19,7 +19,14 @@ import { Column, type ColumnConfig } from "../schema/column.js";
 import type { Entity, ShapeRecord } from "../schema/entity.js";
 import { Owned, type OwnedShape } from "../schema/owned.js";
 import { Reference } from "../schema/reference.js";
-import { camelToSnake, indexName, ownedChildTable, ownedFkColumn } from "../util/naming.js";
+import {
+  camelToSnake,
+  indexName,
+  ownedChildTable,
+  ownedFkColumn,
+  joinTableName,
+  joinTargetFk,
+} from "../util/naming.js";
 import { singularize } from "../util/inflect.js";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
@@ -46,11 +53,13 @@ export interface IndexSpec {
   column: string;
 }
 
-/** A materialized table: columns + indexes. */
+/** A materialized table: columns + indexes (+ a composite PK for join tables). */
 export interface TableSpec {
   name: string;
   columns: ColumnSpec[];
   indexes: IndexSpec[];
+  /** Composite primary key (join tables). Normal tables use `id` column-level. */
+  primaryKey?: string[];
 }
 
 // ── Default rendering ────────────────────────────────────────────────────────
@@ -138,8 +147,8 @@ function collect(
       children.push(
         ...collect(childTable, childTable, value.shape, { table: tableName, fkColumn }),
       );
-    } else if (value instanceof Reference) {
-      // FK column to an independent table — no cascade, auto-indexed (§8).
+    } else if (value instanceof Reference && value.cardinality === "one") {
+      // N:1 FK column to an independent table — no cascade, auto-indexed (§8).
       const col = `${camelToSnake(field)}_id`;
       columns.push({
         name: col,
@@ -148,6 +157,21 @@ function collect(
         references: { table: value.target.name, cascade: false },
       });
       indexes.push({ name: indexName(tableName, col), column: col });
+    } else if (value instanceof Reference) {
+      // N:N — a dedicated join table (composite PK, both FKs cascade the link).
+      const join = joinTableName(pathPrefix, camelToSnake(field));
+      const owningFk = ownedFkColumn(pathPrefix);
+      const targetFk = joinTargetFk(camelToSnake(field));
+      children.push({
+        name: join,
+        columns: [
+          { name: owningFk, sqlType: "uuid", notNull: true, references: { table: tableName, cascade: true } },
+          { name: targetFk, sqlType: "uuid", notNull: true, references: { table: value.target.name, cascade: true } },
+        ],
+        primaryKey: [owningFk, targetFk],
+        // Index the target FK for reverse lookup + cascade-from-target.
+        indexes: [{ name: indexName(join, targetFk), column: targetFk }],
+      });
     } else if (value instanceof Column) {
       const col = columnSpec(field, value.config);
       columns.push(col);
@@ -187,8 +211,9 @@ function renderColumnSpec(c: ColumnSpec): string {
 
 /** Render the `CREATE TABLE` for a single spec. */
 export function renderCreateTable(spec: TableSpec): string {
-  const body = spec.columns.map((c) => `  ${renderColumnSpec(c)}`).join(",\n");
-  return `CREATE TABLE ${spec.name} (\n${body}\n);`;
+  const lines = spec.columns.map((c) => `  ${renderColumnSpec(c)}`);
+  if (spec.primaryKey) lines.push(`  PRIMARY KEY (${spec.primaryKey.join(", ")})`);
+  return `CREATE TABLE ${spec.name} (\n${lines.join(",\n")}\n);`;
 }
 
 /** Render the `CREATE INDEX`es for a single spec. */
@@ -215,4 +240,35 @@ export function emitEntity(entity: Entity<string, ShapeRecord>): string {
   return collectTables(entity)
     .flatMap((spec) => [renderCreateTable(spec), ...renderIndexes(spec)])
     .join("\n");
+}
+
+/**
+ * Order specs so a table is created after every table it references (within the
+ * set). Self-references are ignored (Postgres allows them in `CREATE TABLE`).
+ * On a true multi-table FK cycle, the unresolved specs are appended in their
+ * original order (best effort — deferred-FK handling lands in Phase 6).
+ */
+export function planTables(specs: TableSpec[]): TableSpec[] {
+  const present = new Set(specs.map((s) => s.name));
+  const deps = (s: TableSpec): Set<string> => {
+    const out = new Set<string>();
+    for (const c of s.columns) {
+      const t = c.references?.table;
+      if (t && t !== s.name && present.has(t)) out.add(t);
+    }
+    return out;
+  };
+
+  const remaining = [...specs];
+  const ordered: TableSpec[] = [];
+  const done = new Set<string>();
+
+  while (remaining.length) {
+    const i = remaining.findIndex((s) => [...deps(s)].every((d) => done.has(d)));
+    if (i === -1) break; // cycle — append the rest as-is below
+    const [spec] = remaining.splice(i, 1);
+    ordered.push(spec!);
+    done.add(spec!.name);
+  }
+  return [...ordered, ...remaining];
 }

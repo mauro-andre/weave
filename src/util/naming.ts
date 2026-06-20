@@ -40,3 +40,13 @@ export function ownedChildTable(
 export function ownedFkColumn(parentPathPrefix: string): string {
   return `${singularize(lastSegment(parentPathPrefix))}_id`;
 }
+
+/** Join table for an N:N reference: `("user", "cities")` → `user_cities`. */
+export function joinTableName(pathPrefix: string, fieldSnake: string): string {
+  return `${pathPrefix}_${fieldSnake}`;
+}
+
+/** Join-table FK to the target, from the (snake) field: `"cities"` → `city_id`. */
+export function joinTargetFk(fieldSnake: string): string {
+  return `${singularize(fieldSnake)}_id`;
+}

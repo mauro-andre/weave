@@ -8,6 +8,8 @@
 import { catalog } from "../types/registry.js";
 import { Column, scalarColumn, type AnyColumn } from "./column.js";
 import { OwnedArray, type OwnedShape } from "./owned.js";
+import { ReferenceArray } from "./reference.js";
+import type { Entity, ShapeRecord } from "./entity.js";
 
 // ── Numeric ──────────────────────────────────────────────────────────────────
 export const int2 = () => scalarColumn(catalog.int2);
@@ -46,6 +48,7 @@ export const bytea = () => scalarColumn(catalog.bytea);
  * `array(...)` is overloaded by what it wraps:
  *
  *   - `array(text())`    → a **scalar array column** (`text[]`).
+ *   - `array(cityEntity)`→ an **N:N reference marker** for `reference(array(city))`.
  *   - `array({ ... })`   → an **owned 1:N marker** for `owned(array({...}))`.
  *
  * Scalar arrays default to **`NOT NULL DEFAULT '{}'`** (you always get `[]`,
@@ -54,10 +57,11 @@ export const bytea = () => scalarColumn(catalog.bytea);
 export function array<TData>(
   inner: Column<TData, boolean, boolean>,
 ): Column<TData[], true, true>;
+export function array<T extends Entity<string, ShapeRecord>>(target: T): ReferenceArray<T>;
 export function array<TShape extends OwnedShape>(shape: TShape): OwnedArray<TShape>;
 export function array(
-  arg: Column<unknown, boolean, boolean> | OwnedShape,
-): Column<unknown[], true, true> | OwnedArray<OwnedShape> {
+  arg: Column<unknown, boolean, boolean> | Entity<string, ShapeRecord> | OwnedShape,
+): Column<unknown[], true, true> | ReferenceArray<Entity<string, ShapeRecord>> | OwnedArray<OwnedShape> {
   if (arg instanceof Column) {
     return new Column<unknown[], true, true>({
       pgType: arg.config.pgType,
@@ -69,7 +73,12 @@ export function array(
       index: false,
     });
   }
-  return new OwnedArray(arg);
+  // An Entity has a string `name` and an object `columns`; a shape does not.
+  const candidate = arg as { name?: unknown; columns?: unknown };
+  if (typeof candidate.name === "string" && typeof candidate.columns === "object") {
+    return new ReferenceArray(arg as Entity<string, ShapeRecord>);
+  }
+  return new OwnedArray(arg as OwnedShape);
 }
 
 export type { AnyColumn };

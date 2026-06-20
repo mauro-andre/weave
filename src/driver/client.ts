@@ -15,7 +15,7 @@
 
 import process from "node:process";
 import postgres from "postgres";
-import { collectTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
+import { collectTables, planTables, renderCreateTable, renderIndexes } from "../ddl/emit.js";
 import type {
   Entity,
   ShapeRecord,
@@ -98,19 +98,19 @@ export class Weave {
       `;
       const existing = new Set(rows.map((r) => r.table_name));
 
-      // Each entity expands to its full owned tree (parent-first).
-      for (const entity of this.entities) {
-        for (const spec of collectTables(entity)) {
-          if (existing.has(spec.name)) {
-            skipped.push(spec.name);
-            continue;
-          }
-          await tx.unsafe(renderCreateTable(spec));
-          for (const idx of renderIndexes(spec)) {
-            await tx.unsafe(idx);
-          }
-          created.push(spec.name);
+      // Gather every table (root + owned + join) across entities, then order
+      // them so referenced tables are created before the tables referencing them.
+      const allSpecs = this.entities.flatMap((entity) => collectTables(entity));
+      for (const spec of planTables(allSpecs)) {
+        if (existing.has(spec.name)) {
+          skipped.push(spec.name);
+          continue;
         }
+        await tx.unsafe(renderCreateTable(spec));
+        for (const idx of renderIndexes(spec)) {
+          await tx.unsafe(idx);
+        }
+        created.push(spec.name);
       }
     });
 
