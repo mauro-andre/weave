@@ -437,6 +437,40 @@ Mistura **Mongo Compass + DBeaver**, no nível de objeto. Módulos:
 5. **API playground** — testar as rotas geradas, com o scope ativo.
 6. **Migrations** — ver o diff (IR novo vs banco) e aplicar (`sync`).
 
+### 7.1 Identidade visual (decisão 0.1)
+
+**Metáfora: o tear — dois fios que se entrelaçam.** O nome *Weave* (tecelagem) vira
+a marca, e ela conta a tese do produto:
+
+- **Fio azul** = o relacional / Postgres (a fundação).
+- **Fio verde** = o objeto / ergonomia tipo Mongo (a camada de cima).
+- **O entrelace** = o Weave. (Mapeia também nos dois relacionamentos `owned`/`reference`.)
+
+Direção escolhida: **dois fios visíveis + teal-assinatura** (foge do "verde genérico"
+estilo Supabase).
+
+**Paleta:**
+
+| Papel | Cor | Hex |
+|---|---|---|
+| Primária (entrelace) | teal/esmeralda | `#12B886` |
+| Fio relacional | azul Postgres | `#2F6FEB` |
+| Fio objeto | verde Mongo | `#10B981` |
+| Gradiente-assinatura | azul → esmeralda | `#2563EB → #10B981` |
+| Fundo (dark-first) | near-black azul-esverdeado | `#0B0F12` |
+
+- **Dark-first** (com tema claro depois), acentos em teal.
+- **Uso intencional da dualidade nos dados:** `owned` numa tonalidade, `reference`
+  em outra — o usuário lê o tipo de relação pela cor, sem legenda.
+- **Logomark:** dois fios (azul + verde) cruzando num nó.
+
+**Layout:** sidebar fixa com seletor de **base/projeto** no topo; nav
+**Dados · Entidades · Scopes · API · Config**. A **tela-assinatura** = o agregado num
+card em cima, as linhas das tabelas constituintes em abas embaixo, com **fios sutis
+ligando os campos do objeto às colunas** — vê-se o *weave* acontecendo.
+
+**Tipografia:** UI em **Inter/Geist**; dados/IDs/SQL em **mono** (JetBrains/Geist Mono).
+
 ---
 
 ## 8. Serviços adicionais (backlog de plataforma)
