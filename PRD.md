@@ -495,6 +495,11 @@ await find(req.user.isHR ? hrAuthor : publicAuthor, { where: { … } });
 > bloco), **auto-índice de FK por padrão** (opt-out), escopo v1 com parcial +
 > método `gin`. Expressão / *covering* / `opclass` / `collation` adiados.
 
+> **Resolvido — `id` (decisão 2):** **UUID v7 gerado app-side** (TS, sem
+> dependência), portável p/ **Postgres 13+** (não exige o `uuidv7()` nativo do
+> 18). A coluna mantém `DEFAULT gen_random_uuid()` só como fallback p/ inserts
+> fora do Weave. Testado contra PG 17 e 18.
+
 ---
 
 ## 11. Roadmap (fases)
@@ -524,7 +529,11 @@ await find(req.user.isHR ? hrAuthor : publicAuthor, { where: { … } });
 `jsonb`; agregados/`group by` (ver fronteira "não-OLAP" no §4); paginação por
 cursor/keyset; lock de linha (`FOR UPDATE`) / optimistic locking; escrita por
 filtro (`updateWhere`/`deleteWhere`/upsert por chave única); alvos de `reference`
-**lazy** (`reference(() => entity)`) — pré-requisito de ciclos reais.
+**lazy** (`reference(() => entity)`) — pré-requisito de ciclos reais; **batching
+de escrita** (`shred` hoje faz um round-trip por filho owned e por link N:N —
+candidato a multi-row `INSERT`/`unnest` num agregado grande); **deferred-FK** no
+`sync` p/ ciclo de FK multi-tabela (hoje `planTables` é best-effort; o ciclo nem
+é construível com `reference` eager).
 
 ---
 

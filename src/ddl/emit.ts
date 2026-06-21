@@ -11,8 +11,10 @@
  *   - parent FK    = `<singular last path segment>_id` (`user_id`, `address_id`).
  *   - FK is auto-indexed and `ON DELETE CASCADE` (§8).
  *
- * Decisions baked in: `id uuid PRIMARY KEY DEFAULT uuidv7()`, timestamps
- * `timestamp with time zone NOT NULL DEFAULT now()`, snake_case column names.
+ * Decisions baked in: `id uuid PRIMARY KEY DEFAULT gen_random_uuid()` — the
+ * default is only a fallback; Weave supplies a UUID v7 app-side on every insert
+ * (see `util/uuid`) so it works on Postgres 13+. Timestamps are
+ * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
 import { Column, type ColumnConfig } from "../schema/column.js";
@@ -254,7 +256,9 @@ export function emitEntity(entity: Entity<string, ShapeRecord>): string {
  * Order specs so a table is created after every table it references (within the
  * set). Self-references are ignored (Postgres allows them in `CREATE TABLE`).
  * On a true multi-table FK cycle, the unresolved specs are appended in their
- * original order (best effort — deferred-FK handling lands in Phase 6).
+ * original order (best effort) and the CREATE may fail. Such cycles aren't even
+ * constructible today (references are eager), so this is defensive; proper
+ * deferred-FK handling is a future item (see the PRD roadmap).
  */
 export function planTables(specs: TableSpec[]): TableSpec[] {
   const present = new Set(specs.map((s) => s.name));
