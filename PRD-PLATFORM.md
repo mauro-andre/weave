@@ -181,6 +181,83 @@ CREATE TABLE weave_entities (
 
 ---
 
+### 4.5 Formato do IR (contrato)
+
+O IR é um **espelho 1:1** do que o `defineEntity` expressa hoje (`ColumnConfig` +
+`Reference` + `Owned`) — nada além. Confirmado contra o código (0.1):
+
+- **Tipos não têm parâmetros.** `type` é só o **nome do catálogo** (`"text"`,
+  `"int4"`, …); não há `length`/`precision` (o `PgType` não os carrega).
+- **Sem bloco de índice composto/parcial.** `defineEntity(name, columns)` tem 2
+  argumentos; o bloco `index().on(...)` do engine §8 não foi implementado. O IR
+  **não** tem seção de índices entidade-level por enquanto — ponto de extensão
+  futuro (uma chave `indexes` no topo, quando existir).
+- **`id`/`createdAt`/`updatedAt` são implícitos** — o engine injeta; não aparecem
+  no IR.
+
+**Nós (por `kind`):**
+
+```
+column:    { kind:"column", type, array?, notNull?, default?, unique?, index? }
+reference: { kind:"reference", target, cardinality:"one"|"many", notNull? }
+owned:     { kind:"owned", array, shape, table? }
+```
+
+| Campo | Em | Origem no DSL | Default |
+|---|---|---|---|
+| `type` | column | `text()`, `int4()`, … (nome do catálogo) | — (obrigatório) |
+| `array` | column | `array(text())` | `false` |
+| `notNull` | column | `.notNull()` | `false` |
+| `default` | column | `.default(x)` (presente só se declarado) | ausente |
+| `unique` | column | `.unique()` | `false` |
+| `index` | column | `.index()` (btree 1 coluna) | `false` |
+| `target` | reference | entidade alvo (nome) | — (obrigatório) |
+| `cardinality` | reference | `reference(e)` → `one`; `reference(array(e))` → `many` | — |
+| `notNull` | reference | `.notNull()` (só faz sentido em `one`) | `false` |
+| `array` | owned | `owned({...})` → `false`; `owned(array({...}))` → `true` | — |
+| `shape` | owned | sub-shape recursiva (`{ campo: nó }`) | — |
+| `table` | owned | `owned(..., { table })` (override de nome) | ausente |
+
+**Topo:** `{ irVersion, name, fields }`.
+
+**Exemplo completo (cobre todos os casos):**
+
+```json
+{
+  "irVersion": 1,
+  "name": "users",
+  "fields": {
+    "name":     { "kind": "column", "type": "text", "notNull": true },
+    "email":    { "kind": "column", "type": "text", "notNull": true, "unique": true },
+    "username": { "kind": "column", "type": "text", "notNull": true, "index": true },
+    "phones":   { "kind": "column", "type": "text", "array": true, "notNull": true, "default": [] },
+    "age":      { "kind": "column", "type": "int4" },
+    "active":   { "kind": "column", "type": "bool", "notNull": true, "default": true },
+
+    "city": { "kind": "reference", "target": "cities", "cardinality": "one", "notNull": false },
+    "tags": { "kind": "reference", "target": "tags",   "cardinality": "many" },
+
+    "addresses": { "kind": "owned", "array": true, "shape": {
+      "street": { "kind": "column", "type": "text", "notNull": true },
+      "city":   { "kind": "reference", "target": "cities", "cardinality": "one" },
+      "landmarks": { "kind": "owned", "array": true, "table": "landmarks", "shape": {
+        "label": { "kind": "column", "type": "text", "notNull": true }
+      }}
+    }}
+  }
+}
+```
+
+**Micro-decisões (0.1):**
+
+1. **`irVersion` no topo** — versão do *formato* do IR (não da shape). Seguro barato
+   pra migrar o formato depois (liga na D-4).
+2. **Ordem dos campos = ordem das chaves do JSON** — dita a ordem das colunas no
+   DDL. Sem índice de ordem explícito.
+3. **Default não-JSON-nativo** — só `bigint` cai aqui; guardado como **string** e
+   coagido pelo engine via `type`. (`string`/`number`/`boolean`/array vão diretos;
+   `bytea` default o engine não suporta.)
+
 ## 5. API automática (orientada a agregado)
 
 Cada entidade do metastore ganha rotas. Como a unidade é o **agregado**, a API é
