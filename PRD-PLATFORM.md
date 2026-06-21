@@ -50,6 +50,28 @@ tabelas relacionais**. A tela "agregado em cima ↕ linhas de todas as tabelas q
 o compõem embaixo, editáveis dos dois lados" é a expressão visual direta desse
 conceito. **Esse é o produto.**
 
+### 2.1 Escopo: camada de abstração rica, não backend monolítico (decisão 0.1)
+
+"Backend" são **três camadas** com donos diferentes:
+
+1. **Dados + persistência + API + controle de acesso** (modelo de objeto, auto-API,
+   scopes, navegador) — **é o Weave**. O wedge.
+2. **Identidade / auth** — commodity (Clerk/Auth0/Keycloak; o dev quase sempre já
+   tem). **Fora do núcleo**; módulo opcional futuro.
+3. **Lógica de negócio / compute** (rotas custom, jobs) — **é a app do dev**, no
+   framework que ele escolher.
+
+**Decisão:** o Weave é a **camada 1**, **auth-agnóstico** (via o contrato de claims,
+§6.3) e **agnóstico de framework**. O dev usa o Weave como **todo o seu sistema de
+repositório/banco de dados** (dados, API, controle de acesso) e traz **o framework
+de app que quiser** (Next, etc.) + a auth que já tem. O "dev só cuida do front"
+emerge dessa composição — não de o Weave virar um monólito.
+
+> **Por que não virar "Supabase monolítico":** auth-as-a-service é um produto crítico
+> e enorme (hash, reset, OAuth, MFA, sessão…) que comoditiza o Weave contra
+> incumbentes e **dilui** o diferencial do objeto. Não fechamos a porta pro
+> "Supabase do nosso jeito" — ele se monta por **composição**, não por monólito.
+
 ---
 
 ## 3. O que sobrevive do engine e o que é reconceituado
@@ -461,6 +483,10 @@ Por ordem de afinidade com o modelo:
 ```
 
 ### 9.1 Stack & runtime (decisão 0.1)
+
+> **Escopo desta seção:** é a stack de **implementação da própria plataforma** (o
+> painel + o servidor da API). **Não** é imposição ao dev — quem consome o Weave usa
+> o framework que quiser (Next, etc.); ver §2.1.
 
 - **Framework: VeloJS** (Hono + Preact SSR), o framework do autor — dogfooding e
   controle total.
