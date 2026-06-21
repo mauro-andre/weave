@@ -376,6 +376,27 @@ cravar um modelo de tenant rígido (hierarquias, apps sem tenant continuam caben
 Scopes são configurados **visualmente** na GUI e guardados no metastore
 (`weave_scopes`).
 
+### 6.3 Entrada de identidade — quem quebra o token (decisão 0.1)
+
+A identidade chega **por requisição**. A questão é **quem verifica o token e
+resolve o scope** — a fronteira de confiança vista pela porta de entrada. Os dois
+modelos não são exclusivos; o **contrato de identidade é o mesmo** (saco de claims),
+muda só **quem o preenche**:
+
+- **Modelo B — Weave quebra o token (padrão).** O cliente manda o JWT direto pra
+  API; o Weave **verifica** (config de segredo/JWKS por projeto), extrai os claims e
+  resolve o scope. Entrega a promessa BaaS: o **front da app fala direto** na
+  auto-API. Único modo seguro quando o cliente é não-confiável (browser/mobile).
+- **Modelo A — caller-confiável.** Um backend seu já fez a auth e passa
+  **identidade + scope já resolvidos**; o Weave confia. Para "Weave atrás do meu
+  servidor" / SDK embarcado. **Não** pode ser exposto a clientes não-confiáveis.
+
+> **Regra de ouro:** mesmo quando a requisição "nomeia" o scope, esse nome é
+> **derivado/checado contra os claims** do token — o cliente nunca escolhe `admin`
+> livremente. O nome do scope é do dev (arbitrário); a autoridade é o token.
+
+Mesmo engine, mesma régua de imposição (§6.1); só a porta de entrada difere.
+
 ---
 
 ## 7. GUI (Velo) — a aplicação visual
@@ -400,8 +421,11 @@ Mistura **Mongo Compass + DBeaver**, no nível de objeto. Módulos:
 
 Por ordem de afinidade com o modelo:
 
-- **Auth / identidade** — o scope precisa de um "quem é você". Decisão: construir
-  vs. integrar (ver D-1).
+- **Auth / identidade** — duas auths distintas (ver §6.3 e D-1 resolvida):
+  - **CP (painel):** só um **login gate**, **sem** modelo de permissão — operadores
+    são arquitetos/devs, "modo DBeaver/Compass" (god-mode).
+  - **App (end-user):** a identidade que os scopes usam. Integrar/verificar primeiro
+    (JWT externo); auth própria com baterias é módulo opcional futuro.
 - **Hooks de escrita** (before/after `save`) — encaixam porque o `save` já é
   transacional.
 - **Realtime** sobre **mudança de agregado** (via logical replication) — o ângulo
@@ -479,9 +503,11 @@ Por ordem de afinidade com o modelo:
 
 ## 11. Decisões em aberto
 
-- **D-1 — Auth:** construir identidade própria vs. integrar (ex.: provider
-  externo / JWT de terceiro). *Tendência:* integrar primeiro, focar no diferencial
-  (objeto + scopes).
+- ✅ **D-1 — Auth (resolvida 0.1):** duas auths separadas. **CP** = login gate sem
+  permissões (operadores god-mode). **App** = identidade como saco de claims;
+  **integrar/verificar primeiro** (JWT externo), auth própria como módulo opcional.
+  Entrada por requisição com **Modelo B padrão** (Weave quebra o token) + **Modelo A**
+  (caller-confiável). Implementação no P4; não bloqueia P1–P3. Ver §6.3.
 - ✅ **D-2 — Imposição de scope (resolvida 0.1):** **WHERE homogêneo** injetado no
   chokepoint do compilador (default), com **RLS gerado do IR como blindagem
   opcional por entidade** (acesso fora do Weave). Ver §6.1.
