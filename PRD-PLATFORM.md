@@ -82,11 +82,48 @@ serve à plataforma".
 
 ---
 
-## 4. Metastore — a planta vira dado (IR)
+## 4. Projetos, bases e metastore
+
+### 4.1 O container: Projeto / Base
+
+Acima da entidade existe um container que o resto do PRD pressupunha sem nomear: o
+**Projeto (Base)** — o guarda-chuva que segura entidades + scopes + config de
+identidade. É o equivalente ao "project" do Supabase.
+
+**Decisões (0.1):**
+
+- **Provisionamento — BYO Postgres.** A plataforma **conecta** num cluster PG que
+  você fornece (com privilégio de criar base) e cria/gerencia as bases nele. Não
+  sobe instâncias (orquestração fica adiada). Fiel à linhagem "Weave aponta pro seu
+  PG".
+- **Isolamento — um `DATABASE` por projeto.** Cada projeto = um `CREATE DATABASE`
+  próprio, com seu próprio metastore. Isolamento real, `DROP DATABASE` é teardown
+  limpo. Custo assumido: um pool de conexão por base (pools lazy/sob demanda).
+
+### 4.2 Dois metastores: control plane × por-projeto
+
+- **Control plane** — o "banco da plataforma": lista de projetos/bases, usuários do
+  painel, strings de conexão/credenciais. É o que a GUI lê pra listar "suas bases".
+  Vive em sua própria base.
+- **Metastore por projeto** — `weave_entities`, `weave_scopes` daquele projeto.
+  Vive **dentro** da base do projeto. Criar a base = `CREATE DATABASE` + bootstrap
+  dessas tabelas.
+
+### 4.3 Projeto ≠ tenant (dois níveis de isolamento)
+
+Não confundir com a §6.2. São camadas distintas:
+
+- **Projeto/Base** = o container (uma app inteira). Isolamento por `DATABASE`.
+- **Tenant** = isolamento de **linha dentro** de um projeto (os usuários/contas da
+  *sua* app), via scope `account_id = identity.accountId`.
+
+Uma base pode ter multi-tenancy lá dentro; os dois coexistem.
+
+### 4.4 Metastore — a planta vira dado (IR)
 
 **Decisão (0.1):** a definição de entidade é serializada num **IR (Intermediate
-Representation)** em JSON e guardada no Postgres. O IR é a **fonte da verdade**;
-TS e GUI são dois jeitos de produzi-lo.
+Representation)** em JSON e guardada no Postgres (no metastore **do projeto**). O IR
+é a **fonte da verdade**; TS e GUI são dois jeitos de produzi-lo.
 
 ### Dois níveis, dois lugares
 
@@ -160,6 +197,14 @@ mais ergonômica que a do PostgREST:
 - **Query** = o filtro objeto-literal já existente, exposto como query-param/body.
 - **Projeção/scope** ativos decidem o que volta.
 - **Validação** de input pelo validador nativo do IR (§5.1).
+
+**Rotas fixas, dispatch dinâmico (decisão 0.1).** A API **não cria rota por
+entidade em runtime**. Registra-se **uma vez** um conjunto wildcard
+(`/api/:entity`, `/api/:entity/:id`, …); a cada requisição o handler lê
+`params.entity`, resolve a entidade no **metastore** naquele instante e chama o
+engine. Criar entidade na GUI = inserir linha em `weave_entities` (dado), **não**
+registrar rota. O dinamismo mora no dispatch, não na tabela de rotas — mais simples
+e robusto que registro dinâmico.
 
 ### 5.1 Validação de borda (sem Zod gerado)
 
@@ -309,9 +354,25 @@ Por ordem de afinidade com o modelo:
 └───────────────┬──────────────────────────────────────────────┘
                 │  driver (postgres.js)
 ┌───────────────▼──────────────────────────────────────────────┐
-│  PostgreSQL — metastore (weave_*) + dados + RLS                 │
+│  PostgreSQL (BYO) — control plane + 1 DATABASE por projeto       │
+│    (cada base: metastore weave_* + dados + RLS opcional)         │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+### 9.1 Stack & runtime (decisão 0.1)
+
+- **Framework: VeloJS** (Hono + Preact SSR), o framework do autor — dogfooding e
+  controle total.
+- **GUI = Velo puro:** páginas parametrizadas (`/data/:entity/:id` etc.),
+  `loader`/`action`, event streams (SSE) para sync/migration ao vivo, `middleware`
+  para identidade/scope (seta `c.set("identity")`, que os handlers passam ao engine).
+- **API + engine = código agnóstico de framework** (funções puras + handlers que só
+  tocam o `Context` do Hono), **montado no Velo via `addRoutes`** com as rotas
+  wildcard (§5). Roda como 1 deploy hoje; extraível como serviço **headless** depois
+  sem reescrever.
+- A GUI usa páginas/loaders estáticos do Velo (registrados em build-time); a API usa
+  o escape hatch `addRoutes` (registrado no startup). Nenhum dos dois registra rota
+  em runtime.
 
 ---
 
@@ -323,9 +384,10 @@ Por ordem de afinidade com o modelo:
 - **P0 — Navegador de objetos (read-only).** Lê plantas existentes; lista
   entidades → objetos → linhas constituintes. Usa `find` direto. **Prova visual do
   conceito.** *(decidido como ponto de partida.)*
-- **P1 — Metastore (IR).** Definir o formato do IR, a tabela `weave_entities`, o
-  validador e o leitor do engine a partir do `jsonb`. Migrar o `defineEntity` TS
-  para emitir IR.
+- **P1 — Projetos + Metastore (IR).** **Control plane** (lista de bases + conexões)
+  e criação de base (`CREATE DATABASE` + bootstrap do metastore). Definir o formato
+  do IR, a tabela `weave_entities`, o validador e o leitor do engine a partir do
+  `jsonb`. Migrar o `defineEntity` TS para emitir IR.
 - **P2 — Edição de dados.** Editar o objeto via `save`; depois linha crua (com
   reconciliação da semântica de agregado).
 - **P3 — API REST automática.** Rotas por entidade (CRUD de agregado) + query +
