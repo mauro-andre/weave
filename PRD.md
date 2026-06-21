@@ -2,6 +2,10 @@
 
 > **Status:** v1 completo (Fases 0–7) · **Versão:** 0.5 · **Data:** 2026-06-21
 > Documento de planejamento interno. Docs públicas (README) serão em inglês depois.
+>
+> **Este PRD descreve o _engine_ (a biblioteca).** A evolução para um backend
+> completo (API, scopes, GUI) está em [`PRD-PLATFORM.md`](./PRD-PLATFORM.md) — o
+> engine aqui descrito vira o _kernel_ daquela plataforma.
 
 ---
 
