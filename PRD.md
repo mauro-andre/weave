@@ -1,6 +1,6 @@
 # Weave — PRD (Product Requirements Document)
 
-> **Status:** rascunho · **Versão:** 0.4 · **Data:** 2026-06-20
+> **Status:** v1 completo (Fases 0–7) · **Versão:** 0.5 · **Data:** 2026-06-21
 > Documento de planejamento interno. Docs públicas (README) serão em inglês depois.
 
 ---
@@ -515,14 +515,15 @@ await find(req.user.isHR ? hrAuthor : publicAuthor, { where: { … } });
 - ✅ **Fase 4 — N:N:** tabela de associação (PK composta, cascade do vínculo),
   `expand` agregado, escrita por `<campo>Ids`; ordenação topológica do `sync()`;
   cap de profundidade nos tipos (rede de segurança p/ ciclos — ver nota abaixo).
-- **Fase 5 — Busca avançada:** filtro objeto-literal rico (ver §9.1) — operadores
+- ✅ **Fase 5 — Busca avançada:** filtro objeto-literal rico (ver §9.1) — operadores
   escalares, lógica `and`/`or`/`not`, filtro **aninhado** em `owned`/`reference`
   com quantificadores `some`/`every`/`none`, operadores de coluna-array; mais
   `orderBy`, paginação (ergonomia `zodmongo`) e `count`.
-- **Fase 6 — Projeção:** `select` que **poda o objeto e o tipo de retorno** (ver
+- ✅ **Fase 6 — Projeção:** `select` que **poda o objeto e o tipo de retorno** (ver
   §9.2) + **projeções nomeadas** reutilizáveis (base tipada p/ permissão na app).
-- **Fase 7 — Migrations & DX:** diff de shape → migration, CLI, validação de
-  borda opcional (Zod gerado).
+- ✅ **Fase 7 — Migrations & DX:** diff de shape → migration (`diff()`/`generate()`/
+  `sync()` aditivo com advisory lock) + **CLI** (`status`/`generate`/`sync`). A
+  validação de borda (Zod gerado) era **opcional/pós-v1** (§7) e fica adiada.
 
 **Adiado (pós-v1, opt-in documentado):** políticas de campo impostas
 (default-deny); full-text (`tsvector`) e trigram (`pg_trgm`); query dentro de
