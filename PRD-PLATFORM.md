@@ -280,6 +280,43 @@ owned:     { kind:"owned", array, shape, table? }
    coagido pelo engine via `type`. (`string`/`number`/`boolean`/array vão diretos;
    `bytea` default o engine não suporta.)
 
+### 4.6 Migration — POST de IR é o estado desejado (decisão 0.1)
+
+Schema é dado: dar `POST` num IR novo pra uma entidade **é** o pedido de migração.
+O modelo é **declarativo/idempotente** — um comportamento só, **sem taxonomia de
+operações** (`renameField`/`changeType`/… não existem). "Reproduzir o que chegou,
+preservando o que não mudou."
+
+**Fluxo:**
+
+```
+POST IR (estado desejado)
+  → mesmo que o salvo?  → no-op
+  → materializa o IR em table specs
+  → diffa CONTRA O BANCO VIVO (introspection — não contra o IR antigo)
+  → classifica cada delta:
+       • aditivo (coluna/tabela/índice novos)  → aplica automático
+       • destrutivo (drop, mudança de tipo)    → reporta; aplica só com confirmação
+  → preview do change set + DDL (generate())
+  → aplica em transação + advisory lock (sync())
+  → preserva o não-mudado
+```
+
+**Por que diffar contra o banco vivo, não contra o IR antigo:** o banco é a verdade
+— autocorrige drift e migration parcial anterior. O IR antigo serve só pra histórico.
+(Olhar IR-vs-IR diz *que* mudou, não *o que fazer*; desejado-vs-banco dá o DDL exato.)
+
+**Rename é seguro por padrão, sem resolvê-lo.** Do diff, renomear `title`→`headline`
+é indistinguível de "dropa `title` + cria `headline`". Com o aditivo-first: adiciona
+`headline` (vazio, aplicado) e `title` não está no desejado → vira **drift reportado,
+não dropado**. Resultado: **nenhum dado perdido** (`title` intacto, órfão; `headline`
+vazio). O rename não é "esperto" (não carrega o dado), mas é seguro. **Carregar dado
+num rename** é luxo opcional futuro — no máximo **um** afixo de intenção pontual
+("este campo veio de `title`"), nunca um sistema de comandos.
+
+> É, na essência, o `sync()` que o engine já tem — agora alimentado pelo IR em vez da
+> shape TS.
+
 ## 5. API automática (orientada a agregado)
 
 Cada entidade do metastore ganha rotas. Como a unidade é o **agregado**, a API é
@@ -574,8 +611,11 @@ Por ordem de afinidade com o modelo:
 - **D-3 — Edição de linha crua vs. agregado:** deixar editar linhas de tabela
   owned diretamente (poder de DBeaver) fura o "replace" do agregado. *Tendência:*
   edição via objeto por padrão; linha crua como modo avançado, explícito.
-- **D-4 — IR versionado:** como versionar o IR e fazer diff/migração entre versões
-  da planta. Liga no `diff`/`sync` do engine.
+- ✅ **D-4 — Migration de IR (resolvida 0.1):** modelo **declarativo** — `POST` de IR
+  = estado desejado; materializa → diffa contra o **banco vivo** → aplica aditivo
+  automático, reporta destrutivo (preview + confirm); preserva o não-mudado. **Sem
+  taxonomia de operações.** Rename = add + drift (seguro); "rename com dado" é luxo
+  futuro. Ver §4.6. (Resta, como item menor: histórico de versões do IR.)
 - ✅ **D-5 — Multi-tenancy (resolvida 0.1):** **identidade** é first-class;
   tenancy é só um **scope** (`account_id = identity.accountId`), com açúcar opcional
   pra gerar o scope padrão de uma "chave de tenant". Sem mecanismo de tenant
