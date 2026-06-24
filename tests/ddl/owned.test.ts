@@ -7,7 +7,7 @@ import {
   int4,
   owned,
   text,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 /** The PRD canonical example, minus references (Phase 3). */
 const user = defineEntity("users", {

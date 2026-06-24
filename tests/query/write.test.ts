@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderInsert, renderUpsert } from "../../src/index.js";
+import { renderInsert, renderUpsert } from "../../app/engine/index.js";
 
 describe("renderInsert", () => {
   it("builds a parameterized insert returning id", () => {

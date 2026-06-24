@@ -8,7 +8,7 @@ import {
   type InferEntity,
   type InferInsert,
   type InferRead,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const city = defineEntity("cities", { name: text().notNull() });
 

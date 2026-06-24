@@ -7,7 +7,7 @@ import {
   type InferEntity,
   type InferInsert,
   type InferRead,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const tag = defineEntity("tags", { label: text().notNull() });
 const post = defineEntity("posts", {

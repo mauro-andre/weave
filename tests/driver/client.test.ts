@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import process from "node:process";
-import { array, defineEntity, int4, text, weave, type Weave } from "../../src/index.js";
+import { array, defineEntity, int4, text, weave, type Weave } from "../../app/engine/index.js";
 
 /**
  * Integration tests — require the Postgres from docker-compose.

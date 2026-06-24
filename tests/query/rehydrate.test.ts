@@ -7,7 +7,7 @@ import {
   rehydrate,
   text,
   timestamptz,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 describe("rehydrate", () => {
   it("restores Date, bigint, and system timestamps", () => {

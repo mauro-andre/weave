@@ -6,7 +6,7 @@ import {
   reference,
   text,
   type WhereInput,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const tag = defineEntity("tags", { label: text().notNull() });
 const author = defineEntity("authors", { name: text().notNull() });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allTypes, byName, byOid, catalog } from "../../src/types/index.js";
+import { allTypes, byName, byOid, catalog } from "../../app/engine/types/index.js";
 
 describe("registry", () => {
   it("byName resolves every catalog entry", () => {

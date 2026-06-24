@@ -7,7 +7,7 @@ import {
   array,
   reference,
   text,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const city = defineEntity("cities", { name: text().notNull() });
 

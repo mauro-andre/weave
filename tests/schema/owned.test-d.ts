@@ -6,7 +6,7 @@ import {
   owned,
   text,
   type InferEntity,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 describe("owned inference", () => {
   const user = defineEntity("users", {

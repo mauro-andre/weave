@@ -1,6 +1,6 @@
 import { describe, it, expectTypeOf } from "vitest";
-import { defineEntity, int4, projection, text } from "../../src/index.js";
-import { Weave } from "../../src/index.js";
+import { defineEntity, int4, projection, text } from "../../app/engine/index.js";
+import { Weave } from "../../app/engine/index.js";
 
 const employee = defineEntity("employees", {
   name: text().notNull(),

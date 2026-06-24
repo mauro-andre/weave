@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import process from "node:process";
-import { parseArgs, runCommand } from "../../src/cli.js";
-import { defineEntity, int4, text, weave, type Weave } from "../../src/index.js";
+import { parseArgs, runCommand } from "../../app/engine/cli.js";
+import { defineEntity, int4, text, weave, type Weave } from "../../app/engine/index.js";
 
 describe("parseArgs", () => {
   it("parses a command with --flag value and --flag=value", () => {

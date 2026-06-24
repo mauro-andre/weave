@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { array, defineEntity, int4, text } from "../../src/index.js";
+import { array, defineEntity, int4, text } from "../../app/engine/index.js";
 
 describe("column builder", () => {
   it("starts nullable, scalar, no default", () => {

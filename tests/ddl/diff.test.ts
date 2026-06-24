@@ -7,7 +7,7 @@ import {
   int4,
   text,
   type ActualSchema,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const user = defineEntity("users", {
   name: text().notNull(),

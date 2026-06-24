@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compileFind, defineEntity, int4, text } from "../../src/index.js";
+import { compileFind, defineEntity, int4, text } from "../../app/engine/index.js";
 
 const user = defineEntity("users", {
   name: text().notNull(),

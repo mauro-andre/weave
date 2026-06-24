@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { array, compileFind, defineEntity, owned, reference, text } from "../../src/index.js";
+import { array, compileFind, defineEntity, owned, reference, text } from "../../app/engine/index.js";
 
 const tag = defineEntity("tags", { label: text().notNull() });
 const author = defineEntity("authors", { name: text().notNull() });

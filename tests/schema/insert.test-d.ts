@@ -6,7 +6,7 @@ import {
   owned,
   text,
   type InferInsert,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 describe("InferInsert", () => {
   const user = defineEntity("users", {

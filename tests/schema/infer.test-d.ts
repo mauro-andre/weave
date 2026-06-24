@@ -8,7 +8,7 @@ import {
   timestamptz,
   type InferColumn,
   type InferEntity,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 describe("column inference", () => {
   it("nullable by default, notNull narrows", () => {

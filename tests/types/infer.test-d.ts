@@ -20,7 +20,7 @@ import {
   json,
   jsonb,
   bytea,
-} from "../../src/types/index.js";
+} from "../../app/engine/types/index.js";
 
 /**
  * Compile-time tests: the phantom `tsType` must recover the exact TS type a

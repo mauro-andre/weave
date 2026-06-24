@@ -9,7 +9,7 @@ import {
   int4,
   text,
   timestamptz,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 describe("emitCreateTable", () => {
   it("emits the canonical scalar + array table", () => {

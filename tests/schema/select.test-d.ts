@@ -6,7 +6,7 @@ import {
   reference,
   text,
   type InferSelect,
-} from "../../src/index.js";
+} from "../../app/engine/index.js";
 
 const author = defineEntity("authors", { name: text().notNull(), email: text().notNull() });
 const post = defineEntity("posts", {
