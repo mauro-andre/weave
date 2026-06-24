@@ -45,6 +45,7 @@
     "@mauroandre/velojs": "^0.0.36",
     "@vanilla-extract/css": "^1.21.0",
     "@vanilla-extract/vite-plugin": "^5.2.3",
+    "dotenv": "^17.4.2",
     "postgres": "^3.4.9"
   }
 }
