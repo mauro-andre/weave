@@ -20,13 +20,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "dev": "velojs dev",
+    "build": "velojs build",
+    "start": "velojs start",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:pg18 && npm run test:pg17",
-    "test:pg18": "DATABASE_URL=postgres://weave:weave@localhost:5432/weave vitest run",
-    "test:pg17": "DATABASE_URL=postgres://weave:weave@localhost:5433/weave vitest run",
-    "test:watch": "vitest",
-    "test:types": "vitest typecheck --run"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "postgres",
@@ -43,6 +42,9 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@mauroandre/velojs": "^0.0.36",
+    "@vanilla-extract/css": "^1.21.0",
+    "@vanilla-extract/vite-plugin": "^5.2.3",
     "postgres": "^3.4.9"
   }
 }

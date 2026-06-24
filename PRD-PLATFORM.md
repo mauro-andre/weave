@@ -1,6 +1,6 @@
 # Weave Platform — PRD
 
-> **Status:** rascunho · **Versão:** 0.2 · **Data:** 2026-06-22
+> **Status:** rascunho · **Versão:** 0.3 · **Data:** 2026-06-22
 > Documento de planejamento da **plataforma**. O engine (a biblioteca v1) está
 > especificado em [`PRD.md`](./PRD.md) e vira o *kernel* desta plataforma.
 >
@@ -9,6 +9,11 @@
 > Sem sistema de autenticação de usuários de app (isso é do dev); o único login é o
 > da própria plataforma (estilo pgAdmin). Scopes continuam, como **feature interna
 > opcional**, alimentada por uma identidade que o dev fornece.
+>
+> **0.3 — implementação:** o Weave é construído como **uma aplicação VeloJS normal**.
+> `app/` é a app (rotas + actions + GUI); `app/engine/` é a regra de negócio que as
+> actions chamam. Build = `velojs build`; testes pelo **motor do VeloJS** (actions/
+> rotas), não unit. A auto-API (rotas por entidade) é declarada no `routes.tsx`.
 
 ---
 
@@ -589,24 +594,26 @@ Por ordem de afinidade com o modelo:
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 9.1 Stack & runtime (decisão 0.1)
+### 9.1 Stack & runtime (decisão 0.3)
 
-> **Escopo desta seção:** é a stack de **implementação da própria plataforma** (o
-> painel + o servidor da API). **Não** é imposição ao dev — quem consome o Weave usa
-> o framework que quiser (Next, etc.); ver §2.1.
+> **Escopo:** stack de implementação da **própria plataforma**. Não é imposição ao
+> dev — quem consome a API/SDK usa o framework que quiser (Next, etc.); ver §2.1.
 
-- **Framework: VeloJS** (Hono + Preact SSR), o framework do autor — dogfooding e
-  controle total.
-- **GUI = Velo puro:** páginas parametrizadas (`/data/:entity/:id` etc.),
-  `loader`/`action`, event streams (SSE) para sync/migration ao vivo, `middleware`
-  para identidade/scope (seta `c.set("identity")`, que os handlers passam ao engine).
-- **API + engine = código agnóstico de framework** (funções puras + handlers que só
-  tocam o `Context` do Hono), **montado no Velo via `addRoutes`** com as rotas
-  wildcard (§5). Roda como 1 deploy hoje; extraível como serviço **headless** depois
-  sem reescrever.
-- A GUI usa páginas/loaders estáticos do Velo (registrados em build-time); a API usa
-  o escape hatch `addRoutes` (registrado no startup). Nenhum dos dois registra rota
-  em runtime.
+O Weave é construído como **uma aplicação VeloJS normal** (Hono + Preact SSR), o
+framework do autor — dogfooding e controle total. A divisão é por responsabilidade:
+
+- **`app/`** = a aplicação VeloJS: `routes.tsx`, `server.tsx`, páginas/layouts da GUI,
+  e as **actions** (a borda HTTP/cookie).
+- **`app/engine/`** = a **regra de negócio** que as actions chamam — o engine de
+  objetos (`ddl`/`driver`/`query`/…, **agnóstico de framework**, não importa VeloJS)
+  + o `control-plane/` (login da plataforma, `setup`, `weave_*`).
+- **Build:** `velojs build`. (tsup/SDK só quando a GUI estiver 100% — ver D-6.)
+
+A **GUI** usa `loader`/`action` (server-side, in-process ao engine) + `middleware`
+para a identidade/scope. A **auto-API** (rotas por entidade, §5) é declarada como
+**endpoints no `routes.tsx`** — assim o **motor de teste do VeloJS** as exercita
+direto. **Testes** = sempre por esse motor (actions/rotas), **não unit**; os testes
+do engine que já existem seguem como guarda do compilador/DDL.
 
 ---
 
@@ -621,6 +628,10 @@ Por ordem de afinidade com o modelo:
 
 ### Da porta pra dentro (plataforma + GUI)
 
+- ✅ **F0 — Fundação da app VeloJS.** Shell do painel (login da plataforma +
+  `AdminLayout` + páginas vazias com o menu), **control-plane** (`weave_users` +
+  `setup`/seed do master via `.env`), identidade visual §7.1 (vanilla-extract). Tudo
+  testado pelo motor do VeloJS (`tests/auth.test.ts`).
 - **F1 — Camada de IR.** `toIR` (serializar `defineEntity` → JSON), `fromIR`
   (desserializar JSON → estruturas do engine) e o **validador de IR**. TS puro, sem
   banco; espelha o `collectTables`. (§4.5)
