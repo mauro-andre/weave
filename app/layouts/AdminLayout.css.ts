@@ -7,39 +7,74 @@ export const shell = style({
 });
 
 export const sidebar = style({
-  width: "220px",
-  padding: vars.space.md,
+  width: "240px",
+  flexShrink: 0,
+  background: vars.color.surface,
   borderRight: `1px solid ${vars.color.border}`,
+  padding: "16px 12px",
   display: "flex",
   flexDirection: "column",
-  gap: vars.space.md,
+  gap: vars.space.lg,
 });
 
 export const brand = style({
-  color: vars.color.teal,
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "6px 8px",
   fontWeight: 700,
+  fontSize: "17px",
+  letterSpacing: "0.2px",
 });
 
-export const navList = style({
-  listStyle: "none",
-  padding: 0,
-  margin: 0,
+export const nav = style({
   display: "flex",
   flexDirection: "column",
-  gap: vars.space.sm,
+  gap: "2px",
+});
+
+export const navLink = style({
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "9px 10px",
+  borderRadius: "8px",
+  color: vars.color.muted,
+  fontSize: "14px",
+  cursor: "pointer",
+  transition: "background 120ms, color 120ms",
+  selectors: {
+    "&:hover": { background: vars.color.bg, color: vars.color.text },
+  },
+});
+
+export const navLinkActive = style({
+  background: "rgba(18, 184, 134, 0.12)",
+  color: vars.color.teal,
+  fontWeight: 600,
 });
 
 export const logout = style({
   marginTop: "auto",
-  padding: vars.space.sm,
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "9px 10px",
+  borderRadius: "8px",
   background: "transparent",
-  border: `1px solid ${vars.color.border}`,
-  borderRadius: vars.radius.md,
+  border: "none",
+  font: "inherit",
   color: vars.color.muted,
+  fontSize: "14px",
   cursor: "pointer",
+  textAlign: "left",
+  selectors: {
+    "&:hover": { background: vars.color.bg, color: vars.color.danger },
+  },
 });
 
 export const content = style({
   flex: 1,
   padding: vars.space.lg,
+  overflow: "auto",
 });

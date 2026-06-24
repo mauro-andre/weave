@@ -44,22 +44,30 @@ export const Component = () => {
   };
 
   return (
-    <main class={css.main}>
-      <h1>Weave</h1>
-      <form onSubmit={onSubmit} class={css.form}>
-        <input name="username" placeholder="usuário" autoComplete="username" class={css.input} />
+    <main class={css.page}>
+      <form class={css.card} onSubmit={onSubmit}>
+        <div class={css.brand}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7c5 0 7 10 16 10" stroke="#2F6FEB" strokeWidth="2.4" strokeLinecap="round" />
+            <path d="M4 17c5 0 7-10 16-10" stroke="#10B981" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
+          <span>Weave</span>
+        </div>
+        <p class={css.subtitle}>Painel de administração</p>
+
+        <input class={css.input} name="username" placeholder="usuário" autoComplete="username" />
         <input
+          class={css.input}
           name="password"
           type="password"
           placeholder="senha"
           autoComplete="current-password"
-          class={css.input}
         />
-        <button type="submit" class={css.button}>
+        <button class={css.button} type="submit">
           Entrar
         </button>
         {error ? (
-          <p role="alert" class={css.error}>
+          <p class={css.error} role="alert">
             {error}
           </p>
         ) : null}

@@ -27,6 +27,6 @@
 
     "ignoreDeprecations": "6.0"
   },
-  "include": ["app/engine", "tests"],
+  "include": ["app", "tests"],
   "exclude": ["dist", "node_modules"]
 }
