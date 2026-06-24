@@ -1,42 +1,48 @@
 # Weave Platform — PRD
 
-> **Status:** rascunho · **Versão:** 0.1 · **Data:** 2026-06-21
+> **Status:** rascunho · **Versão:** 0.2 · **Data:** 2026-06-22
 > Documento de planejamento da **plataforma**. O engine (a biblioteca v1) está
 > especificado em [`PRD.md`](./PRD.md) e vira o *kernel* desta plataforma.
+>
+> **0.2 — reposicionamento:** o Weave **não** é um BaaS nem um backend completo. É
+> uma **abstração do PostgreSQL que dá uma base de objetos** + uma GUI + uma API.
+> Sem sistema de autenticação de usuários de app (isso é do dev); o único login é o
+> da própria plataforma (estilo pgAdmin). Scopes continuam, como **feature interna
+> opcional**, alimentada por uma identidade que o dev fornece.
 
 ---
 
 ## 1. Visão
 
-A **Weave Platform** transforma o Weave de uma biblioteca ORM em um **backend
-completo** — um "Supabase do nosso jeito", porém com uma diferença de categoria:
-o Supabase é uma camada fina sobre **tabelas**; a Weave é uma camada sobre
-**objetos**.
+A **Weave Platform** é a camada de produto em volta do engine: uma **GUI** e uma
+**API** que tornam o Weave utilizável como uma **base de dados de objetos** — sem
+escrever SQL, e sem precisar de um backend só pra isso.
 
-O conceito-núcleo permanece o do engine: **Weave é uma base de dados de
-objetos** — uma abstração do Postgres em que um objeto pode ser composto por
-várias tabelas (a árvore `owned`), mas você só pensa no objeto. A plataforma
-adiciona, em volta desse núcleo:
+O conceito-núcleo é o do engine: **Weave é uma abstração do PostgreSQL que te dá uma
+base de objetos** — um objeto pode ser composto por várias tabelas (a árvore
+`owned`), mas você só pensa no objeto. Postgres por baixo, objetos por cima. A
+plataforma adiciona, em volta desse núcleo:
 
 1. **Metastore** — a definição das entidades (a "planta") deixa de viver só em
-   código TS e passa a ser **dado** no próprio Postgres (IR em `jsonb`), para que
-   possa ser criada e editada **visualmente**.
+   código TS e passa a ser **dado** no próprio Postgres (IR em `jsonb`), pra poder
+   ser criada e editada **visualmente**.
 2. **API automática** — cada entidade ganha rotas REST (GET/POST/PATCH/DELETE)
    orientadas a **agregado**, sem escrever código.
-3. **Scopes** — modelo de permissão visual (quais objetos, quais campos, quais
-   verbos), imposto no servidor.
-4. **GUI** — uma aplicação visual (em **Velo**, framework do autor) para navegar
-   nos dados, modelar entidades e configurar tudo. Uma mistura de **Mongo Compass
-   + DBeaver**, mas no nível de **objeto**.
+3. **GUI** — uma aplicação visual, estilo **pgAdmin / Mongo Compass / DBeaver** mas
+   no nível de **objeto**, pra navegar nos dados, modelar entidades e administrar.
+4. **Scopes (opcional)** — moldagem de acesso (linhas/campos/verbos) a partir de
+   uma identidade que o **dev fornece**. Weave **não** autentica.
 
-> **Posicionamento:** o Supabase é a referência de *categoria* (BaaS), não o que
-> estamos clonando. O diferencial defensável é o **objeto que atravessa várias
-> tabelas** — e a prova visual disso (objeto em cima, linhas constituintes
-> embaixo) é o *killer demo* que nenhum concorrente tem.
+> **O que o Weave NÃO é:** não é um BaaS, não é um backend completo, não tem sistema
+> de autenticação de usuários de aplicação. É uma **abstração do PostgreSQL** que dá
+> uma base de objetos. A autenticação e a lógica da app são do **dev**; o único login
+> da plataforma é o de quem entra na GUI pra administrar (estilo pgAdmin). O
+> diferencial defensável é o **objeto que atravessa várias tabelas** — e a prova
+> visual disso (objeto em cima, linhas constituintes embaixo) é o *killer demo*.
 
 ---
 
-## 2. O wedge (por que não é "só mais um BaaS")
+## 2. O wedge — o objeto sobre várias tabelas
 
 | Ferramenta | O que mostra/abstrai | O que falta |
 |---|---|---|
@@ -50,27 +56,20 @@ tabelas relacionais**. A tela "agregado em cima ↕ linhas de todas as tabelas q
 o compõem embaixo, editáveis dos dois lados" é a expressão visual direta desse
 conceito. **Esse é o produto.**
 
-### 2.1 Escopo: camada de abstração rica, não backend monolítico (decisão 0.1)
+### 2.1 Escopo: abstração de dados, não backend (decisão 0.2)
 
-"Backend" são **três camadas** com donos diferentes:
+O Weave cuida de **uma** coisa: **dados como objetos** — modelo, persistência, API
+e (opcional) moldagem de acesso. Ficam **de fora, de propósito**:
 
-1. **Dados + persistência + API + controle de acesso** (modelo de objeto, auto-API,
-   scopes, navegador) — **é o Weave**. O wedge.
-2. **Identidade / auth** — commodity (Clerk/Auth0/Keycloak; o dev quase sempre já
-   tem). **Fora do núcleo**; módulo opcional futuro.
-3. **Lógica de negócio / compute** (rotas custom, jobs) — **é a app do dev**, no
-   framework que ele escolher.
+- **Autenticação de usuário de app** — é do **dev** (Clerk/Auth0/a auth dele). Weave
+  não autentica e não guarda usuários de app. O único login que existe é o da
+  **própria plataforma** (operadores entrando na GUI, estilo pgAdmin).
+- **Lógica de negócio / compute** (rotas custom, jobs) — roda na **app do dev**, no
+  framework que ele quiser (Next, etc.). Weave não hospeda função.
 
-**Decisão:** o Weave é a **camada 1**, **auth-agnóstico** (via o contrato de claims,
-§6.3) e **agnóstico de framework**. O dev usa o Weave como **todo o seu sistema de
-repositório/banco de dados** (dados, API, controle de acesso) e traz **o framework
-de app que quiser** (Next, etc.) + a auth que já tem. O "dev só cuida do front"
-emerge dessa composição — não de o Weave virar um monólito.
-
-> **Por que não virar "Supabase monolítico":** auth-as-a-service é um produto crítico
-> e enorme (hash, reset, OAuth, MFA, sessão…) que comoditiza o Weave contra
-> incumbentes e **dilui** o diferencial do objeto. Não fechamos a porta pro
-> "Supabase do nosso jeito" — ele se monta por **composição**, não por monólito.
+O dev usa o Weave como **todo o seu repositório de dados** (a base de objetos) e
+monta o resto com as ferramentas dele. Nada de "backend monolítico": o diferencial é
+o **objeto sobre relacional**, não uma suíte de serviços de commodity.
 
 ---
 
@@ -109,8 +108,8 @@ serve à plataforma".
 ### 4.1 O container: Projeto / Base
 
 Acima da entidade existe um container que o resto do PRD pressupunha sem nomear: o
-**Projeto (Base)** — o guarda-chuva que segura entidades + scopes + config de
-identidade. É o equivalente ao "project" do Supabase.
+**Projeto (Base)** — o guarda-chuva que segura as entidades e os scopes. É o
+container análogo a um "projeto" / `database`.
 
 **Decisões (0.1):**
 
@@ -358,30 +357,39 @@ reexpressar algo que o IR já descreve. Em vez disso, três camadas:
    reimplementa essas regras).
 3. **Refinamento opcional plugável** — regras que o schema não expressa (formato
    de email, `min`/`max`, regex) ficam como **opt-in por campo**; quem quiser pode
-   plugar Zod ou um validador custom. Sem isso na planta, não há de-para algum.
+   plugar um validador custom. Sem isso na planta, não há de-para algum.
 
 ---
 
-## 6. Scopes (permissão) — o eixo mais delicado
+## 6. Scopes (opcional) — moldagem de acesso
 
-Um **scope** é, por entidade, uma tripla:
+Scope é um recurso **opcional e interno** do Weave: uma forma declarativa de
+**moldar o acesso** a partir de uma identidade que o **dev fornece** — Weave **não**
+autentica (§6.3). São de **livre criação**: o dev cria quantos quiser, com os nomes
+e regras que quiser.
 
-1. **Predicado de linha** — *quais objetos* você enxerga (ex.: "só os da minha
-   conta", "só os meus"). É multi-tenancy / visibilidade de registro.
-2. **Projeção** — *quais campos* (reusa §9.2 do engine; o campo não-selecionado
-   nem existe no tipo).
-3. **Verbos** — *quais operações* (GET/POST/PATCH/DELETE permitidos).
+Um scope é um **papel nomeado que atravessa as entidades**; para cada entidade,
+define **três eixos**:
 
-Exemplo do autor, formalizado:
+1. **Linhas** — *quais objetos* (ex.: "só os da conta X", "só os do usuário Y").
+   Reusa o `where` do `find()`.
+2. **Campos** — *quais partes de cada objeto* (vale pra árvore aninhada). Reusa o
+   `select` (o campo não-selecionado nem existe no tipo).
+3. **Verbos** — *quais operações* (read / create / update / delete).
 
-| Scope | Predicado de linha | Projeção | Verbos |
+Entidade que o scope **não lista** → **sem acesso** (`default-deny`).
+
+Exemplo:
+
+| Scope | Linhas | Campos | Verbos |
 |---|---|---|---|
 | `master` | tudo | tudo | todos |
-| `admin` | `account_id = :currentAccount` | tudo | todos |
-| `user` | `owner_id = :currentUser` | oculta campos sensíveis | GET, PATCH (próprios) |
+| `admin` | `account_id = identity.accountId` | tudo | todos |
+| `user` | `owner_id = identity.userId` | oculta campos sensíveis | read, update |
 
-> **Princípio de correção (não-negociável):** o cliente **nunca** é fonte de
-> autoridade. Ele só pode **estreitar** dentro do scope ativo, jamais alargar.
+> **Princípio (não-negociável):** o cliente **nunca** é fonte de autoridade — a
+> identidade e o scope vêm de um **caller confiável** (§6.3). O nome do scope é do
+> dev; a autoridade é a identidade que o caller passou.
 
 ### 6.1 Imposição — WHERE homogêneo + RLS opcional
 
@@ -409,13 +417,14 @@ constrangidos sem precisar de `account_id` próprio. O dilema "desnormalizar vs.
 subquery" só existe se a **blindagem RLS opcional** for ligada (aí sim cada tabela
 precisa da sua política) — no default ele não aparece.
 
-### 6.2 Identidade first-class; tenancy é só um scope
+### 6.2 A identidade vem do dev; tenancy é só um scope
 
-**Decisão (0.1):** o Weave **não** tem um mecanismo dedicado de "tenant". Em vez
-disso, **identidade** é first-class e tenancy é apenas um scope sobre ela.
+**Decisão (0.2):** o Weave **não** tem mecanismo dedicado de "tenant" — nem guarda
+identidade. A identidade chega **pronta, do caller confiável do dev** (§6.3), e
+tenancy é apenas um scope sobre ela.
 
-1. A plataforma sempre tem uma **identidade corrente** (vinda do auth) com atributos
-   arbitrários — `accountId`, `userId`, `role`, o que o app definir.
+1. Cada requisição traz uma **identidade** com atributos arbitrários — `accountId`,
+   `userId`, `role`, o que o app definir — **fornecida pelo dev**.
 2. Um **scope é um predicado sobre essa identidade** (reusa o filtro
    objeto-literal). Um mesmo mecanismo cobre os três casos do autor:
 
@@ -435,26 +444,49 @@ cravar um modelo de tenant rígido (hierarquias, apps sem tenant continuam caben
 Scopes são configurados **visualmente** na GUI e guardados no metastore
 (`weave_scopes`).
 
-### 6.3 Entrada de identidade — quem quebra o token (decisão 0.1)
+### 6.3 Weave não autentica — a identidade vem do dev (decisão 0.2)
 
-A identidade chega **por requisição**. A questão é **quem verifica o token e
-resolve o scope** — a fronteira de confiança vista pela porta de entrada. Os dois
-modelos não são exclusivos; o **contrato de identidade é o mesmo** (saco de claims),
-muda só **quem o preenche**:
+**Weave nunca autentica nem quebra token.** Quando o dev quer acesso por scope, é o
+**backend confiável dele** que autentica o usuário, resolve a identidade
+(`{ userId, accountId, role, … }`) e a passa pro Weave **já pronta** — junto com o
+scope a aplicar. O Weave confia nesse caller e aplica o filtro/projeção (§6.1).
 
-- **Modelo B — Weave quebra o token (padrão).** O cliente manda o JWT direto pra
-  API; o Weave **verifica** (config de segredo/JWKS por projeto), extrai os claims e
-  resolve o scope. Entrega a promessa BaaS: o **front da app fala direto** na
-  auto-API. Único modo seguro quando o cliente é não-confiável (browser/mobile).
-- **Modelo A — caller-confiável.** Um backend seu já fez a auth e passa
-  **identidade + scope já resolvidos**; o Weave confia. Para "Weave atrás do meu
-  servidor" / SDK embarcado. **Não** pode ser exposto a clientes não-confiáveis.
+> Logo, a auto-API com scope pressupõe um **caller confiável** (o servidor do dev).
+> Não existe "front não-confiável falando direto com scope": isso exigiria o Weave
+> **verificar token**, e autenticar **não é função do Weave** — é do dev.
 
-> **Regra de ouro:** mesmo quando a requisição "nomeia" o scope, esse nome é
-> **derivado/checado contra os claims** do token — o cliente nunca escolhe `admin`
-> livremente. O nome do scope é do dev (arbitrário); a autoridade é o token.
+Regra de ouro: o cliente não é fonte de autoridade; o scope é aplicado a partir da
+identidade que o **caller confiável** forneceu.
 
-Mesmo engine, mesma régua de imposição (§6.1); só a porta de entrada difere.
+### 6.4 Definição de scope (DX)
+
+Scope é uma **definição** (igual à entidade), então segue o **mesmo padrão do IR**:
+pode ser autorado **code-first** (`defineScope`) **ou na GUI**, e os dois viram um
+**scope-IR** guardado em `weave_scopes`.
+
+```ts
+const userScope = defineScope("user", ({ identity }) => ({
+  posts: {
+    where:  { authorId: identity.userId },   // mesmo filtro do find()
+    select: { title: true, body: true },     // mesma projeção do find()
+    verbs:  ["read", "update"],
+  },
+  comments: {
+    where: { post: { authorId: identity.userId } },
+    verbs: ["read"],
+  },
+  // entidades não listadas → sem acesso (default-deny)
+}));
+```
+
+- **`identity` é um handle simbólico:** `identity.userId` é um placeholder que o
+  engine troca pelo valor real que o caller confiável passou na requisição (§6.3).
+- **Forma da identidade declarada por projeto:** o projeto declara os nomes dos
+  claims que o app vai mandar (`accountId`, `userId`, `role`, …) — não é auth, é só
+  pra DSL/GUI referenciá-los com autocomplete.
+- **Default-deny:** entidade fora do scope = sem acesso.
+- **Verbos:** `read` / `create` / `update` / `delete` — linhas e campos limitam o
+  *alcance*; o verbo diz se a operação é permitida **de todo**.
 
 ---
 
@@ -470,7 +502,12 @@ Mistura **Mongo Compass + DBeaver**, no nível de objeto. Módulos:
    decisão D-3, pois mexer em linha crua de owned fura a semântica de "replace").
 3. **Designer de entidades** — criar/editar a planta visualmente (escreve o IR no
    metastore). Campos, tipos, `owned`/`reference`, índices.
-4. **Designer de scopes** — montar as triplas de permissão visualmente.
+4. **Designer de scopes** — uma **matriz scopes × entidades**: a célula resume o
+   acesso (verbos + se há filtro/projeção), `—` = sem acesso (default-deny). Clicar
+   abre o editor da tripla — verbos em chips, `where` no **mesmo construtor de
+   filtro** do navegador (com tokens `identity.*`), campos numa checklist (owned/
+   reference expansíveis). **Preview ao vivo:** "ver os dados como este scope" abre
+   o navegador com o scope aplicado — linhas filtradas, campos mascarados.
 5. **API playground** — testar as rotas geradas, com o scope ativo.
 6. **Migrations** — ver o diff (IR novo vs banco) e aplicar (`sync`).
 
@@ -514,11 +551,10 @@ ligando os campos do objeto às colunas** — vê-se o *weave* acontecendo.
 
 Por ordem de afinidade com o modelo:
 
-- **Auth / identidade** — duas auths distintas (ver §6.3 e D-1 resolvida):
-  - **CP (painel):** só um **login gate**, **sem** modelo de permissão — operadores
-    são arquitetos/devs, "modo DBeaver/Compass" (god-mode).
-  - **App (end-user):** a identidade que os scopes usam. Integrar/verificar primeiro
-    (JWT externo); auth própria com baterias é módulo opcional futuro.
+- **Auth** — fora do núcleo. Há **um** login só: o da **plataforma/GUI** (operadores
+  entrando pra administrar, estilo pgAdmin; god-mode, sem permissões entre eles). A
+  autenticação dos usuários **da app** é 100% do dev — Weave não é, e não vira,
+  provedor de auth. (Ver §6.3 e D-1.)
 - **Hooks de escrita** (before/after `save`) — encaixam porque o `save` já é
   transacional.
 - **Realtime** sobre **mudança de agregado** (via logical replication) — o ângulo
@@ -538,8 +574,8 @@ Por ordem de afinidade com o modelo:
                 │  HTTP (mesma API pública)
 ┌───────────────▼──────────────────────────────────────────────┐
 │  API automática  — rotas por entidade, orientadas a agregado   │
-│  Authz (scopes)  — predicado de linha + projeção + verbos       │
-│  Validação (Zod do IR)                                          │
+│  Authz (scopes, opcional) — identidade fornecida pelo dev       │
+│  Validação nativa do IR (sem Zod)                               │
 └───────────────┬──────────────────────────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────────────────────────┐
@@ -576,35 +612,56 @@ Por ordem de afinidade com o modelo:
 
 ## 10. Roadmap da plataforma (fases)
 
-> Ordem de construção; nada é descartado. Começamos pelo que roda quase inteiro
-> sobre o engine atual e prova o conceito.
+> **Estratégia: "da porta pra dentro".** Construímos a plataforma inteira **+ a
+> GUI** operando sobre **JSON entrando e saindo**, sem nos importarmos ainda com
+> **quem** envia/recebe (transporte HTTP, auth, identidade, SDK do dev) — isso é "da
+> porta pra fora" e fica pra depois. Nesta fase o operador é god-mode (CP, sem
+> permissões). O **kernel** (engine v1: find/save/diff/sync/query/projection) já
+> está ✅; a GUI fala com a plataforma **in-process**.
 
-- **P0 — Navegador de objetos (read-only).** Lê plantas existentes; lista
-  entidades → objetos → linhas constituintes. Usa `find` direto. **Prova visual do
-  conceito.** *(decidido como ponto de partida.)*
-- **P1 — Projetos + Metastore (IR).** **Control plane** (lista de bases + conexões)
-  e criação de base (`CREATE DATABASE` + bootstrap do metastore). Definir o formato
-  do IR, a tabela `weave_entities`, o validador e o leitor do engine a partir do
-  `jsonb`. Migrar o `defineEntity` TS para emitir IR.
-- **P2 — Edição de dados.** Editar o objeto via `save`; depois linha crua (com
-  reconciliação da semântica de agregado).
-- **P3 — API REST automática.** Rotas por entidade (CRUD de agregado) + query +
-  validação Zod.
-- **P4 — Scopes + Authz.** Tripla (linha/projeção/verbos), imposta no servidor
-  (RLS onde der). Designer visual.
-- **P5 — Auth / identidade.**
-- **P6 — Designer de entidades na GUI** (criar planta visualmente).
-- **P7+ — Realtime, hooks, audit, webhooks, storage.**
+### Da porta pra dentro (plataforma + GUI)
+
+- **F1 — Camada de IR.** `toIR` (serializar `defineEntity` → JSON), `fromIR`
+  (desserializar JSON → estruturas do engine) e o **validador de IR**. TS puro, sem
+  banco; espelha o `collectTables`. (§4.5)
+- **F2 — Metastore + projetos.** Control plane (lista de bases + conexões), criar
+  base (`CREATE DATABASE` + bootstrap `weave_*`), e o engine lendo a planta do
+  `jsonb` (via `fromIR`). (§4.1–4.4)
+- **F3 — Migration.** `POST` de IR = estado desejado → reconcile declarativo contra
+  o banco vivo (aditivo automático / destrutivo reportado). Reusa diff/sync. (§4.6)
+- **F4 — I/O de dados em JSON.** A fronteira do dado: **desserializar + validar +
+  coagir** o JSON de entrada (validador nativo do IR, §5.1) e **serializar** a saída.
+  `find`/`save`/`paginate`/`count` operando JSON↔objeto. Sem transporte/auth — só o
+  contrato JSON, chamável in-process.
+- **F5 — Scopes (mecanismo).** A tripla (linha/projeção/verbos) imposta no
+  compilador (WHERE homogêneo, §6.1), alimentada por uma **identidade dada** (ainda
+  sem fonte de identidade) + o designer visual de scopes.
+- **F6 — GUI completa (Velo).** O painel inteiro, consumindo a plataforma
+  in-process: **navegador-assinatura** (agregado ↕ linhas constituintes), edição de
+  dados (objeto via `save`; linha crua = D-3), **designer de entidades** (escreve
+  IR), designer de scopes, view de migration, playground. Identidade visual §7.1.
+
+### Da porta pra fora (depois)
+
+- **G1 — Transporte HTTP.** Expor a auto-API pública: rotas wildcard + dispatch por
+  entidade (§5) sobre HTTP. (Até aqui a GUI falava in-process.)
+- **G2 — Login da plataforma + contrato de identidade.** O login da GUI (operadores,
+  estilo pgAdmin, god-mode). E o **contrato** pelo qual o caller confiável do dev
+  passa a identidade por requisição, ligando-a aos scopes da F5. Weave **não**
+  autentica usuário de app nem quebra token (§6.3).
+- **G3 — SDK tipado do dev.** `push`/`pull`, cliente que reidrata na ponta (objeto
+  in/out, JSON/HTTP invisível). (D-6)
+- **G4 — Serviços adicionais.** Realtime de agregado, hooks in-transaction, audit,
+  webhooks, storage (§8).
 
 ---
 
 ## 11. Decisões em aberto
 
-- ✅ **D-1 — Auth (resolvida 0.1):** duas auths separadas. **CP** = login gate sem
-  permissões (operadores god-mode). **App** = identidade como saco de claims;
-  **integrar/verificar primeiro** (JWT externo), auth própria como módulo opcional.
-  Entrada por requisição com **Modelo B padrão** (Weave quebra o token) + **Modelo A**
-  (caller-confiável). Implementação no P4; não bloqueia P1–P3. Ver §6.3.
+- ✅ **D-1 — Auth (resolvida 0.2):** Weave **não autentica**. Único login = o da
+  **plataforma/GUI** (operadores, god-mode, sem permissões — estilo pgAdmin). A auth
+  dos usuários da app é do **dev**. Scopes (opcionais) consomem a identidade que o
+  **caller confiável do dev** fornece — Weave **não** quebra token. Ver §6.3 e §8.
 - ✅ **D-2 — Imposição de scope (resolvida 0.1):** **WHERE homogêneo** injetado no
   chokepoint do compilador (default), com **RLS gerado do IR como blindagem
   opcional por entidade** (acesso fora do Weave). Ver §6.1.
@@ -616,10 +673,10 @@ Por ordem de afinidade com o modelo:
   automático, reporta destrutivo (preview + confirm); preserva o não-mudado. **Sem
   taxonomia de operações.** Rename = add + drift (seguro); "rename com dado" é luxo
   futuro. Ver §4.6. (Resta, como item menor: histórico de versões do IR.)
-- ✅ **D-5 — Multi-tenancy (resolvida 0.1):** **identidade** é first-class;
-  tenancy é só um **scope** (`account_id = identity.accountId`), com açúcar opcional
-  pra gerar o scope padrão de uma "chave de tenant". Sem mecanismo de tenant
-  dedicado. Ver §6.2.
+- ✅ **D-5 — Multi-tenancy (resolvida 0.2):** tenancy é só um **scope**
+  (`account_id = identity.accountId`) sobre a identidade que o **dev fornece**; sem
+  mecanismo de tenant dedicado. Açúcar opcional: gerar o scope padrão de uma "chave
+  de tenant". Ver §6.2.
 - **D-6 — SDK/cliente:** a lib TS atual vira cliente da API (typed) além de poder
   rodar embarcada? *Tendência:* sim, cliente typed gerado do IR.
 
@@ -629,6 +686,7 @@ Por ordem de afinidade com o modelo:
 
 > A Weave Platform é o **banco de dados de objetos como produto**: você modela
 > objetos, a plataforma materializa em Postgres relacional de verdade, expõe tudo
-> como API, controla acesso por scope, e te dá um painel onde se enxerga o objeto
-> *e* as linhas que o compõem. O Supabase abstrai tabelas; a Weave abstrai
+> como API, **opcionalmente** molda o acesso por scope, e te dá um painel onde se
+> enxerga o objeto *e* as linhas que o compõem. O Supabase abstrai tabelas; a Weave
+> abstrai
 > **objetos** — esse é o salto.
