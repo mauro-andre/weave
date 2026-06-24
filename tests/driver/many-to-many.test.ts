@@ -11,7 +11,7 @@ const post = defineEntity("weave_nn_posts", {
   tags: reference(array(tag)),
 });
 
-const tables = `weave_nn_post_tags, weave_nn_posts, weave_nn_tags`;
+const tables = `weave_nn_post__tags, weave_nn_posts, weave_nn_tags`;
 
 describe.skipIf(noDb)("N:N (reference array)", () => {
   let db: Weave;
@@ -35,7 +35,7 @@ describe.skipIf(noDb)("N:N (reference array)", () => {
   it("sync() created the join table despite registration order", async () => {
     const rows = await db.sql<{ table_name: string }[]>`
       select table_name from information_schema.tables
-      where table_schema = 'public' and table_name = 'weave_nn_post_tags'`;
+      where table_schema = 'public' and table_name = 'weave_nn_post__tags'`;
     expect(rows).toHaveLength(1);
   });
 
@@ -44,7 +44,7 @@ describe.skipIf(noDb)("N:N (reference array)", () => {
     expect((saved as Record<string, unknown>)["tags"]).toBeUndefined();
 
     const linkCount = await db.sql<{ n: number }[]>`
-      select count(*)::int as n from weave_nn_post_tags`;
+      select count(*)::int as n from weave_nn_post__tags`;
     expect(linkCount[0]!.n).toBe(2);
   });
 

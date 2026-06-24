@@ -13,7 +13,7 @@ const post = defineEntity("weave_sel_posts", {
   comments: owned(array({ body: text().notNull() })),
 });
 
-const tables = `weave_sel_post_comments, weave_sel_posts, weave_sel_authors`;
+const tables = `weave_sel_post__comments, weave_sel_posts, weave_sel_authors`;
 
 describe.skipIf(noDb)("select (integration)", () => {
   let db: Weave;

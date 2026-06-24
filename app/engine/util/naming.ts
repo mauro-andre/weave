@@ -22,15 +22,16 @@ export function indexName(table: string, column: string): string {
 }
 
 /**
- * Child table name for an owned relationship.
- * `("user", "addresses")` → `user_addresses`; `override` wins when given.
+ * Child table name for an owned relationship. The ownership path is joined with
+ * a **double** underscore so it stays unambiguous even when names contain `_`:
+ * `("user", "addresses")` → `user__addresses`. `override` wins when given.
  */
 export function ownedChildTable(
   pathPrefix: string,
   fieldSnake: string,
   override?: string,
 ): string {
-  return override ?? `${pathPrefix}_${fieldSnake}`;
+  return override ?? `${pathPrefix}__${fieldSnake}`;
 }
 
 /**
@@ -41,9 +42,9 @@ export function ownedFkColumn(parentPathPrefix: string): string {
   return `${singularize(lastSegment(parentPathPrefix))}_id`;
 }
 
-/** Join table for an N:N reference: `("user", "cities")` → `user_cities`. */
+/** Join table for an N:N reference (path joined with `__`): `("user", "cities")` → `user__cities`. */
 export function joinTableName(pathPrefix: string, fieldSnake: string): string {
-  return `${pathPrefix}_${fieldSnake}`;
+  return `${pathPrefix}__${fieldSnake}`;
 }
 
 /** Join-table FK to the target, from the (snake) field: `"cities"` → `city_id`. */

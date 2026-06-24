@@ -20,12 +20,12 @@ export const action_logout = async ({ c }: ActionArgs) => {
 };
 
 const NAV = [
-  { to: "/", label: "Início", Icon: HomeAngle },
-  { to: "/dados", label: "Dados", Icon: Database },
-  { to: "/entidades", label: "Entidades", Icon: Box },
+  { to: "/", label: "Home", Icon: HomeAngle },
+  { to: "/data", label: "Data", Icon: Database },
+  { to: "/entities", label: "Entities", Icon: Box },
   { to: "/scopes", label: "Scopes", Icon: ShieldKeyhole },
   { to: "/api", label: "API", Icon: Code },
-  { to: "/config", label: "Config", Icon: Settings },
+  { to: "/settings", label: "Settings", Icon: Settings },
 ];
 
 export const Component = ({ children }: { children?: ComponentChildren }) => {
@@ -62,7 +62,7 @@ export const Component = ({ children }: { children?: ComponentChildren }) => {
           }}
         >
           <Logout size={18} />
-          <span>Sair</span>
+          <span>Sign out</span>
         </button>
       </aside>
 

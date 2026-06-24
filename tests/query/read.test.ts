@@ -23,19 +23,19 @@ describe("compileFind", () => {
           "'name', users.name, " +
           "'email', users.email, " +
           "'addresses', (SELECT coalesce(json_agg(json_build_object(" +
-          "'id', user_addresses.id, " +
-          "'street', user_addresses.street, " +
+          "'id', user__addresses.id, " +
+          "'street', user__addresses.street, " +
           "'landmarks', (SELECT coalesce(json_agg(json_build_object(" +
-          "'id', user_addresses_landmarks.id, " +
-          "'label', user_addresses_landmarks.label, " +
-          "'createdAt', user_addresses_landmarks.created_at, " +
-          "'updatedAt', user_addresses_landmarks.updated_at) " +
-          "ORDER BY user_addresses_landmarks.created_at), '[]'::json) " +
-          "FROM user_addresses_landmarks WHERE user_addresses_landmarks.address_id = user_addresses.id), " +
-          "'createdAt', user_addresses.created_at, " +
-          "'updatedAt', user_addresses.updated_at) " +
-          "ORDER BY user_addresses.created_at), '[]'::json) " +
-          "FROM user_addresses WHERE user_addresses.user_id = users.id), " +
+          "'id', user__addresses__landmarks.id, " +
+          "'label', user__addresses__landmarks.label, " +
+          "'createdAt', user__addresses__landmarks.created_at, " +
+          "'updatedAt', user__addresses__landmarks.updated_at) " +
+          "ORDER BY user__addresses__landmarks.created_at), '[]'::json) " +
+          "FROM user__addresses__landmarks WHERE user__addresses__landmarks.address_id = user__addresses.id), " +
+          "'createdAt', user__addresses.created_at, " +
+          "'updatedAt', user__addresses.updated_at) " +
+          "ORDER BY user__addresses.created_at), '[]'::json) " +
+          "FROM user__addresses WHERE user__addresses.user_id = users.id), " +
           "'createdAt', users.created_at, " +
           "'updatedAt', users.updated_at) AS data",
         "FROM users",
@@ -54,11 +54,11 @@ describe("compileFind", () => {
     const account = defineEntity("accounts", { profile: owned({ bio: text() }) });
     const { text: sql } = compileFind(account);
     expect(sql).toContain(
-      "'profile', (SELECT json_build_object('id', account_profile.id, " +
-        "'bio', account_profile.bio, " +
-        "'createdAt', account_profile.created_at, " +
-        "'updatedAt', account_profile.updated_at) " +
-        "FROM account_profile WHERE account_profile.account_id = accounts.id LIMIT 1)",
+      "'profile', (SELECT json_build_object('id', account__profile.id, " +
+        "'bio', account__profile.bio, " +
+        "'createdAt', account__profile.created_at, " +
+        "'updatedAt', account__profile.updated_at) " +
+        "FROM account__profile WHERE account__profile.account_id = accounts.id LIMIT 1)",
     );
   });
 });

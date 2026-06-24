@@ -1,1 +1,1 @@
-export const Component = () => <h1>Dados</h1>;
+export const Component = () => <h1>Data</h1>;

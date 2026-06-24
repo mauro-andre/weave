@@ -13,7 +13,7 @@ const post = defineEntity("weave_nf_posts", {
   comments: owned(array({ body: text().notNull(), approved: text() })),
 });
 
-const tables = `weave_nf_post_tags, weave_nf_post_comments, weave_nf_posts, weave_nf_tags`;
+const tables = `weave_nf_post__tags, weave_nf_post__comments, weave_nf_posts, weave_nf_tags`;
 
 describe.skipIf(noDb)("nested filtering (integration)", () => {
   let db: Weave;

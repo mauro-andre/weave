@@ -17,6 +17,16 @@ export async function setup(): Promise<void> {
     )
   `;
 
+  // Metastore das entidades: a planta (IR) de cada entidade, em jsonb.
+  await sql`
+    CREATE TABLE IF NOT EXISTS weave_entities (
+      name        text PRIMARY KEY,
+      ir          jsonb NOT NULL,
+      created_at  timestamptz NOT NULL DEFAULT now(),
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
   const [row] = await sql<{ count: number }[]>`SELECT count(*)::int AS count FROM weave_users`;
   if (row && row.count === 0) {
     const username = process.env.MASTER_USERNAME;

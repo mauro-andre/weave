@@ -9,6 +9,9 @@ export default defineConfig({
   plugins: [veloPlugin(), vanillaExtractPlugin()],
   test: {
     include: ["tests/**/*.test.ts"],
+    // Os testes batem no mesmo banco `weave`; rodar os arquivos em série evita
+    // corrida nas tabelas de control-plane (weave_users/weave_entities) e DDL.
+    fileParallelism: false,
     env: {
       DATABASE_URL: "postgres://weave:weave@localhost:5432/weave",
       MASTER_USERNAME: "master",

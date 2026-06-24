@@ -5,6 +5,7 @@ import * as AdminLayout from "./layouts/AdminLayout.js";
 import * as Home from "./pages/Home.js";
 import * as Data from "./pages/Data.js";
 import * as Entities from "./pages/Entities.js";
+import * as EntityDesigner from "./pages/EntityDesigner.js";
 import * as Scopes from "./pages/Scopes.js";
 import * as Api from "./pages/Api.js";
 import * as Config from "./pages/Config.js";
@@ -25,11 +26,12 @@ export default [
         middlewares: [authMiddleware],
         children: [
           { path: "/", module: Home },
-          { path: "/dados", module: Data },
-          { path: "/entidades", module: Entities },
+          { path: "/data", module: Data },
+          { path: "/entities", module: Entities },
+          { path: "/entities/:name", module: EntityDesigner },
           { path: "/scopes", module: Scopes },
           { path: "/api", module: Api },
-          { path: "/config", module: Config },
+          { path: "/settings", module: Config },
         ],
       },
     ],

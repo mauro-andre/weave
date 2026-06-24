@@ -18,8 +18,8 @@ const user = defineEntity("weave_save_users", {
 });
 
 const tables = `
-  weave_save_user_addresses_landmarks,
-  weave_save_user_addresses,
+  weave_save_user__addresses__landmarks,
+  weave_save_user__addresses,
   weave_save_users`;
 
 describe.skipIf(noDb)("save (shred)", () => {
@@ -74,7 +74,7 @@ describe.skipIf(noDb)("save (shred)", () => {
     expect(updated.addresses[0]!.street).toBe("New");
 
     // Old children are gone (replace), including grandchildren.
-    const landmarks = await db.sql`select count(*)::int as n from weave_save_user_addresses_landmarks
+    const landmarks = await db.sql`select count(*)::int as n from weave_save_user__addresses__landmarks
       where label = 'L1'`;
     expect(landmarks[0]!.n).toBe(0);
   });

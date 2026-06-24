@@ -11,7 +11,7 @@ export const action_login = async ({
 
   const user = await findUserByUsername(body.username);
   if (!user || !verifyPassword(body.password, user.password_hash)) {
-    return { error: "Usuário ou senha inválidos." };
+    return { error: "Invalid username or password." };
   }
 
   const { setCookie } = await import("@mauroandre/velojs/cookie");
@@ -53,18 +53,18 @@ export const Component = () => {
           </svg>
           <span>Weave</span>
         </div>
-        <p class={css.subtitle}>Painel de administração</p>
+        <p class={css.subtitle}>Admin panel</p>
 
-        <input class={css.input} name="username" placeholder="usuário" autoComplete="username" />
+        <input class={css.input} name="username" placeholder="username" autoComplete="username" />
         <input
           class={css.input}
           name="password"
           type="password"
-          placeholder="senha"
+          placeholder="password"
           autoComplete="current-password"
         />
         <button class={css.button} type="submit">
-          Entrar
+          Sign in
         </button>
         {error ? (
           <p class={css.error} role="alert">
