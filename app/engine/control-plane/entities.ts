@@ -26,6 +26,12 @@ function parseIR(ir: EntityIR | string): EntityIR {
   return typeof ir === "string" ? (JSON.parse(ir) as EntityIR) : ir;
 }
 
+/** Remove a entidade do metastore. A tabela física fica (sync é aditivo). */
+export async function deleteEntity(name: string): Promise<void> {
+  const sql = db();
+  await sql`DELETE FROM weave_entities WHERE name = ${name}`;
+}
+
 /**
  * Dry-run: calcula o plano de mudanças (intenção, via diff por id) **sem**
  * tocar no banco. Mesmo pipeline do save (normaliza + garante ids) pra que o

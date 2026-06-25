@@ -11,6 +11,7 @@ import * as ScopeDesigner from "./pages/ScopeDesigner.js";
 import * as Api from "./pages/Api.js";
 import * as Config from "./pages/Config.js";
 import * as DataApi from "./api/handlers.js";
+import * as Admin from "./api/admin.js";
 import { authMiddleware } from "./auth/auth.middleware.js";
 import { apiKeyMiddleware } from "./api/api-key.middleware.js";
 
@@ -24,11 +25,33 @@ export default [
       // Público
       { path: "/login", module: Login },
       // API REST pública (god-mode, x-api-key). É o chokepoint dos scopes (F5).
-      { path: "/api/:entity", method: "GET", handler: DataApi.apiList, middlewares: [apiKeyMiddleware] },
-      { path: "/api/:entity", method: "POST", handler: DataApi.apiCreate, middlewares: [apiKeyMiddleware] },
-      { path: "/api/:entity/:id", method: "GET", handler: DataApi.apiGetOne, middlewares: [apiKeyMiddleware] },
-      { path: "/api/:entity/:id", method: "PATCH", handler: DataApi.apiUpdate, middlewares: [apiKeyMiddleware] },
-      { path: "/api/:entity/:id", method: "DELETE", handler: DataApi.apiDelete, middlewares: [apiKeyMiddleware] },
+      // Aninhada sob /api — a key é validada uma vez no nó pai.
+      {
+        path: "/api",
+        middlewares: [apiKeyMiddleware],
+        children: [
+          { path: "/:entity", method: "GET", handler: DataApi.apiList },
+          { path: "/:entity", method: "POST", handler: DataApi.apiCreate },
+          { path: "/:entity/:id", method: "GET", handler: DataApi.apiGetOne },
+          { path: "/:entity/:id", method: "PATCH", handler: DataApi.apiUpdate },
+          { path: "/:entity/:id", method: "DELETE", handler: DataApi.apiDelete },
+        ],
+      },
+      // API de admin (control-plane): entidades (plan/apply) + scopes. Mesma key.
+      {
+        path: "/admin",
+        middlewares: [apiKeyMiddleware],
+        children: [
+          { path: "/entities", method: "GET", handler: Admin.adminListEntities },
+          { path: "/entities/:name", method: "GET", handler: Admin.adminGetEntity },
+          { path: "/entities/:name", method: "PUT", handler: Admin.adminPutEntity },
+          { path: "/entities/:name", method: "DELETE", handler: Admin.adminDeleteEntity },
+          { path: "/scopes", method: "GET", handler: Admin.adminListScopes },
+          { path: "/scopes/:name", method: "GET", handler: Admin.adminGetScope },
+          { path: "/scopes/:name", method: "PUT", handler: Admin.adminPutScope },
+          { path: "/scopes/:name", method: "DELETE", handler: Admin.adminDeleteScope },
+        ],
+      },
       // Protegido — authMiddleware vale pra páginas, loaders e actions abaixo
       {
         module: AdminLayout,
