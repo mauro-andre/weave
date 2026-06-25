@@ -30,6 +30,13 @@ export interface CompiledFilter {
 const TEXT_TYPES = new Set(["text", "varchar", "bpchar"]);
 const NUMERIC_TYPES = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
 
+// Campos gerenciados (não estão no shape do IR, mas existem em toda tabela).
+const MANAGED: Record<string, { col: string; type: string }> = {
+  id: { col: "id", type: "uuid" },
+  createdAt: { col: "created_at", type: "timestamptz" },
+  updatedAt: { col: "updated_at", type: "timestamptz" },
+};
+
 /**
  * Compila um filtro num predicado SQL booleano referente ao alias `root` (a
  * tabela da entidade raiz). `byName` deve conter os IRs **resolvidos** (mirrors
@@ -71,19 +78,24 @@ export function compileFilter(
     const [head, ...rest] = segs;
     if (head === undefined) throw new Error("filter: empty path.");
     const node = fields[head];
-    if (!node) throw new Error(`filter: unknown field '${head}'.`);
     const col = camelToSnake(head);
 
-    // Folha: campo escalar.
+    // Folha: campo escalar (ou gerenciado: id / created at / updated at).
     if (rest.length === 0) {
-      if (node.kind !== "column") throw new Error(`filter: '${head}' is not a value field.`);
-      if (node.array) {
-        // Coluna-array → "any": algum elemento casa.
-        const e = alias();
-        return `EXISTS (SELECT 1 FROM unnest(${parent}.${col}) AS ${e} WHERE ${leaf(e, op, value, node.type)})`;
+      if (node?.kind === "column") {
+        if (node.array) {
+          // Coluna-array → "any": algum elemento casa.
+          const e = alias();
+          return `EXISTS (SELECT 1 FROM unnest(${parent}.${col}) AS ${e} WHERE ${leaf(e, op, value, node.type)})`;
+        }
+        return leaf(`${parent}.${col}`, op, value, node.type);
       }
-      return leaf(`${parent}.${col}`, op, value, node.type);
+      const m = MANAGED[head];
+      if (!node && m) return leaf(`${parent}.${m.col}`, op, value, m.type);
+      throw new Error(`filter: '${head}' is not a value field.`);
     }
+
+    if (!node) throw new Error(`filter: unknown field '${head}'.`);
 
     // Galho: owned ou reference (mesmo padrão EXISTS, elo diferente).
     if (node.kind === "owned") {

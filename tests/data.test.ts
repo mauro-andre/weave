@@ -283,6 +283,14 @@ describe("data browser — leitura de objetos", () => {
       expect(p.docs.map((d) => d.code).sort()).toEqual(["O1", "O2"]);
     });
 
+    it("filtra por campo gerenciado (id equals)", async () => {
+      const res = await app.as({ user: master }).action(action_listObjects, { body: { name: "ord" } });
+      const docs = (await res.json()).docs as { id: string; code: string }[];
+      const o1 = docs.find((d) => d.code === "O1")!;
+      const p = await filter("ord", { path: ["id"], op: "equals", value: o1.id });
+      expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
+    });
+
     it("SSR: filtro na URL renderiza só o resultado (refresh-safe)", async () => {
       const f = encodeURIComponent(
         JSON.stringify({ path: ["buyer", "addresses", "city"], op: "contains", value: "paulo" }),

@@ -12,6 +12,16 @@ const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"])
 const DATE = new Set(["timestamptz", "timestamp", "date", "time"]);
 const NO_VALUE = new Set(["isEmpty", "isTrue", "isFalse"]);
 
+// Campos gerenciados (não estão no shape, mas existem em toda entidade).
+const MANAGED: Record<string, { label: string; type: string }> = {
+  id: { label: "id", type: "uuid" },
+  createdAt: { label: "created at", type: "timestamptz" },
+  updatedAt: { label: "updated at", type: "timestamptz" },
+};
+function fieldLabel(name: string): string {
+  return MANAGED[name]?.label ?? name;
+}
+
 const OP_LABEL: Record<string, string> = {
   contains: "contains",
   startsWith: "starts with",
@@ -127,7 +137,7 @@ function ConditionRow({
         <span key={i}>
           {i > 0 ? <span class={css.sep}>›&nbsp;</span> : null}
           <span class={css.chip}>
-            {c.name}
+            {fieldLabel(c.name)}
             <span class={`${css.chipBadge} ${badgeClass(kindOf(c.node))}`}>{kindLabel(c.node)}</span>
           </span>
         </span>
@@ -189,7 +199,7 @@ function ConditionBuilder({
         <span key={i}>
           {i > 0 ? <span class={css.sep}>›&nbsp;</span> : null}
           <button class={`${css.chip} ${css.chipBtn}`} onClick={() => truncate(i)} title="edit from here">
-            {c.name}
+            {fieldLabel(c.name)}
             <span class={`${css.chipBadge} ${badgeClass(kindOf(c.node))}`}>{kindLabel(c.node)}</span>
           </button>
         </span>
@@ -242,7 +252,8 @@ function resolvePath(shapes: Shapes, root: string, segments: string[]) {
   const chosen: { name: string; node: FieldIR }[] = [];
   let fields = shapes[root] ?? {};
   for (const name of segments) {
-    const node = fields[name];
+    let node = fields[name];
+    if (!node && MANAGED[name]) node = { kind: "column", type: MANAGED[name]!.type } as ColumnIR;
     if (!node) break;
     chosen.push({ name, node });
     if (node.kind === "column") {
@@ -257,7 +268,13 @@ function resolvePath(shapes: Shapes, root: string, segments: string[]) {
 }
 
 function fieldOptions(fields: Record<string, FieldIR>): SelectOption[] {
-  return Object.entries(fields).map(([name, node]) => ({ value: name, label: name, hint: kindLabel(node) }));
+  const opts: SelectOption[] = Object.entries(fields).map(([name, node]) => ({
+    value: name,
+    label: name,
+    hint: kindLabel(node),
+  }));
+  for (const [key, m] of Object.entries(MANAGED)) opts.push({ value: key, label: m.label, hint: m.type });
+  return opts;
 }
 
 function kindOf(node: FieldIR): "link" | "owned" | "leaf" {
