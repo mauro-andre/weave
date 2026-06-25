@@ -14,7 +14,10 @@ function normFields(fields: Record<string, FieldIR>): Record<string, FieldIR> {
 }
 
 function normNode(node: FieldIR): FieldIR {
-  if (node.kind === "owned") return { ...node, shape: normFields(node.shape) };
+  if (node.kind === "owned") {
+    if (node.mirror) return { ...node, mirror: slug(node.mirror) };
+    return { ...node, shape: normFields(node.shape ?? {}) };
+  }
   if (node.kind === "reference") return { ...node, target: slug(node.target) };
   return node;
 }

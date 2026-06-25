@@ -36,7 +36,8 @@ function validateNode(node: unknown, path: string): void {
     }
     case "owned": {
       if (typeof node["array"] !== "boolean") throw err(`${path}: \`array\` must be a boolean.`);
-      if (!isObj(node["shape"])) throw err(`${path}: \`shape\` must be an object.`);
+      if (typeof node["mirror"] === "string") return; // espelho — resolvido no sync
+      if (!isObj(node["shape"])) throw err(`${path}: owned needs \`shape\` or \`mirror\`.`);
       for (const [key, child] of Object.entries(node["shape"])) {
         validateNode(child, `${path}.${key}`);
       }

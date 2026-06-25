@@ -51,7 +51,7 @@ function buildNode(node: FieldIR, map: Record<string, AnyEntity>) {
     return new Reference(target, node.cardinality, node.notNull ?? false);
   }
   return new Owned(
-    buildShape(node.shape, map),
+    buildShape(node.shape ?? {}, map),
     node.array ? "many" : "one",
     node.table !== undefined ? { table: node.table } : {},
   );

@@ -24,7 +24,10 @@ export interface OwnedIR {
   kind: "owned";
   /** `false` = 1:1, `true` = 1:N. */
   array: boolean;
-  shape: Record<string, FieldIR>;
+  /** Forma inline (XOR com `mirror`). */
+  shape?: Record<string, FieldIR>;
+  /** Espelha a forma de outra entidade (XOR com `shape`). Resolvido no sync. */
+  mirror?: string;
   /** Override do nome da tabela filha. */
   table?: string;
 }

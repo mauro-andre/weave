@@ -2,6 +2,7 @@ import { db } from "./db.js";
 import { weave } from "../index.js";
 import { validateIR } from "../ir/validate.js";
 import { normalizeEntityIR } from "../ir/normalize.js";
+import { resolveMirrors } from "../ir/resolve-mirrors.js";
 import { fromIR } from "../ir/from-ir.js";
 import type { EntityIR } from "../ir/types.js";
 
@@ -41,7 +42,9 @@ export async function saveEntity(input: unknown): Promise<EntityIR> {
 
 /** Materializa todas as entidades do metastore no banco (aditivo, via sync). */
 async function materialize(): Promise<void> {
-  const entities = fromIR(await listEntities());
+  const irs = await listEntities();
+  const byName = new Map(irs.map((ir) => [ir.name, ir] as const));
+  const entities = fromIR(irs.map((ir) => resolveMirrors(ir, byName)));
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
   const client = weave({ url, entities });

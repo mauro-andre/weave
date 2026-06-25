@@ -242,3 +242,25 @@ export const error = style({
   color: vars.color.danger,
   fontSize: "13px",
 });
+
+export const mirrorNote = style({
+  margin: "0 0 8px",
+  fontSize: "12px",
+  color: vars.color.muted,
+});
+
+export const mirrorList = style({
+  listStyle: "none",
+  padding: 0,
+  margin: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "4px",
+  fontSize: "13px",
+});
+
+export const mirrorKind = style({
+  color: vars.color.muted,
+  fontFamily: vars.font.mono,
+  fontSize: "12px",
+});

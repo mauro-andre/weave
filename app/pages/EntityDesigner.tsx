@@ -23,6 +23,7 @@ interface Field {
   index: boolean;
   fields: Field[];
   target: string;
+  mirror: string; // owned: "" = inline; senão o nome da entidade espelhada
 }
 
 interface EntityModel {
@@ -31,7 +32,7 @@ interface EntityModel {
 }
 
 interface LoaderData {
-  entities: string[];
+  entities: EntityIR[];
   current: EntityIR | null;
 }
 
@@ -48,15 +49,16 @@ const newField = (): Field => ({
   index: false,
   fields: [],
   target: "",
+  mirror: "",
 });
 
-// ── Loader: entidades existentes (alvo de reference) + a atual (se editando) ──
+// ── Loader: entidades existentes (alvo de reference/mirror) + a atual ─────────
 export const loader = async ({ params }: LoaderArgs): Promise<LoaderData> => {
   const { listEntities, getEntity } = await import("../engine/control-plane/entities.js");
   const all = await listEntities();
   const name = params.name;
   const current = name && name !== "new" ? await getEntity(name) : null;
-  return { entities: all.map((e) => e.name), current };
+  return { entities: all, current };
 };
 
 // ── IR ↔ modelo ───────────────────────────────────────────────────────────────
@@ -77,9 +79,13 @@ function fieldToIR(f: Field): FieldIR {
     case "scalarList":
       return col(f, true);
     case "ownedOne":
-      return { kind: "owned", array: false, shape: shapeOf(f.fields) };
+      return f.mirror
+        ? { kind: "owned", array: false, mirror: f.mirror }
+        : { kind: "owned", array: false, shape: shapeOf(f.fields) };
     case "ownedMany":
-      return { kind: "owned", array: true, shape: shapeOf(f.fields) };
+      return f.mirror
+        ? { kind: "owned", array: true, mirror: f.mirror }
+        : { kind: "owned", array: true, shape: shapeOf(f.fields) };
     case "refOne":
       return { kind: "reference", target: f.target, cardinality: "one" };
     case "refMany":
@@ -115,28 +121,54 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
       f.target = node.target;
     } else {
       f.family = node.array ? "ownedMany" : "ownedOne";
-      f.fields = fieldsFromIR(node.shape);
+      if (node.mirror) f.mirror = node.mirror;
+      else f.fields = fieldsFromIR(node.shape ?? {});
     }
     return f;
   });
 }
 
-// ── Preview ao vivo das tabelas (espelha o collectTables do engine) ───────────
-function previewTables(name: string, fields: Field[]): string[] {
+// ── Preview ao vivo das tabelas (espelha o collectTables; resolve mirrors) ────
+function previewTables(name: string, fields: Field[], byName: Map<string, EntityIR>): string[] {
   const root = slug(name);
   const out = [root];
-  walkOwned(fields, singularize(root), out);
+  walkOwned(fields, singularize(root), out, byName);
   return out;
 }
 
-function walkOwned(fields: Field[], prefix: string, out: string[]): void {
+function walkOwned(fields: Field[], prefix: string, out: string[], byName: Map<string, EntityIR>): void {
   for (const f of fields) {
     if ((f.family === "ownedOne" || f.family === "ownedMany") && f.name) {
       const child = ownedChildTable(prefix, slug(f.name), undefined);
       out.push(child);
-      walkOwned(f.fields, child, out);
+      if (f.mirror) {
+        const base = byName.get(f.mirror);
+        if (base) walkIR(base.fields, child, out, byName);
+      } else {
+        walkOwned(f.fields, child, out, byName);
+      }
     }
   }
+}
+
+function walkIR(fields: Record<string, FieldIR>, prefix: string, out: string[], byName: Map<string, EntityIR>): void {
+  for (const [name, node] of Object.entries(fields)) {
+    if (node.kind !== "owned") continue;
+    const child = ownedChildTable(prefix, slug(name), node.table);
+    out.push(child);
+    if (node.mirror) {
+      const base = byName.get(node.mirror);
+      if (base) walkIR(base.fields, child, out, byName);
+    } else {
+      walkIR(node.shape ?? {}, child, out, byName);
+    }
+  }
+}
+
+function describeNode(node: FieldIR): string {
+  if (node.kind === "column") return node.array ? `${node.type}[]` : node.type;
+  if (node.kind === "reference") return `→ ${node.target} (${node.cardinality === "many" ? "N:N" : "N:1"})`;
+  return node.mirror ? `owned ⛓ ${node.mirror}` : "owned { … }";
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -161,6 +193,26 @@ function FlagChip({
   );
 }
 
+function MirrorPreview({ entity }: { entity: EntityIR | undefined }) {
+  if (!entity) {
+    return <p class={css.mirrorNote}>⛓ mirrored entity not found.</p>;
+  }
+  return (
+    <div>
+      <p class={css.mirrorNote}>
+        ⛓ mirrored from <code>{entity.name}</code> — edit it there.
+      </p>
+      <ul class={css.mirrorList}>
+        {Object.entries(entity.fields).map(([name, node]) => (
+          <li key={name}>
+            <code>{name}</code> <span class={css.mirrorKind}>{describeNode(node)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function FieldRow({
   field,
   entities,
@@ -168,7 +220,7 @@ function FieldRow({
   onRemove,
 }: {
   field: Field;
-  entities: string[];
+  entities: EntityIR[];
   onChange: () => void;
   onRemove: () => void;
 }) {
@@ -235,6 +287,24 @@ function FieldRow({
           </>
         ) : null}
 
+        {isOwned ? (
+          <select
+            class={css.select}
+            value={field.mirror}
+            onChange={(e) => {
+              field.mirror = (e.currentTarget as HTMLSelectElement).value;
+              onChange();
+            }}
+          >
+            <option value="">define fields here</option>
+            {entities.map((ent) => (
+              <option key={ent.name} value={ent.name}>
+                mirror: {ent.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
         {isRef ? (
           <select
             class={css.select}
@@ -245,9 +315,9 @@ function FieldRow({
             }}
           >
             <option value="">— choose entity —</option>
-            {entities.map((n) => (
-              <option key={n} value={n}>
-                {n}
+            {entities.map((ent) => (
+              <option key={ent.name} value={ent.name}>
+                {ent.name}
               </option>
             ))}
           </select>
@@ -258,9 +328,15 @@ function FieldRow({
         </button>
       </div>
 
-      {isOwned ? (
+      {isOwned && !field.mirror ? (
         <div class={css.nested}>
           <FieldList fields={field.fields} entities={entities} onChange={onChange} />
+        </div>
+      ) : null}
+
+      {isOwned && field.mirror ? (
+        <div class={css.nested}>
+          <MirrorPreview entity={entities.find((ent) => ent.name === field.mirror)} />
         </div>
       ) : null}
     </div>
@@ -273,7 +349,7 @@ function FieldList({
   onChange,
 }: {
   fields: Field[];
-  entities: string[];
+  entities: EntityIR[];
   onChange: () => void;
 }) {
   return (
@@ -312,6 +388,7 @@ export const Component = () => {
 
   const key = isNew ? "::new" : params.name;
   const entities = loaded?.entities ?? [];
+  const byName = new Map(entities.map((e) => [e.name, e] as const));
   const model = useSignal<EntityModel>(
     loaded?.current ? irToModel(loaded.current) : { name: "", fields: [] },
   );
@@ -342,7 +419,7 @@ export const Component = () => {
     navigate("/entities"); // SPA, sem reload da tela
   };
 
-  const tables = previewTables(model.value.name || "entity", model.value.fields);
+  const tables = previewTables(model.value.name || "entity", model.value.fields, byName);
 
   return (
     <div class={css.page}>

@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -95,6 +95,38 @@ describe("entidades — criar e materializar", () => {
       WHERE table_schema = 'public' AND table_name = 'produtos_especiais'
     `;
     expect(cols.map((c) => c.column_name)).toContain("descricao");
+  });
+
+  it("owned espelhado (mirror) materializa com a forma da entidade base", async () => {
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "produto",
+          fields: {
+            nome: { kind: "column", type: "text", notNull: true },
+            preco: { kind: "column", type: "int4" },
+          },
+        },
+      },
+    });
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "pedido",
+          fields: { itens: { kind: "owned", array: true, mirror: "produto" } },
+        },
+      },
+    });
+
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const cols = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pedido__itens'
+    `;
+    expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(["nome", "preco"]));
   });
 
   it("rejeita IR inválido (tipo fora do catálogo)", async () => {
