@@ -4,6 +4,7 @@ import { resolveMirrors } from "../ir/resolve-mirrors.js";
 import { fromIR } from "../ir/from-ir.js";
 import { slug } from "../util/slug.js";
 import { compileFilter, type Filter } from "./filter.js";
+import { compileSort, type SortKey } from "./sort.js";
 import type { EntityIR, FieldIR } from "../ir/types.js";
 
 export interface ObjectPage {
@@ -27,6 +28,7 @@ export async function listObjects(
   page = 1,
   perPage = 20,
   filter?: Filter | null,
+  sort?: SortKey[] | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
@@ -65,8 +67,11 @@ export async function listObjects(
     }[];
     const docsQuantity = countRows[0]?.n ?? 0;
 
+    // `id` (uuidv7) entra sempre como desempate estável da paginação.
+    const orderBy =
+      sort && sort.length > 0 ? `${compileSort(name, rootIr.fields, byName, sort)}, root.id` : "root.id";
     const idRows = (await sql.unsafe(
-      `SELECT id FROM ${table} root ${where} ORDER BY id LIMIT ${pp} OFFSET ${offset}`,
+      `SELECT id FROM ${table} root ${where} ORDER BY ${orderBy} LIMIT ${pp} OFFSET ${offset}`,
       params,
     )) as { id: string }[];
     const ids = idRows.map((r) => r.id);

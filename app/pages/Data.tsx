@@ -5,9 +5,11 @@ import { useState, useEffect, useRef } from "preact/hooks";
 import { Page } from "../components/Page.js";
 import { Select } from "../components/Select.js";
 import { FilterBar } from "./FilterBar.js";
+import { SortBar } from "./SortBar.js";
 import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
 import type { ObjectPage } from "../engine/control-plane/data.js";
 import type { Filter } from "../engine/control-plane/filter.js";
+import type { SortKey } from "../engine/control-plane/sort.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Data.css.js";
 
@@ -20,35 +22,39 @@ interface DataLoaded {
   selected: string | null;
   /** Página de objetos da entidade selecionada (null se nenhuma selecionada). */
   page: ObjectPage | null;
-  /** Filtro ativo, decodificado da URL (`?path=&op=&value=`). */
+  /** Filtro ativo, decodificado da URL (`?filter=` em JSON). */
   filter: Filter | null;
+  /** Ordenação ativa, decodificada da URL (`?sort=` em JSON). */
+  sort: SortKey[] | null;
 }
 
-// Estado na URL (`?entity=&page=&path=&op=&value=`) → o loader busca server-side,
+// Estado na URL (`?entity=&page=&filter=&sort=`) → o loader busca server-side,
 // então refresh e link direto funcionam. Sem `entity`, nada é mostrado.
 export const loader = async ({ query }: LoaderArgs): Promise<DataLoaded> => {
   const { listEntities } = await import("../engine/control-plane/entities.js");
   const entities = (await listEntities()).map((e) => e.name);
   const selected = query.entity && entities.includes(query.entity) ? query.entity : null;
-  const filter = selected ? parseFilter(query.filter) : null;
+  const filter = selected ? parseJson<Filter>(query.filter) : null;
+  const sort = selected ? parseJson<SortKey[]>(query.sort) : null;
   let page: ObjectPage | null = null;
   if (selected) {
     const { listObjects } = await import("../engine/control-plane/data.js");
-    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, filter);
+    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, filter, sort);
   }
-  return { entities, selected, page, filter };
+  return { entities, selected, page, filter, sort };
 };
 
-function urlFor(entity: string, p: number, f: Filter | null): string {
+function urlFor(entity: string, p: number, f: Filter | null, s: SortKey[] | null): string {
   let u = `/data?entity=${encodeURIComponent(entity)}&page=${p}`;
   if (f) u += `&filter=${encodeURIComponent(JSON.stringify(f))}`;
+  if (s && s.length) u += `&sort=${encodeURIComponent(JSON.stringify(s))}`;
   return u;
 }
 
-function parseFilter(raw: string | undefined): Filter | null {
+function parseJson<T>(raw: string | undefined): T | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as Filter;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
@@ -56,10 +62,10 @@ function parseFilter(raw: string | undefined): Filter | null {
 
 export const action_listObjects = async ({
   body,
-}: ActionArgs<{ name: string; page?: number; filter?: Filter | null }>) => {
+}: ActionArgs<{ name: string; page?: number; filter?: Filter | null; sort?: SortKey[] | null }>) => {
   const { listObjects } = await import("../engine/control-plane/data.js");
   try {
-    return await listObjects(body.name, body.page ?? 1, 20, body.filter ?? null);
+    return await listObjects(body.name, body.page ?? 1, 20, body.filter ?? null, body.sort ?? null);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to load objects." };
   }
@@ -88,6 +94,7 @@ export const Component = () => {
   const selected = useSignal<string | null>(loaded?.selected ?? null);
   const page = useSignal<ObjectPage | null>(loaded?.page ?? null);
   const filter = useSignal<Filter | null>(loaded?.filter ?? null);
+  const sort = useSignal<SortKey[] | null>(loaded?.sort ?? null);
   const loading = useSignal(false);
   const creating = useSignal(false);
   const inited = useRef(false);
@@ -98,17 +105,19 @@ export const Component = () => {
     selected.value = loaded.selected;
     page.value = loaded.page;
     filter.value = loaded.filter;
+    sort.value = loaded.sort;
     inited.current = true;
   }, [loaded]);
 
-  // Troca de entidade / página / filtro: busca via action E reflete na URL.
-  const load = async (entity: string, p: number, f: Filter | null) => {
+  // Troca de entidade / página / filtro / sort: busca via action E reflete na URL.
+  const load = async (entity: string, p: number, f: Filter | null, s: SortKey[] | null) => {
     selected.value = entity;
     filter.value = f;
+    sort.value = s;
     creating.value = false;
     loading.value = true;
-    navigate(urlFor(entity, p, f));
-    const res = (await action_listObjects({ body: { name: entity, page: p, filter: f } })) as
+    navigate(urlFor(entity, p, f, s));
+    const res = (await action_listObjects({ body: { name: entity, page: p, filter: f, sort: s } })) as
       | ObjectPage
       | { error: string };
     loading.value = false;
@@ -116,7 +125,7 @@ export const Component = () => {
   };
   const reload = () => {
     creating.value = false;
-    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, filter.value);
+    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, filter.value, sort.value);
   };
 
   const sel = selected.value;
@@ -140,7 +149,7 @@ export const Component = () => {
           <Select
             options={entities.map((name) => ({ value: name, label: name }))}
             value={sel ?? ""}
-            onChange={(name) => load(name, 1, null)}
+            onChange={(name) => load(name, 1, null, null)}
             placeholder="Select entity…"
             mono
           />
@@ -155,11 +164,21 @@ export const Component = () => {
 
       {sel && cur ? (
         <FilterBar
-          key={`${sel}:${JSON.stringify(filter.value)}`}
+          key={`f:${sel}:${JSON.stringify(filter.value)}`}
           shapes={cur.shapes}
           root={cur.root}
           active={filter.value}
-          onChange={(f) => load(sel, 1, f)}
+          onChange={(f) => load(sel, 1, f, sort.value)}
+        />
+      ) : null}
+
+      {sel && cur ? (
+        <SortBar
+          key={`s:${sel}:${JSON.stringify(sort.value)}`}
+          shapes={cur.shapes}
+          root={cur.root}
+          active={sort.value}
+          onChange={(s) => load(sel, 1, filter.value, s)}
         />
       ) : null}
 
@@ -193,7 +212,7 @@ export const Component = () => {
               <button
                 class={css.pagerBtn}
                 disabled={cur.currentPage <= 1}
-                onClick={() => load(cur.root, cur.currentPage - 1, filter.value)}
+                onClick={() => load(cur.root, cur.currentPage - 1, filter.value, sort.value)}
               >
                 ◀
               </button>
@@ -203,7 +222,7 @@ export const Component = () => {
               <button
                 class={css.pagerBtn}
                 disabled={cur.currentPage >= cur.pageQuantity}
-                onClick={() => load(cur.root, cur.currentPage + 1, filter.value)}
+                onClick={() => load(cur.root, cur.currentPage + 1, filter.value, sort.value)}
               >
                 ▶
               </button>

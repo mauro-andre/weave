@@ -19,8 +19,8 @@ describe("data browser — leitura de objetos", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria, medida, ord, usr__addresses, usr, prod CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('blog', 'categoria', 'artigo', 'medida', 'usr', 'ord', 'prod')`;
+        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria, medida, ord, usr__addresses, usr, prod, book CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('blog', 'categoria', 'artigo', 'medida', 'usr', 'ord', 'prod', 'book')`;
       },
       getSessionCookie: async ({ user }) => {
         const { createToken } = await import("../app/engine/control-plane/crypto.js");
@@ -292,6 +292,56 @@ describe("data browser — leitura de objetos", () => {
       const html = await res.text();
       expect(html).toContain("O1");
       expect(html).not.toContain("O2");
+    });
+  });
+
+  // ── Ordenação ───────────────────────────────────────────────────────────────
+  describe("ordenação", () => {
+    type Page = { docs: { code?: string; title?: string; year?: number }[] };
+    const sortBy = async (name: string, s: unknown): Promise<Page> => {
+      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, sort: s } });
+      return (await res.json()) as Page;
+    };
+
+    beforeAll(async () => {
+      // `ord`/`usr` já existem (do bloco de filtro). Cria `book` p/ multi-chave.
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: {
+          ir: {
+            irVersion: 1,
+            name: "book",
+            fields: { title: { kind: "column", type: "text" }, year: { kind: "column", type: "int4" } },
+          },
+        },
+      });
+      const save = (object: Record<string, unknown>) =>
+        app.as({ user: master }).action(action_saveObject, { body: { name: "book", object } });
+      await save({ title: "Beta", year: 2000 });
+      await save({ title: "Alpha", year: 2010 });
+      await save({ title: "Alpha", year: 1990 });
+    });
+
+    it("ordena por escalar de topo (desc)", async () => {
+      const p = await sortBy("ord", [{ path: ["code"], dir: "desc" }]);
+      expect(p.docs.map((d) => d.code)).toEqual(["O2", "O1"]);
+    });
+
+    it("ordena por caminho aninhado N:1 (buyer.name asc)", async () => {
+      const p = await sortBy("ord", [{ path: ["buyer", "name"], dir: "asc" }]);
+      expect(p.docs.map((d) => d.code)).toEqual(["O1", "O2"]); // Alice < Bob
+    });
+
+    it("múltiplas chaves (title asc, year asc)", async () => {
+      const p = await sortBy("book", [
+        { path: ["title"], dir: "asc" },
+        { path: ["year"], dir: "asc" },
+      ]);
+      expect(p.docs.map((d) => d.year)).toEqual([1990, 2010, 2000]); // Alpha 1990, Alpha 2010, Beta 2000
+    });
+
+    it("ordena por campo gerenciado (created at)", async () => {
+      const p = await sortBy("book", [{ path: ["createdAt"], dir: "asc" }]);
+      expect(p.docs.map((d) => d.title)).toEqual(["Beta", "Alpha", "Alpha"]); // ordem de criação
     });
   });
 });
