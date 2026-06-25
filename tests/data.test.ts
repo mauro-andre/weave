@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_saveEntity } from "../app/pages/Entities.js";
-import { action_listObjects, action_saveObject } from "../app/pages/Data.js";
+import { action_listObjects, action_saveObject, action_deleteObject } from "../app/pages/Data.js";
 
 describe("data browser — leitura de objetos", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
@@ -350,6 +350,31 @@ describe("data browser — leitura de objetos", () => {
     it("ordena por campo gerenciado (created at)", async () => {
       const p = await sortBy("book", [{ path: ["createdAt"], dir: "asc" }]);
       expect(p.docs.map((d) => d.title)).toEqual(["Beta", "Alpha", "Alpha"]); // ordem de criação
+    });
+  });
+
+  // ── Delete ──────────────────────────────────────────────────────────────────
+  describe("delete", () => {
+    const newId = async (name: string, object: Record<string, unknown>): Promise<string> => {
+      const res = await app.as({ user: master }).action(action_saveObject, { body: { name, object } });
+      return ((await res.json()) as { object: { id: string } }).object.id;
+    };
+
+    it("deleta um objeto", async () => {
+      const id = await newId("book", { title: "ToDelete", year: 1 });
+      const res = await app.as({ user: master }).action(action_deleteObject, { body: { name: "book", id } });
+      expect((await res.json()).ok).toBe(true);
+
+      const list = await app.as({ user: master }).action(action_listObjects, { body: { name: "book" } });
+      const ids = ((await list.json()).docs as { id: string }[]).map((d) => d.id);
+      expect(ids).not.toContain(id);
+    });
+
+    it("bloqueia delete de objeto referenciado (mensagem amigável)", async () => {
+      const carol = await newId("usr", { name: "Carol" });
+      await newId("ord", { code: "DEL-REF", buyer: { id: carol } });
+      const res = await app.as({ user: master }).action(action_deleteObject, { body: { name: "usr", id: carol } });
+      expect((await res.json()).error).toMatch(/referenced/i);
     });
   });
 });

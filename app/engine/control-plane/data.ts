@@ -1,4 +1,5 @@
 import { weave } from "../index.js";
+import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors } from "../ir/resolve-mirrors.js";
 import { fromIR } from "../ir/from-ir.js";
@@ -158,6 +159,25 @@ function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unkn
       if (Array.isArray(v)) for (const c of v) normalizeRefs(childShape, c as Record<string, unknown>);
       else if (v && typeof v === "object") normalizeRefs(childShape, v as Record<string, unknown>);
     }
+  }
+}
+
+/**
+ * Apaga um objeto pela id. Owned (e links N:N) cascateiam via FK; se o objeto
+ * for **referenciado** por outro (N:1), o Postgres barra — devolvemos mensagem
+ * amigável (nunca o erro SQL cru).
+ */
+export async function deleteObject(name: string, id: string): Promise<void> {
+  const irs = await listEntities();
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
+  const sql = db();
+  try {
+    await sql`DELETE FROM ${sql(slug(name))} WHERE id = ${id}`;
+  } catch (e) {
+    if ((e as { code?: string }).code === "23503") {
+      throw new Error("Can't delete: this object is referenced by other objects.");
+    }
+    throw e;
   }
 }
 

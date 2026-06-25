@@ -6,6 +6,7 @@ import { Page } from "../components/Page.js";
 import { Select } from "../components/Select.js";
 import { FilterBar } from "./FilterBar.js";
 import { SortBar } from "./SortBar.js";
+import { ConfirmModal } from "../components/ConfirmModal.js";
 import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
 import type { ObjectPage } from "../engine/control-plane/data.js";
 import type { Filter } from "../engine/control-plane/filter.js";
@@ -79,6 +80,16 @@ export const action_saveObject = async ({
     return { ok: true, object: await saveObject(body.name, body.object) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to save object." };
+  }
+};
+
+export const action_deleteObject = async ({ body }: ActionArgs<{ name: string; id: string }>) => {
+  const { deleteObject } = await import("../engine/control-plane/data.js");
+  try {
+    await deleteObject(body.name, body.id);
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to delete object." };
   }
 };
 
@@ -253,6 +264,8 @@ function RootCard({
   const editing = useSignal(!!isNew);
   const draft = useSignal<Record<string, unknown>>(isNew ? {} : doc);
   const saving = useSignal(false);
+  const confirming = useSignal(false);
+  const deleting = useSignal(false);
   const err = useSignal("");
   const bump = () => touch(draft);
 
@@ -280,6 +293,19 @@ function RootCard({
     editing.value = false;
     onSaved();
   };
+  const doDelete = async () => {
+    deleting.value = true;
+    err.value = "";
+    const res = (await action_deleteObject({ body: { name: root, id: String(doc.id) } })) as { error?: string };
+    deleting.value = false;
+    confirming.value = false;
+    if (res.error) {
+      err.value = res.error;
+      return;
+    }
+    editing.value = false;
+    onSaved();
+  };
 
   return (
     <div class={css.card}>
@@ -288,6 +314,11 @@ function RootCard({
         <div class={css.actions}>
           {editing.value ? (
             <>
+              {!isNew ? (
+                <button class={btn.danger} onClick={() => (confirming.value = true)}>
+                  Delete
+                </button>
+              ) : null}
               <button class={btn.ghost} onClick={cancel}>
                 Cancel
               </button>
@@ -310,6 +341,18 @@ function RootCard({
       )}
 
       {err.value ? <p class={css.errorMsg}>{err.value}</p> : null}
+
+      {confirming.value ? (
+        <ConfirmModal
+          title={`Delete this ${root}?`}
+          message="This permanently deletes the object and its nested data. This can't be undone."
+          confirmLabel="Delete"
+          danger
+          busy={deleting.value}
+          onConfirm={doDelete}
+          onCancel={() => (confirming.value = false)}
+        />
+      ) : null}
     </div>
   );
 }

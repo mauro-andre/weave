@@ -41,3 +41,14 @@ export const ghost = style({
     "&:disabled": { opacity: 0.5, cursor: "not-allowed" },
   },
 });
+
+export const danger = style({
+  ...base,
+  background: vars.color.danger,
+  border: "1px solid transparent",
+  color: vars.color.bg,
+  selectors: {
+    "&:hover": { filter: "brightness(1.06)" },
+    "&:disabled": { opacity: 0.5, cursor: "not-allowed", filter: "none" },
+  },
+});
