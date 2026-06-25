@@ -4,6 +4,8 @@ import * as css from "./Select.css.js";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Texto auxiliar à direita (ex.: tipo/kind do campo). */
+  hint?: string;
 }
 
 /**
@@ -127,7 +129,8 @@ export function Select({
                     onMouseEnter={() => setActive(i)}
                     onClick={() => pick(opt.value)}
                   >
-                    {opt.label}
+                    <span>{opt.label}</span>
+                    {opt.hint ? <span class={css.optionHint}>{opt.hint}</span> : null}
                   </button>
                 );
               })

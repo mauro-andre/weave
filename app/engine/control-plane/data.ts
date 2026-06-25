@@ -2,6 +2,8 @@ import { weave } from "../index.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors } from "../ir/resolve-mirrors.js";
 import { fromIR } from "../ir/from-ir.js";
+import { slug } from "../util/slug.js";
+import { compileFilter, type Filter } from "./filter.js";
 import type { EntityIR, FieldIR } from "../ir/types.js";
 
 export interface ObjectPage {
@@ -14,40 +16,78 @@ export interface ObjectPage {
   currentPage: number;
 }
 
-/** Lê uma página de objetos de uma entidade (owned aninhado + references expandidas 1 nível). */
-export async function listObjects(name: string, page = 1, perPage = 20): Promise<ObjectPage> {
+/**
+ * Lê uma página de objetos (owned aninhado + references expandidas 1 nível),
+ * com filtro por caminho aninhado opcional. Estratégia: o filtro compila num
+ * predicado `EXISTS` sobre a tabela raiz, que produz os ids da página (count +
+ * limit/offset); depois o engine lê/expande esses ids — sem tocar no read.
+ */
+export async function listObjects(
+  name: string,
+  page = 1,
+  perPage = 20,
+  filter?: Filter | null,
+): Promise<ObjectPage> {
   const irs = await listEntities();
-  const root = irs.find((e) => e.name === name);
-  if (!root) throw new Error(`Unknown entity: ${name}`);
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
 
-  const byName = new Map(irs.map((e) => [e.name, e] as const));
-  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const rawByName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, rawByName));
+  const byName = new Map(resolved.map((e) => [e.name, e] as const)); // resolvido, p/ o filtro
   const entities = fromIR(resolved);
   const shapes: Record<string, Record<string, FieldIR>> = {};
   for (const r of resolved) shapes[r.name] = r.fields;
+  const rootIr = byName.get(name)!;
+  const table = slug(name);
 
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
   const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
+  const find = (client as unknown as { find(e: unknown, o: unknown): Promise<Record<string, unknown>[]> }).find.bind(
+    client,
+  );
   try {
-    const expand = buildExpand(root);
-    const opts: Record<string, unknown> = { page, perPage };
-    if (Object.keys(expand).length) opts.expand = expand;
-    // Chamado no próprio client (não extrair o método: perderia o `this`).
-    const loose = client as unknown as {
-      paginate(
-        e: unknown,
-        o: unknown,
-      ): Promise<{ docs: unknown[]; docsQuantity: number; pageQuantity: number; currentPage: number }>;
-    };
-    const res = await loose.paginate(entities[name], opts);
+    let where = "";
+    let params: unknown[] = [];
+    if (filter) {
+      const compiled = compileFilter(name, rootIr.fields, byName, filter);
+      where = `WHERE ${compiled.sql}`;
+      params = compiled.params;
+    }
+
+    const p = Math.max(1, Math.floor(page));
+    const pp = Math.max(1, Math.floor(perPage));
+    const offset = (p - 1) * pp;
+
+    const countRows = (await sql.unsafe(`SELECT count(*)::int AS n FROM ${table} root ${where}`, params)) as {
+      n: number;
+    }[];
+    const docsQuantity = countRows[0]?.n ?? 0;
+
+    const idRows = (await sql.unsafe(
+      `SELECT id FROM ${table} root ${where} ORDER BY id LIMIT ${pp} OFFSET ${offset}`,
+      params,
+    )) as { id: string }[];
+    const ids = idRows.map((r) => r.id);
+
+    let docs: Record<string, unknown>[] = [];
+    if (ids.length > 0) {
+      const expand = buildExpand(rootIr);
+      const opts: Record<string, unknown> = { where: { id: { in: ids } } };
+      if (Object.keys(expand).length) opts.expand = expand;
+      const found = await find(entities[name], opts);
+      const byId = new Map(found.map((d) => [d.id as string, d]));
+      docs = ids.map((id) => byId.get(id)).filter((d): d is Record<string, unknown> => !!d);
+    }
+
     return jsonSafe({
       root: name,
       shapes,
-      docs: res.docs as Record<string, unknown>[],
-      docsQuantity: res.docsQuantity,
-      pageQuantity: res.pageQuantity,
-      currentPage: res.currentPage,
+      docs,
+      docsQuantity,
+      pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)),
+      currentPage: p,
     });
   } finally {
     await client.close();

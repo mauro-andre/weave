@@ -67,7 +67,10 @@ globalStyle(`${list}::-webkit-scrollbar-thumb`, {
 });
 
 export const option = style({
-  display: "block",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
   width: "100%",
   textAlign: "left",
   padding: "8px 10px",
@@ -78,6 +81,13 @@ export const option = style({
   fontSize: "13px",
   fontFamily: vars.font.ui,
   cursor: "pointer",
+});
+
+export const optionHint = style({
+  flexShrink: 0,
+  fontSize: "11px",
+  fontFamily: vars.font.ui,
+  color: vars.color.muted,
 });
 
 export const optionActive = style({ background: vars.color.bg });

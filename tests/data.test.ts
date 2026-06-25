@@ -19,8 +19,8 @@ describe("data browser — leitura de objetos", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria, medida CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('blog', 'categoria', 'artigo')`;
+        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria, medida, ord, usr__addresses, usr, prod CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('blog', 'categoria', 'artigo', 'medida', 'usr', 'ord', 'prod')`;
       },
       getSessionCookie: async ({ user }) => {
         const { createToken } = await import("../app/engine/control-plane/crypto.js");
@@ -159,5 +159,139 @@ describe("data browser — leitura de objetos", () => {
     const res = await app.as({ user: master }).action(action_listObjects, { body: { name: "medida" } });
     const page = (await res.json()) as { docs: { peso: number }[] };
     expect(page.docs[0]?.peso).toBe(42);
+  });
+
+  // ── Filtro por caminho aninhado (o diferencial) ─────────────────────────────
+  describe("filtro por caminho aninhado", () => {
+    type Page = { docs: { code?: string; name?: string }[]; docsQuantity: number };
+    const save = (name: string, object: Record<string, unknown>) =>
+      app.as({ user: master }).action(action_saveObject, { body: { name, object } });
+    const filter = async (name: string, f: unknown): Promise<Page> => {
+      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, filter: f } });
+      return (await res.json()) as Page;
+    };
+
+    beforeAll(async () => {
+      const define = (ir: unknown) => app.as({ user: master }).action(action_saveEntity, { body: { ir } });
+      await define({
+        irVersion: 1,
+        name: "usr",
+        fields: {
+          name: { kind: "column", type: "text" },
+          addresses: { kind: "owned", array: true, shape: { city: { kind: "column", type: "text" } } },
+        },
+      });
+      await define({
+        irVersion: 1,
+        name: "ord",
+        fields: {
+          code: { kind: "column", type: "text" },
+          buyer: { kind: "reference", target: "usr", cardinality: "one" },
+        },
+      });
+      await define({
+        irVersion: 1,
+        name: "prod",
+        fields: {
+          name: { kind: "column", type: "text" },
+          tags: { kind: "column", type: "text", array: true },
+          scores: { kind: "column", type: "int4", array: true },
+        },
+      });
+
+      const alice = ((await (await save("usr", { name: "Alice", addresses: [{ city: "São Paulo" }, { city: "Rio" }] })).json()) as { object: { id: string } }).object.id;
+      const bob = ((await (await save("usr", { name: "Bob", addresses: [{ city: "Belo Horizonte" }] })).json()) as { object: { id: string } }).object.id;
+      await save("ord", { code: "O1", buyer: { id: alice } });
+      await save("ord", { code: "O2", buyer: { id: bob } });
+      await save("prod", { name: "X", tags: ["maçã", "banana"], scores: [3, 7] });
+      await save("prod", { name: "Y", tags: ["uva"], scores: [1, 2] });
+    });
+
+    it("🚩 orders cujo user tem ALGUM address com city ~ (ref → owned → texto)", async () => {
+      const p = await filter("ord", { path: ["buyer", "addresses", "city"], op: "contains", value: "paulo" });
+      expect(p.docsQuantity).toBe(1);
+      expect(p.docs[0]?.code).toBe("O1");
+    });
+
+    it("reference N:1 direta (buyer.name)", async () => {
+      const p = await filter("ord", { path: ["buyer", "name"], op: "contains", value: "ali" });
+      expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
+    });
+
+    it("owned direto (addresses.city)", async () => {
+      const p = await filter("usr", { path: ["addresses", "city"], op: "contains", value: "rio" });
+      expect(p.docs.map((d) => d.name)).toEqual(["Alice"]);
+    });
+
+    it("coluna-array de texto: algum elemento contains", async () => {
+      const p = await filter("prod", { path: ["tags"], op: "contains", value: "maç" });
+      expect(p.docs.map((d) => d.name)).toEqual(["X"]);
+    });
+
+    it("coluna-array de número: algum elemento >= 5", async () => {
+      const p = await filter("prod", { path: ["scores"], op: "gte", value: "5" });
+      expect(p.docs.map((d) => d.name)).toEqual(["X"]);
+    });
+
+    it("escalar de topo (equals)", async () => {
+      const p = await filter("ord", { path: ["code"], op: "equals", value: "O2" });
+      expect(p.docs.map((d) => d.code)).toEqual(["O2"]);
+    });
+
+    it("AND combina condições (match all)", async () => {
+      const p = await filter("ord", {
+        and: [
+          { path: ["buyer", "name"], op: "contains", value: "ali" },
+          { path: ["code"], op: "equals", value: "O1" },
+        ],
+      });
+      expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
+    });
+
+    it("AND sem interseção retorna vazio", async () => {
+      const p = await filter("ord", {
+        and: [
+          { path: ["buyer", "name"], op: "contains", value: "ali" },
+          { path: ["code"], op: "equals", value: "O2" },
+        ],
+      });
+      expect(p.docsQuantity).toBe(0);
+    });
+
+    it("OR une condições (match any)", async () => {
+      const p = await filter("ord", {
+        or: [
+          { path: ["code"], op: "equals", value: "O1" },
+          { path: ["code"], op: "equals", value: "O2" },
+        ],
+      });
+      expect(p.docs.map((d) => d.code).sort()).toEqual(["O1", "O2"]);
+    });
+
+    it("árvore complexa: (b AND O2) OR O1", async () => {
+      const p = await filter("ord", {
+        or: [
+          {
+            and: [
+              { path: ["buyer", "name"], op: "contains", value: "bob" },
+              { path: ["code"], op: "equals", value: "O2" },
+            ],
+          },
+          { path: ["code"], op: "equals", value: "O1" },
+        ],
+      });
+      expect(p.docs.map((d) => d.code).sort()).toEqual(["O1", "O2"]);
+    });
+
+    it("SSR: filtro na URL renderiza só o resultado (refresh-safe)", async () => {
+      const f = encodeURIComponent(
+        JSON.stringify({ path: ["buyer", "addresses", "city"], op: "contains", value: "paulo" }),
+      );
+      const res = await app.as({ user: master }).get(`/data?entity=ord&filter=${f}`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("O1");
+      expect(html).not.toContain("O2");
+    });
   });
 });

@@ -4,8 +4,10 @@ import { useSignal } from "@preact/signals";
 import { useState, useEffect, useRef } from "preact/hooks";
 import { Page } from "../components/Page.js";
 import { Select } from "../components/Select.js";
+import { FilterBar } from "./FilterBar.js";
 import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
 import type { ObjectPage } from "../engine/control-plane/data.js";
+import type { Filter } from "../engine/control-plane/filter.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Data.css.js";
 
@@ -18,26 +20,46 @@ interface DataLoaded {
   selected: string | null;
   /** Página de objetos da entidade selecionada (null se nenhuma selecionada). */
   page: ObjectPage | null;
+  /** Filtro ativo, decodificado da URL (`?path=&op=&value=`). */
+  filter: Filter | null;
 }
 
-// Estado na URL (`?entity=&page=`) → o loader busca server-side, então refresh
-// e link direto funcionam. Sem `entity` na URL, nada é mostrado (sem auto-seleção).
+// Estado na URL (`?entity=&page=&path=&op=&value=`) → o loader busca server-side,
+// então refresh e link direto funcionam. Sem `entity`, nada é mostrado.
 export const loader = async ({ query }: LoaderArgs): Promise<DataLoaded> => {
   const { listEntities } = await import("../engine/control-plane/entities.js");
   const entities = (await listEntities()).map((e) => e.name);
   const selected = query.entity && entities.includes(query.entity) ? query.entity : null;
+  const filter = selected ? parseFilter(query.filter) : null;
   let page: ObjectPage | null = null;
   if (selected) {
     const { listObjects } = await import("../engine/control-plane/data.js");
-    page = await listObjects(selected, Math.max(1, Number(query.page) || 1));
+    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, filter);
   }
-  return { entities, selected, page };
+  return { entities, selected, page, filter };
 };
 
-export const action_listObjects = async ({ body }: ActionArgs<{ name: string; page?: number }>) => {
+function urlFor(entity: string, p: number, f: Filter | null): string {
+  let u = `/data?entity=${encodeURIComponent(entity)}&page=${p}`;
+  if (f) u += `&filter=${encodeURIComponent(JSON.stringify(f))}`;
+  return u;
+}
+
+function parseFilter(raw: string | undefined): Filter | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Filter;
+  } catch {
+    return null;
+  }
+}
+
+export const action_listObjects = async ({
+  body,
+}: ActionArgs<{ name: string; page?: number; filter?: Filter | null }>) => {
   const { listObjects } = await import("../engine/control-plane/data.js");
   try {
-    return await listObjects(body.name, body.page ?? 1);
+    return await listObjects(body.name, body.page ?? 1, 20, body.filter ?? null);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to load objects." };
   }
@@ -65,6 +87,7 @@ export const Component = () => {
   // Estado vivo (client). Inicializa do loader (refresh/link diretos via URL).
   const selected = useSignal<string | null>(loaded?.selected ?? null);
   const page = useSignal<ObjectPage | null>(loaded?.page ?? null);
+  const filter = useSignal<Filter | null>(loaded?.filter ?? null);
   const loading = useSignal(false);
   const creating = useSignal(false);
   const inited = useRef(false);
@@ -74,22 +97,26 @@ export const Component = () => {
     if (!loaded || inited.current) return;
     selected.value = loaded.selected;
     page.value = loaded.page;
+    filter.value = loaded.filter;
     inited.current = true;
   }, [loaded]);
 
-  // Troca de entidade / página: busca via action E reflete na URL (refresh-safe).
-  const load = async (entity: string, p: number) => {
+  // Troca de entidade / página / filtro: busca via action E reflete na URL.
+  const load = async (entity: string, p: number, f: Filter | null) => {
     selected.value = entity;
+    filter.value = f;
     creating.value = false;
     loading.value = true;
-    navigate(`/data?entity=${encodeURIComponent(entity)}&page=${p}`);
-    const res = (await action_listObjects({ body: { name: entity, page: p } })) as ObjectPage | { error: string };
+    navigate(urlFor(entity, p, f));
+    const res = (await action_listObjects({ body: { name: entity, page: p, filter: f } })) as
+      | ObjectPage
+      | { error: string };
     loading.value = false;
     page.value = "error" in res ? null : res;
   };
   const reload = () => {
     creating.value = false;
-    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1);
+    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, filter.value);
   };
 
   const sel = selected.value;
@@ -113,12 +140,28 @@ export const Component = () => {
           <Select
             options={entities.map((name) => ({ value: name, label: name }))}
             value={sel ?? ""}
-            onChange={(name) => load(name, 1)}
+            onChange={(name) => load(name, 1, null)}
             placeholder="Select entity…"
             mono
           />
+          {sel && cur ? (
+            <span class={css.countBadge}>
+              <span class={css.countNum}>{cur.docsQuantity.toLocaleString()}</span>
+              {filter.value ? "matching" : cur.docsQuantity === 1 ? "object" : "objects"}
+            </span>
+          ) : null}
         </div>
       )}
+
+      {sel && cur ? (
+        <FilterBar
+          key={`${sel}:${JSON.stringify(filter.value)}`}
+          shapes={cur.shapes}
+          root={cur.root}
+          active={filter.value}
+          onChange={(f) => load(sel, 1, f)}
+        />
+      ) : null}
 
       {entities.length === 0 ? null : loading.value ? (
         <p class={css.empty}>Loading…</p>
@@ -147,7 +190,11 @@ export const Component = () => {
           </div>
           {cur.pageQuantity > 1 ? (
             <div class={css.pager}>
-              <button class={css.pagerBtn} disabled={cur.currentPage <= 1} onClick={() => load(cur.root, cur.currentPage - 1)}>
+              <button
+                class={css.pagerBtn}
+                disabled={cur.currentPage <= 1}
+                onClick={() => load(cur.root, cur.currentPage - 1, filter.value)}
+              >
                 ◀
               </button>
               <span>
@@ -156,7 +203,7 @@ export const Component = () => {
               <button
                 class={css.pagerBtn}
                 disabled={cur.currentPage >= cur.pageQuantity}
-                onClick={() => load(cur.root, cur.currentPage + 1)}
+                onClick={() => load(cur.root, cur.currentPage + 1, filter.value)}
               >
                 ▶
               </button>

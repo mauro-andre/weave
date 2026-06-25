@@ -8,6 +8,25 @@ export const picker = style({
   marginBottom: vars.space.lg,
 });
 
+export const countBadge = style({
+  display: "inline-flex",
+  alignItems: "baseline",
+  gap: "5px",
+  padding: "6px 12px",
+  borderRadius: "999px",
+  background: vars.color.surface,
+  border: `1px solid ${vars.color.border}`,
+  fontSize: "13px",
+  color: vars.color.muted,
+});
+
+export const countNum = style({
+  fontFamily: vars.font.mono,
+  fontWeight: 700,
+  fontSize: "14px",
+  color: vars.color.text,
+});
+
 export const list = style({ display: "flex", flexDirection: "column", gap: vars.space.md });
 
 export const empty = style({ color: vars.color.muted, fontSize: "14px", padding: `${vars.space.lg} 0` });
