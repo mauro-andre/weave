@@ -129,6 +129,45 @@ describe("entidades — criar e materializar", () => {
     expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(["nome", "preco"]));
   });
 
+  it("mirror + campos locais: espelha a base E acrescenta os extras (quantidade)", async () => {
+    // `produto` já existe (criada no teste anterior, mesma suíte/ordem).
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "pedido",
+          fields: {
+            itens: {
+              kind: "owned",
+              array: true,
+              mirror: "produto",
+              shape: {
+                quantidade: { kind: "column", type: "int4", notNull: true },
+                subtotal: { kind: "column", type: "int4" },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const cols = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pedido__itens'
+    `;
+    const names = cols.map((c) => c.column_name);
+    expect(names).toEqual(expect.arrayContaining(["nome", "preco", "quantidade", "subtotal"]));
+
+    // O IR guardado preserva mirror + os campos locais (não a forma expandida).
+    const { getEntity } = await import("../app/engine/control-plane/entities.js");
+    const pedido = await getEntity("pedido");
+    const itens = pedido?.fields.itens;
+    expect(itens).toMatchObject({ kind: "owned", mirror: "produto" });
+    expect(Object.keys((itens as { shape: object }).shape)).toEqual(["quantidade", "subtotal"]);
+  });
+
   it("rejeita IR inválido (tipo fora do catálogo)", async () => {
     const res = await app.as({ user: master }).action(action_saveEntity, {
       body: { ir: { irVersion: 1, name: "bad", fields: { x: { kind: "column", type: "naoexiste" } } } },

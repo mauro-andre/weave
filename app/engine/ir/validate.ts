@@ -36,10 +36,17 @@ function validateNode(node: unknown, path: string): void {
     }
     case "owned": {
       if (typeof node["array"] !== "boolean") throw err(`${path}: \`array\` must be a boolean.`);
-      if (typeof node["mirror"] === "string") return; // espelho — resolvido no sync
-      if (!isObj(node["shape"])) throw err(`${path}: owned needs \`shape\` or \`mirror\`.`);
-      for (const [key, child] of Object.entries(node["shape"])) {
-        validateNode(child, `${path}.${key}`);
+      const hasMirror = typeof node["mirror"] === "string";
+      // Sem mirror, `shape` é obrigatório (forma inline). Com mirror, `shape` é
+      // opcional e carrega os campos locais (extras) — resolvido no sync.
+      if (!hasMirror && !isObj(node["shape"])) {
+        throw err(`${path}: owned needs \`shape\` or \`mirror\`.`);
+      }
+      if (node["shape"] !== undefined) {
+        if (!isObj(node["shape"])) throw err(`${path}: \`shape\` must be an object.`);
+        for (const [key, child] of Object.entries(node["shape"])) {
+          validateNode(child, `${path}.${key}`);
+        }
       }
       return;
     }

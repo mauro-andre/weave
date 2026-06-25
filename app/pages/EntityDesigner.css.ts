@@ -264,3 +264,12 @@ export const mirrorKind = style({
   fontFamily: vars.font.mono,
   fontSize: "12px",
 });
+
+export const localLabel = style({
+  margin: `${vars.space.sm} 0 6px`,
+  paddingTop: vars.space.sm,
+  borderTop: `1px dashed ${vars.color.border}`,
+  fontSize: "12px",
+  color: vars.color.green,
+  fontWeight: 600,
+});

@@ -22,11 +22,13 @@ function resolveNode(node: FieldIR, byName: Map<string, EntityIR>, seen: Set<str
     const base = byName.get(node.mirror);
     if (!base) throw new Error(`IR — mirror para entidade desconhecida: '${node.mirror}'.`);
     if (seen.has(node.mirror)) throw new Error(`IR — mirror cíclico em '${node.mirror}'.`);
-    const shape = resolveFields(base.fields, byName, new Set(seen).add(node.mirror));
+    const baseShape = resolveFields(base.fields, byName, new Set(seen).add(node.mirror));
+    // Campos locais (extras) são anexados à forma da base; em colisão, o local vence.
+    const localShape = node.shape ? resolveFields(node.shape, byName, seen) : {};
     return {
       kind: "owned",
       array: node.array,
-      shape,
+      shape: { ...baseShape, ...localShape },
       ...(node.table !== undefined ? { table: node.table } : {}),
     };
   }

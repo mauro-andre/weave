@@ -15,7 +15,14 @@ function normFields(fields: Record<string, FieldIR>): Record<string, FieldIR> {
 
 function normNode(node: FieldIR): FieldIR {
   if (node.kind === "owned") {
-    if (node.mirror) return { ...node, mirror: slug(node.mirror) };
+    // Com mirror: normaliza o alvo e, se houver, os campos locais (extras).
+    if (node.mirror) {
+      return {
+        ...node,
+        mirror: slug(node.mirror),
+        ...(node.shape ? { shape: normFields(node.shape) } : {}),
+      };
+    }
     return { ...node, shape: normFields(node.shape ?? {}) };
   }
   if (node.kind === "reference") return { ...node, target: slug(node.target) };

@@ -24,9 +24,13 @@ export interface OwnedIR {
   kind: "owned";
   /** `false` = 1:1, `true` = 1:N. */
   array: boolean;
-  /** Forma inline (XOR com `mirror`). */
+  /**
+   * Forma do owned. Sem `mirror`: é a forma inline completa. Com `mirror`: são os
+   * **campos locais** (extras), anexados à forma espelhada (ex.: `quantidade` num
+   * item de pedido que espelha `produto`).
+   */
   shape?: Record<string, FieldIR>;
-  /** Espelha a forma de outra entidade (XOR com `shape`). Resolvido no sync. */
+  /** Espelha a forma de outra entidade. Resolvido no sync; pode coexistir com `shape` (locais). */
   mirror?: string;
   /** Override do nome da tabela filha. */
   table?: string;

@@ -6,7 +6,7 @@ import { catalog } from "../engine/types/registry.js";
 import { ownedChildTable } from "../engine/util/naming.js";
 import { singularize } from "../engine/util/inflect.js";
 import { slug } from "../engine/util/slug.js";
-import type { ColumnIR, EntityIR, FieldIR } from "../engine/ir/types.js";
+import type { ColumnIR, EntityIR, FieldIR, OwnedIR } from "../engine/ir/types.js";
 import { action_saveEntity } from "./Entities.js";
 import * as css from "./EntityDesigner.css.js";
 
@@ -79,18 +79,25 @@ function fieldToIR(f: Field): FieldIR {
     case "scalarList":
       return col(f, true);
     case "ownedOne":
-      return f.mirror
-        ? { kind: "owned", array: false, mirror: f.mirror }
-        : { kind: "owned", array: false, shape: shapeOf(f.fields) };
+      return ownedIR(f, false);
     case "ownedMany":
-      return f.mirror
-        ? { kind: "owned", array: true, mirror: f.mirror }
-        : { kind: "owned", array: true, shape: shapeOf(f.fields) };
+      return ownedIR(f, true);
     case "refOne":
       return { kind: "reference", target: f.target, cardinality: "one" };
     case "refMany":
       return { kind: "reference", target: f.target, cardinality: "many" };
   }
+}
+
+// Com mirror, `shape` carrega só os campos locais (extras); omitido se vazio.
+function ownedIR(f: Field, array: boolean): OwnedIR {
+  if (f.mirror) {
+    const local = shapeOf(f.fields);
+    const node: OwnedIR = { kind: "owned", array, mirror: f.mirror };
+    if (Object.keys(local).length) node.shape = local;
+    return node;
+  }
+  return { kind: "owned", array, shape: shapeOf(f.fields) };
 }
 
 function col(f: Field, array: boolean): ColumnIR {
@@ -122,7 +129,8 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
     } else {
       f.family = node.array ? "ownedMany" : "ownedOne";
       if (node.mirror) f.mirror = node.mirror;
-      else f.fields = fieldsFromIR(node.shape ?? {});
+      // Sem mirror: shape = forma inline. Com mirror: shape = campos locais.
+      f.fields = fieldsFromIR(node.shape ?? {});
     }
     return f;
   });
@@ -144,6 +152,7 @@ function walkOwned(fields: Field[], prefix: string, out: string[], byName: Map<s
       if (f.mirror) {
         const base = byName.get(f.mirror);
         if (base) walkIR(base.fields, child, out, byName);
+        walkOwned(f.fields, child, out, byName); // campos locais (extras)
       } else {
         walkOwned(f.fields, child, out, byName);
       }
@@ -159,6 +168,7 @@ function walkIR(fields: Record<string, FieldIR>, prefix: string, out: string[], 
     if (node.mirror) {
       const base = byName.get(node.mirror);
       if (base) walkIR(base.fields, child, out, byName);
+      walkIR(node.shape ?? {}, child, out, byName); // campos locais (extras)
     } else {
       walkIR(node.shape ?? {}, child, out, byName);
     }
@@ -337,6 +347,8 @@ function FieldRow({
       {isOwned && field.mirror ? (
         <div class={css.nested}>
           <MirrorPreview entity={entities.find((ent) => ent.name === field.mirror)} />
+          <p class={css.localLabel}>＋ Additional fields (local to this list)</p>
+          <FieldList fields={field.fields} entities={entities} onChange={onChange} />
         </div>
       ) : null}
     </div>
