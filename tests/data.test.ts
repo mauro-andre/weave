@@ -19,7 +19,7 @@ describe("data browser — leitura de objetos", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria CASCADE`;
+        await sql`DROP TABLE IF EXISTS blog__tags, blog, artigo, categoria, medida CASCADE`;
         await sql`DELETE FROM weave_entities WHERE name IN ('blog', 'categoria', 'artigo')`;
       },
       getSessionCookie: async ({ user }) => {
@@ -135,5 +135,17 @@ describe("data browser — leitura de objetos", () => {
       (d: { titulo: string }) => d.titulo === "Linked",
     ) as { categoria: { nome: string } };
     expect(linked.categoria?.nome).toBe("Tech"); // vínculo criado a partir do id
+  });
+
+  it("serializa colunas int8 (BigInt) sem quebrar", async () => {
+    await save("medida", { peso: { kind: "column", type: "int8" } });
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    await sql`INSERT INTO medida (peso) VALUES (42)`;
+
+    // Sem o jsonSafe, o res.json() (JSON.stringify) estouraria no BigInt.
+    const res = await app.as({ user: master }).action(action_listObjects, { body: { name: "medida" } });
+    const page = (await res.json()) as { docs: { peso: number }[] };
+    expect(page.docs[0]?.peso).toBe(42);
   });
 });

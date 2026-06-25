@@ -41,17 +41,32 @@ export async function listObjects(name: string, page = 1, perPage = 20): Promise
       ): Promise<{ docs: unknown[]; docsQuantity: number; pageQuantity: number; currentPage: number }>;
     };
     const res = await loose.paginate(entities[name], opts);
-    return {
+    return jsonSafe({
       root: name,
       shapes,
       docs: res.docs as Record<string, unknown>[],
       docsQuantity: res.docsQuantity,
       pageQuantity: res.pageQuantity,
       currentPage: res.currentPage,
-    };
+    });
   } finally {
     await client.close();
   }
+}
+
+// postgres.js devolve `int8` como BigInt, que o JSON.stringify da resposta RPC não
+// serializa. Convertemos: número quando cabe com segurança, senão string.
+function jsonSafe<T>(v: T): T {
+  if (typeof v === "bigint") {
+    return (Number.isSafeInteger(Number(v)) ? Number(v) : v.toString()) as unknown as T;
+  }
+  if (Array.isArray(v)) return v.map((x) => jsonSafe(x)) as unknown as T;
+  if (v && typeof v === "object" && !(v instanceof Date)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) out[k] = jsonSafe(val);
+    return out as unknown as T;
+  }
+  return v;
 }
 
 /**
@@ -74,7 +89,7 @@ export async function saveObject(name: string, object: Record<string, unknown>):
   const client = weave({ url, entities });
   try {
     const loose = client as unknown as { save(e: unknown, i: unknown): Promise<unknown> };
-    return await loose.save(entities[name], object);
+    return jsonSafe(await loose.save(entities[name], object));
   } finally {
     await client.close();
   }
