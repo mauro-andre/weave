@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2 CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -104,7 +104,7 @@ describe("entidades — criar e materializar", () => {
           irVersion: 1,
           name: "produto",
           fields: {
-            nome: { kind: "column", type: "text", notNull: true },
+            nome: { kind: "column", type: "text", notNull: true, unique: true },
             preco: { kind: "column", type: "int4" },
           },
         },
@@ -127,6 +127,13 @@ describe("entidades — criar e materializar", () => {
       WHERE table_schema = 'public' AND table_name = 'pedido__itens'
     `;
     expect(cols.map((c) => c.column_name)).toEqual(expect.arrayContaining(["nome", "preco"]));
+
+    // O snapshot NÃO herda `unique` da base (mesmo produto cabe em vários itens).
+    const uniq = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM information_schema.table_constraints
+      WHERE table_schema = 'public' AND table_name = 'pedido__itens' AND constraint_type = 'UNIQUE'
+    `;
+    expect(uniq[0]?.n).toBe(0);
   });
 
   it("mirror + campos locais: espelha a base E acrescenta os extras (quantidade)", async () => {
@@ -509,6 +516,36 @@ describe("entidades — criar e materializar", () => {
       // a constraint unique passa a barrar duplicata
       await expect(sql`INSERT INTO rf (code) VALUES ('a')`).rejects.toThrow();
     });
+  });
+
+  it("rejeita nome de entidade reservado (order)", async () => {
+    const res = await app.as({ user: master }).action(action_saveEntity, {
+      body: { ir: { irVersion: 1, name: "order", fields: { x: { kind: "column", type: "text" } } } },
+    });
+    expect((await res.json()).error).toMatch(/reserved/i);
+  });
+
+  it("rejeita coluna escalar com nome reservado (select)", async () => {
+    const res = await app.as({ user: master }).action(action_saveEntity, {
+      body: { ir: { irVersion: 1, name: "coisa", fields: { select: { kind: "column", type: "text" } } } },
+    });
+    expect((await res.json()).error).toMatch(/reserved/i);
+  });
+
+  it("permite 'user'/'order' como reference/owned (viram _id e pai__filho)", async () => {
+    const res = await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "thing2",
+          fields: {
+            user: { kind: "reference", target: "thing2", cardinality: "one" }, // → user_id
+            order: { kind: "owned", array: true, shape: { qty: { kind: "column", type: "int4" } } }, // → thing2__order
+          },
+        },
+      },
+    });
+    expect(await res.json()).toMatchObject({ ok: true, name: "thing2" });
   });
 
   it("rejeita IR inválido (tipo fora do catálogo)", async () => {

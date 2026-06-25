@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [veloPlugin(), vanillaExtractPlugin()],
   test: {
     include: ["tests/**/*.test.ts"],
+    // Zera o banco UMA vez antes de toda a sessão (dropa todas as tabelas).
+    globalSetup: ["./tests/global-setup.ts"],
     // Os testes batem no mesmo banco `weave`; rodar os arquivos em série evita
     // corrida nas tabelas de control-plane (weave_users/weave_entities) e DDL.
     fileParallelism: false,

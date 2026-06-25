@@ -8,25 +8,6 @@ export const picker = style({
   marginBottom: vars.space.lg,
 });
 
-export const pill = style({
-  padding: "7px 14px",
-  background: vars.color.surface,
-  border: `1px solid ${vars.color.border}`,
-  borderRadius: "999px",
-  color: vars.color.muted,
-  fontSize: "13px",
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: vars.font.mono,
-  selectors: { "&:hover": { borderColor: vars.color.muted, color: vars.color.text } },
-});
-
-export const pillOn = style({
-  background: "rgba(18, 184, 134, 0.15)",
-  borderColor: vars.color.teal,
-  color: vars.color.teal,
-});
-
 export const list = style({ display: "flex", flexDirection: "column", gap: vars.space.md });
 
 export const empty = style({ color: vars.color.muted, fontSize: "14px", padding: `${vars.space.lg} 0` });

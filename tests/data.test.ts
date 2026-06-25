@@ -137,6 +137,18 @@ describe("data browser — leitura de objetos", () => {
     expect(linked.categoria?.nome).toBe("Tech"); // vínculo criado a partir do id
   });
 
+  it("SSR: /data?entity=blog renderiza os objetos (estado na URL)", async () => {
+    const res = await app.as({ user: master }).get("/data?entity=blog");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Hello"); // título de um objeto seedado
+  });
+
+  it("SSR: /data sem entity não auto-seleciona nada", async () => {
+    const res = await app.as({ user: master }).get("/data");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Select an entity"); // estado vazio
+  });
+
   it("serializa colunas int8 (BigInt) sem quebrar", async () => {
     await save("medida", { peso: { kind: "column", type: "int8" } });
     const { db } = await import("../app/engine/control-plane/db.js");

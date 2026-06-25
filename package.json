@@ -25,7 +25,8 @@
     "start": "velojs start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed": "vitest run --config vitest.seed.config.ts"
   },
   "keywords": [
     "postgres",
@@ -36,6 +37,7 @@
     "typescript"
   ],
   "devDependencies": {
+    "@faker-js/faker": "^10.5.0",
     "@types/node": "^26.0.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",

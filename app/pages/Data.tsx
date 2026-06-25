@@ -1,8 +1,9 @@
 import type { ActionArgs, LoaderArgs } from "@mauroandre/velojs";
-import { useLoader, touch } from "@mauroandre/velojs/hooks";
+import { useLoader, useNavigate, touch } from "@mauroandre/velojs/hooks";
 import { useSignal } from "@preact/signals";
-import { useEffect, useState } from "preact/hooks";
+import { useState, useEffect, useRef } from "preact/hooks";
 import { Page } from "../components/Page.js";
+import { Select } from "../components/Select.js";
 import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
 import type { ObjectPage } from "../engine/control-plane/data.js";
 import * as btn from "../styles/button.css.js";
@@ -11,9 +12,26 @@ import * as css from "./Data.css.js";
 const SHOW_LIMIT = 6; // campos visíveis antes do "show all fields"
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
 
-export const loader = async (_args: LoaderArgs): Promise<string[]> => {
+interface DataLoaded {
+  entities: string[];
+  /** Entidade da URL (`?entity=`), ou null se nenhuma/ inválida. */
+  selected: string | null;
+  /** Página de objetos da entidade selecionada (null se nenhuma selecionada). */
+  page: ObjectPage | null;
+}
+
+// Estado na URL (`?entity=&page=`) → o loader busca server-side, então refresh
+// e link direto funcionam. Sem `entity` na URL, nada é mostrado (sem auto-seleção).
+export const loader = async ({ query }: LoaderArgs): Promise<DataLoaded> => {
   const { listEntities } = await import("../engine/control-plane/entities.js");
-  return (await listEntities()).map((e) => e.name);
+  const entities = (await listEntities()).map((e) => e.name);
+  const selected = query.entity && entities.includes(query.entity) ? query.entity : null;
+  let page: ObjectPage | null = null;
+  if (selected) {
+    const { listObjects } = await import("../engine/control-plane/data.js");
+    page = await listObjects(selected, Math.max(1, Number(query.page) || 1));
+  }
+  return { entities, selected, page };
 };
 
 export const action_listObjects = async ({ body }: ActionArgs<{ name: string; page?: number }>) => {
@@ -39,37 +57,51 @@ export const action_saveObject = async ({
 type Shapes = Record<string, Record<string, FieldIR>>;
 
 export const Component = () => {
-  const { data: loaded } = useLoader<string[]>();
-  const entities = loaded.value ?? [];
+  const { data } = useLoader<DataLoaded>();
+  const navigate = useNavigate();
+  const loaded = data.value;
+  const entities = loaded?.entities ?? [];
 
-  const selected = useSignal<string>("");
-  const page = useSignal<ObjectPage | null>(null);
+  // Estado vivo (client). Inicializa do loader (refresh/link diretos via URL).
+  const selected = useSignal<string | null>(loaded?.selected ?? null);
+  const page = useSignal<ObjectPage | null>(loaded?.page ?? null);
   const loading = useSignal(false);
   const creating = useSignal(false);
+  const inited = useRef(false);
 
-  const load = async (name: string, p: number) => {
-    selected.value = name;
+  // Sincroniza uma vez quando o loader chega (navegação SPA pra cá, hydrate).
+  useEffect(() => {
+    if (!loaded || inited.current) return;
+    selected.value = loaded.selected;
+    page.value = loaded.page;
+    inited.current = true;
+  }, [loaded]);
+
+  // Troca de entidade / página: busca via action E reflete na URL (refresh-safe).
+  const load = async (entity: string, p: number) => {
+    selected.value = entity;
     creating.value = false;
     loading.value = true;
-    const res = (await action_listObjects({ body: { name, page: p } })) as ObjectPage | { error: string };
+    navigate(`/data?entity=${encodeURIComponent(entity)}&page=${p}`);
+    const res = (await action_listObjects({ body: { name: entity, page: p } })) as ObjectPage | { error: string };
     loading.value = false;
     page.value = "error" in res ? null : res;
   };
+  const reload = () => {
+    creating.value = false;
+    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1);
+  };
 
-  useEffect(() => {
-    if (entities.length && !selected.value) load(entities[0]!, 1);
-  }, [entities.length]);
-
-  const data = page.value;
-  const reload = () => data && load(data.root, data.currentPage);
+  const sel = selected.value;
+  const cur = page.value;
 
   return (
     <Page
       title="Data"
       actions={
-        data ? (
+        sel ? (
           <button class={btn.primary} onClick={() => (creating.value = true)}>
-            + New {data.root}
+            + New {sel}
           </button>
         ) : undefined
       }
@@ -78,53 +110,53 @@ export const Component = () => {
         <p class={css.empty}>No entities yet. Create one first.</p>
       ) : (
         <div class={css.picker}>
-          {entities.map((name) => (
-            <button
-              key={name}
-              class={selected.value === name ? `${css.pill} ${css.pillOn}` : css.pill}
-              onClick={() => load(name, 1)}
-            >
-              {name}
-            </button>
-          ))}
+          <Select
+            options={entities.map((name) => ({ value: name, label: name }))}
+            value={sel ?? ""}
+            onChange={(name) => load(name, 1)}
+            placeholder="Select entity…"
+            mono
+          />
         </div>
       )}
 
-      {loading.value ? (
+      {entities.length === 0 ? null : loading.value ? (
         <p class={css.empty}>Loading…</p>
-      ) : data ? (
+      ) : !sel ? (
+        <p class={css.empty}>Select an entity to browse its objects.</p>
+      ) : cur ? (
         <>
           <div class={css.list}>
             {creating.value ? (
               <RootCard
-                shapes={data.shapes}
-                root={data.root}
+                shapes={cur.shapes}
+                root={cur.root}
                 doc={{}}
                 isNew
                 onSaved={reload}
                 onDiscard={() => (creating.value = false)}
               />
             ) : null}
-            {data.docs.length === 0 && !creating.value ? (
-              <p class={css.empty}>No objects in {data.root} yet.</p>
+            {cur.docs.length === 0 && !creating.value ? (
+              <p class={css.empty}>No objects in {cur.root} yet.</p>
             ) : (
-              data.docs.map((doc, i) => (
-                <RootCard key={(doc.id as string) ?? i} shapes={data.shapes} root={data.root} doc={doc} onSaved={reload} />
+              cur.docs.map((doc, i) => (
+                <RootCard key={(doc.id as string) ?? i} shapes={cur.shapes} root={cur.root} doc={doc} onSaved={reload} />
               ))
             )}
           </div>
-          {data.pageQuantity > 1 ? (
+          {cur.pageQuantity > 1 ? (
             <div class={css.pager}>
-              <button class={css.pagerBtn} disabled={data.currentPage <= 1} onClick={() => load(data.root, data.currentPage - 1)}>
+              <button class={css.pagerBtn} disabled={cur.currentPage <= 1} onClick={() => load(cur.root, cur.currentPage - 1)}>
                 ◀
               </button>
               <span>
-                {data.currentPage} / {data.pageQuantity} · {data.docsQuantity} objects
+                {cur.currentPage} / {cur.pageQuantity} · {cur.docsQuantity} objects
               </span>
               <button
                 class={css.pagerBtn}
-                disabled={data.currentPage >= data.pageQuantity}
-                onClick={() => load(data.root, data.currentPage + 1)}
+                disabled={cur.currentPage >= cur.pageQuantity}
+                onClick={() => load(cur.root, cur.currentPage + 1)}
               >
                 ▶
               </button>
