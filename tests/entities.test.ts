@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -166,6 +166,36 @@ describe("entidades — criar e materializar", () => {
     const itens = pedido?.fields.itens;
     expect(itens).toMatchObject({ kind: "owned", mirror: "produto" });
     expect(Object.keys((itens as { shape: object }).shape)).toEqual(["quantidade", "subtotal"]);
+  });
+
+  it("materializa valores default por tipo (text/int4/bool)", async () => {
+    const res = await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "tarefa",
+          fields: {
+            titulo: { kind: "column", type: "text", notNull: true },
+            status: { kind: "column", type: "text", default: "pending" },
+            prioridade: { kind: "column", type: "int4", default: 1 },
+            ativo: { kind: "column", type: "bool", default: true },
+          },
+        },
+      },
+    });
+    expect(await res.json()).toMatchObject({ ok: true, name: "tarefa" });
+
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const cols = await sql<{ column_name: string; column_default: string | null }[]>`
+      SELECT column_name, column_default FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'tarefa'
+    `;
+    const defaults = Object.fromEntries(cols.map((c) => [c.column_name, c.column_default]));
+    expect(defaults["status"]).toContain("'pending'");
+    expect(defaults["prioridade"]).toBe("1");
+    expect(defaults["ativo"]).toBe("true");
+    expect(defaults["titulo"]).toBeNull(); // sem default declarado
   });
 
   it("rejeita IR inválido (tipo fora do catálogo)", async () => {

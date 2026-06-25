@@ -121,6 +121,33 @@ export const flags = style({
   gap: "4px",
 });
 
+export const defaultWrap = style({
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+});
+
+export const defaultTag = style({
+  fontSize: "11px",
+  fontWeight: 600,
+  letterSpacing: "0.4px",
+  color: vars.color.muted,
+  textTransform: "uppercase",
+});
+
+export const defaultInput = style({
+  width: "110px",
+  padding: "8px 10px",
+  background: vars.color.bg,
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "7px",
+  color: vars.color.text,
+  fontSize: "13px",
+  fontFamily: vars.font.mono,
+  outline: "none",
+  selectors: { "&:focus": { borderColor: vars.color.teal } },
+});
+
 export const chip = style({
   padding: "5px 9px",
   background: "transparent",

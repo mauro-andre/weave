@@ -21,6 +21,7 @@ interface Field {
   notNull: boolean;
   unique: boolean;
   index: boolean;
+  default: string; // texto cru do input; "" = sem default. Coagido por tipo no toIR.
   fields: Field[];
   target: string;
   mirror: string; // owned: "" = inline; senão o nome da entidade espelhada
@@ -47,10 +48,19 @@ const newField = (): Field => ({
   notNull: false,
   unique: false,
   index: false,
+  default: "",
   fields: [],
   target: "",
   mirror: "",
 });
+
+// Tipos cujo default é numérico; `bool` vira booleano; o resto fica string.
+const NUMERIC_TYPES = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
+function coerceDefault(raw: string, type: string): unknown {
+  if (NUMERIC_TYPES.has(type)) return Number(raw);
+  if (type === "bool") return raw.trim() === "true";
+  return raw;
+}
 
 // ── Loader: entidades existentes (alvo de reference/mirror) + a atual ─────────
 export const loader = async ({ params }: LoaderArgs): Promise<LoaderData> => {
@@ -106,6 +116,8 @@ function col(f: Field, array: boolean): ColumnIR {
   if (f.notNull) c.notNull = true;
   if (f.unique) c.unique = true;
   if (f.index) c.index = true;
+  // Default só faz sentido em coluna escalar (arrays: o engine só aceita '{}').
+  if (!array && f.default.trim() !== "") c.default = coerceDefault(f.default, f.type);
   return c;
 }
 
@@ -123,6 +135,7 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
       f.notNull = !!node.notNull;
       f.unique = !!node.unique;
       f.index = !!node.index;
+      if (node.default !== undefined) f.default = String(node.default);
     } else if (node.kind === "reference") {
       f.family = node.cardinality === "many" ? "refMany" : "refOne";
       f.target = node.target;
@@ -223,6 +236,44 @@ function MirrorPreview({ entity }: { entity: EntityIR | undefined }) {
   );
 }
 
+// Valor default da coluna. Para `bool`, um select tri-estado (none/true/false);
+// para os demais, um input livre coagido por tipo no `toIR`.
+function DefaultInput({ field, onChange }: { field: Field; onChange: () => void }) {
+  if (field.type === "bool") {
+    return (
+      <span class={css.defaultWrap}>
+        <span class={css.defaultTag}>default</span>
+        <select
+          class={css.select}
+          value={field.default}
+          onChange={(e) => {
+            field.default = (e.currentTarget as HTMLSelectElement).value;
+            onChange();
+          }}
+        >
+          <option value="">none</option>
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      </span>
+    );
+  }
+  return (
+    <span class={css.defaultWrap}>
+      <span class={css.defaultTag}>default</span>
+      <input
+        class={css.defaultInput}
+        placeholder="none"
+        value={field.default}
+        onInput={(e) => {
+          field.default = (e.currentTarget as HTMLInputElement).value;
+          onChange();
+        }}
+      />
+    </span>
+  );
+}
+
 function FieldRow({
   field,
   entities,
@@ -294,6 +345,7 @@ function FieldRow({
               <FlagChip label="UQ" tip="Unique" on={field.unique} set={(v) => { field.unique = v; onChange(); }} />
               <FlagChip label="IDX" tip="Indexed" on={field.index} set={(v) => { field.index = v; onChange(); }} />
             </div>
+            {field.family === "scalar" ? <DefaultInput field={field} onChange={onChange} /> : null}
           </>
         ) : null}
 
