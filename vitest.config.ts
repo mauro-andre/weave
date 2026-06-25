@@ -19,6 +19,7 @@ export default defineConfig({
       MASTER_USERNAME: "master",
       MASTER_PASSWORD: "masterpass",
       SESSION_SECRET: "test-session-secret",
+      WEAVE_API_KEY: "test-api-key",
     },
     typecheck: {
       enabled: true,

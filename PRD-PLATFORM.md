@@ -628,6 +628,15 @@ do engine que já existem seguem como guarda do compilador/DDL.
 
 ### Da porta pra dentro (plataforma + GUI)
 
+> **Status (jun/2026) — construído & testado (246 testes verdes):**
+> - **Camada de IR** completa: `toIR`/`fromIR`/`validateIR`/`normalizeEntityIR`/`resolveMirrors`, com **mirror + campos locais**, **defaults**, **ids estáveis de campo** (rename preserva dado) e **bloqueio de nomes reservados** (mensagem amigável, sem SQL).
+> - **Metastore** `weave_entities` (IR em `jsonb`) sobre **uma `DATABASE` única** (multi-projeto / `CREATE DATABASE` ainda não).
+> - **Designer visual de entidades** + **edição segura**: diff por id → **plano classificado por risco** (🟢 auto / 🔴 confirma / 🟡 backfill / ⛔ bloqueado) → **folha de revisão** → **aplicação transacional** (rename real preservando dado, backfill uniforme, drops confirmados). Sync aditivo reusado do engine.
+> - **Browser de dados** com **CRUD completo**: cards recursivos (owned aninhado + reference expandida), criar/editar **inline**, **deletar** com `ConfirmModal` (cascata de owned/N:N; bloqueio amigável se referenciado).
+> - **Filtro por caminho aninhado**: árvore booleana **AND/OR** recursiva, atravessa owned/reference (`EXISTS` aninhado), listas com semântica **"any"** (`unnest`), `id`/`created at`/`updated at`. **Ordenação multi-chave** (aninhada por galho single, managed fields). Contagem ao vivo. Tudo **refresh-safe na URL**.
+> - **Seed de cenário** (`npm run seed`) populando milhares de objetos pelas actions.
+> - **Falta:** F5 scopes + designer de scopes, playground, e tudo da "porta pra fora" (HTTP, identidade, SDK).
+
 - ✅ **F0 — Fundação da app VeloJS.** Shell do painel (login da plataforma +
   `AdminLayout` + páginas vazias com o menu), **control-plane** (`weave_users` +
   `setup`/seed do master via `.env`), identidade visual §7.1 (vanilla-extract). Tudo

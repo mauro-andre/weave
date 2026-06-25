@@ -162,6 +162,12 @@ function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unkn
   }
 }
 
+/** Lê um objeto pela id (owned aninhado + references expandidas), ou null. */
+export async function getObject(name: string, id: string): Promise<Record<string, unknown> | null> {
+  const page = await listObjects(name, 1, 1, { path: ["id"], op: "equals", value: id });
+  return page.docs[0] ?? null;
+}
+
 /**
  * Apaga um objeto pela id. Owned (e links N:N) cascateiam via FK; se o objeto
  * for **referenciado** por outro (N:1), o Postgres barra — devolvemos mensagem

@@ -27,6 +27,19 @@ export async function setup(): Promise<void> {
     )
   `;
 
+  // Chaves da API REST: guardamos só o hash (sha256); o texto aparece 1x na criação.
+  // `prefix` é só pra exibir na lista. (No futuro: vínculo de identidade/scope aqui.)
+  await sql`
+    CREATE TABLE IF NOT EXISTS weave_api_keys (
+      id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name          text NOT NULL,
+      key_hash      text NOT NULL UNIQUE,
+      prefix        text NOT NULL,
+      created_at    timestamptz NOT NULL DEFAULT now(),
+      last_used_at  timestamptz
+    )
+  `;
+
   const [row] = await sql<{ count: number }[]>`SELECT count(*)::int AS count FROM weave_users`;
   if (row && row.count === 0) {
     const username = process.env.MASTER_USERNAME;
