@@ -7,6 +7,7 @@ import * as Data from "./pages/Data.js";
 import * as Entities from "./pages/Entities.js";
 import * as EntityDesigner from "./pages/EntityDesigner.js";
 import * as Scopes from "./pages/Scopes.js";
+import * as ScopeDesigner from "./pages/ScopeDesigner.js";
 import * as Api from "./pages/Api.js";
 import * as Config from "./pages/Config.js";
 import * as DataApi from "./api/handlers.js";
@@ -38,6 +39,7 @@ export default [
           { path: "/entities", module: Entities },
           { path: "/entities/:name", module: EntityDesigner },
           { path: "/scopes", module: Scopes },
+          { path: "/scopes/:name", module: ScopeDesigner },
           { path: "/api", module: Api },
           { path: "/settings", module: Config },
         ],

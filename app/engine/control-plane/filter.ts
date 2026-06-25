@@ -154,6 +154,10 @@ export function compileFilter(
         return `${colExpr} < ${bind(scalar(value, type))}`;
       case "lte":
         return `${colExpr} <= ${bind(scalar(value, type))}`;
+      case "in":
+        return `${colExpr} = ANY(${bind(arrayOf(value, type))})`;
+      case "notIn":
+        return `${colExpr} <> ALL(${bind(arrayOf(value, type))})`;
       case "before":
         return `${colExpr} < ${bind(String(value))}`;
       case "after":
@@ -170,6 +174,11 @@ function scalar(value: unknown, type: string): unknown {
   if (NUMERIC_TYPES.has(type)) return Number(value);
   if (type === "bool") return value === true || value === "true";
   return String(value);
+}
+
+// Para `in`/`notIn`: aceita array (caso scope) ou um valor só, coagindo elementos.
+function arrayOf(value: unknown, type: string): unknown[] {
+  return (Array.isArray(value) ? value : [value]).map((v) => scalar(v, type));
 }
 
 // Curingas do usuário viram literais (escape com `\`, o default do ILIKE).
