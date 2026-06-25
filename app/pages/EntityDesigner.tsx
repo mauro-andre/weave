@@ -8,6 +8,8 @@ import { singularize } from "../engine/util/inflect.js";
 import { slug } from "../engine/util/slug.js";
 import type { ColumnIR, EntityIR, FieldIR, OwnedIR } from "../engine/ir/types.js";
 import { action_saveEntity } from "./Entities.js";
+import { ReviewSheet } from "./ReviewSheet.js";
+import type { EntityDiff } from "../engine/ir/diff.js";
 import * as css from "./EntityDesigner.css.js";
 
 // As 6 possibilidades (§ designer): primitivo/objeto × único/lista × owned/reference.
@@ -39,9 +41,8 @@ interface LoaderData {
 
 const TYPES = Object.keys(catalog);
 
-let _id = 0;
 const newField = (): Field => ({
-  id: String(++_id),
+  id: crypto.randomUUID(),
   name: "",
   family: "scalar",
   type: "text",
@@ -93,9 +94,9 @@ function fieldToIR(f: Field): FieldIR {
     case "ownedMany":
       return ownedIR(f, true);
     case "refOne":
-      return { kind: "reference", target: f.target, cardinality: "one" };
+      return { kind: "reference", id: f.id, target: f.target, cardinality: "one" };
     case "refMany":
-      return { kind: "reference", target: f.target, cardinality: "many" };
+      return { kind: "reference", id: f.id, target: f.target, cardinality: "many" };
   }
 }
 
@@ -103,15 +104,15 @@ function fieldToIR(f: Field): FieldIR {
 function ownedIR(f: Field, array: boolean): OwnedIR {
   if (f.mirror) {
     const local = shapeOf(f.fields);
-    const node: OwnedIR = { kind: "owned", array, mirror: f.mirror };
+    const node: OwnedIR = { kind: "owned", id: f.id, array, mirror: f.mirror };
     if (Object.keys(local).length) node.shape = local;
     return node;
   }
-  return { kind: "owned", array, shape: shapeOf(f.fields) };
+  return { kind: "owned", id: f.id, array, shape: shapeOf(f.fields) };
 }
 
 function col(f: Field, array: boolean): ColumnIR {
-  const c: ColumnIR = { kind: "column", type: f.type };
+  const c: ColumnIR = { kind: "column", id: f.id, type: f.type };
   if (array) c.array = true;
   if (f.notNull) c.notNull = true;
   if (f.unique) c.unique = true;
@@ -129,6 +130,7 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
   return Object.entries(fields).map(([name, node]) => {
     const f = newField();
     f.name = name;
+    if (node.id) f.id = node.id; // preserva a identidade persistida (rename)
     if (node.kind === "column") {
       f.family = node.array ? "scalarList" : "scalar";
       f.type = node.type;
@@ -468,20 +470,31 @@ export const Component = () => {
 
   const error = useSignal("");
   const saving = useSignal(false);
+  const pending = useSignal<EntityDiff | null>(null); // plano aguardando revisão
   const bump = () => touch(model);
   const navigate = useNavigate();
 
-  const save = async () => {
+  // Save = portão: se o plano tem risco, abre a folha; senão aplica e navega.
+  const submit = async (confirm?: string[], fill?: Record<string, unknown>) => {
     error.value = "";
     saving.value = true;
-    const res = await action_saveEntity({ body: { ir: toIR(model.value) } });
+    const res = (await action_saveEntity({
+      body: { ir: toIR(model.value), ...(confirm ? { confirm } : {}), ...(fill ? { fill } : {}) },
+    })) as { error?: string; status?: string; plan?: EntityDiff };
     saving.value = false;
-    if ((res as { error?: string }).error) {
-      error.value = (res as { error: string }).error;
+    if (res.error) {
+      error.value = res.error;
       return;
     }
+    if (res.status === "needsReview") {
+      pending.value = res.plan ?? null;
+      return;
+    }
+    pending.value = null;
     navigate("/entities"); // SPA, sem reload da tela
   };
+
+  const save = () => submit();
 
   const tables = previewTables(model.value.name || "entity", model.value.fields, byName);
 
@@ -529,6 +542,15 @@ export const Component = () => {
         <p class={css.error} role="alert">
           {error.value}
         </p>
+      ) : null}
+
+      {pending.value ? (
+        <ReviewSheet
+          plan={pending.value}
+          saving={saving.value}
+          onCancel={() => (pending.value = null)}
+          onApply={(confirm, fill) => submit(confirm, fill)}
+        />
       ) : null}
     </div>
   );

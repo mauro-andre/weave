@@ -1,9 +1,11 @@
 import { db } from "./db.js";
-import { weave } from "../index.js";
 import { validateIR } from "../ir/validate.js";
 import { normalizeEntityIR } from "../ir/normalize.js";
+import { ensureFieldIds } from "../ir/ensure-ids.js";
 import { resolveMirrors } from "../ir/resolve-mirrors.js";
 import { fromIR } from "../ir/from-ir.js";
+import { diffEntityIR, type EntityDiff } from "../ir/diff.js";
+import { probePlan, applyMigration } from "./migrate.js";
 import type { EntityIR } from "../ir/types.js";
 
 /** Lista as plantas (IR) guardadas no metastore. */
@@ -25,32 +27,69 @@ function parseIR(ir: EntityIR | string): EntityIR {
 }
 
 /**
- * Grava a planta no metastore e **materializa** as tabelas reais (reusa o
- * `sync()` do engine). Valida o IR antes; lança em IR inválido.
+ * Dry-run: calcula o plano de mudanças (intenção, via diff por id) **sem**
+ * tocar no banco. Mesmo pipeline do save (normaliza + garante ids) pra que o
+ * rename seja detectado do mesmo jeito.
  */
-export async function saveEntity(input: unknown): Promise<EntityIR> {
-  const ir = normalizeEntityIR(validateIR(input));
-  const sql = db();
-  await sql`
-    INSERT INTO weave_entities (name, ir)
-    VALUES (${ir.name}, ${JSON.stringify(ir)}::jsonb)
-    ON CONFLICT (name) DO UPDATE SET ir = EXCLUDED.ir, updated_at = now()
-  `;
-  await materialize();
-  return ir;
+export async function planEntity(input: unknown): Promise<EntityDiff> {
+  const normalized = normalizeEntityIR(validateIR(input));
+  const previous = await getEntity(normalized.name);
+  const next = ensureFieldIds(normalized, previous);
+  return diffEntityIR(previous, next);
 }
 
-/** Materializa todas as entidades do metastore no banco (aditivo, via sync). */
-async function materialize(): Promise<void> {
-  const irs = await listEntities();
-  const byName = new Map(irs.map((ir) => [ir.name, ir] as const));
-  const entities = fromIR(irs.map((ir) => resolveMirrors(ir, byName)));
-  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
-  if (!url) throw new Error("weave: DATABASE_URL is not set.");
-  const client = weave({ url, entities });
-  try {
-    await client.sync();
-  } finally {
-    await client.close();
-  }
+export interface ApplyOptions {
+  /** Caminhos de `removeField` que o usuário confirmou (apaga dado). */
+  confirm?: string[];
+  /** Valor de backfill por caminho, para os casos `needsValue`. */
+  fill?: Record<string, unknown>;
+}
+
+export interface ApplyOutcome {
+  /** `applied` = gravou e materializou; `needsReview` = nada aplicado, revise. */
+  status: "applied" | "needsReview";
+  name: string;
+  /** Plano sondado (riscos reais), pra a folha de revisão. */
+  plan: EntityDiff;
+}
+
+/**
+ * Grava + materializa uma entidade aplicando o plano de mudanças numa transação
+ * (rename preserva dado, drops confirmados, backfill uniforme). Se houver algo
+ * bloqueado, não-confirmado ou sem valor, **não aplica nada** e devolve o plano
+ * pra revisão. Valida o IR antes; lança em IR inválido.
+ */
+export async function applyEntity(input: unknown, opts: ApplyOptions = {}): Promise<ApplyOutcome> {
+  const normalized = normalizeEntityIR(validateIR(input));
+  const sql = db();
+  const previous = await getEntity(normalized.name);
+  const next = ensureFieldIds(normalized, previous);
+  const plan = await probePlan(sql, next, diffEntityIR(previous, next));
+
+  const confirm = new Set(opts.confirm ?? []);
+  const fill = opts.fill ?? {};
+  const stuck =
+    plan.changes.some((c) => c.risk === "blocked") ||
+    plan.changes.some((c) => c.risk === "confirm" && !confirm.has(c.path)) ||
+    plan.changes.some((c) => c.risk === "needsValue" && fill[c.path] === undefined);
+  if (stuck) return { status: "needsReview", name: next.name, plan };
+
+  // Conjunto do engine = todas as entidades, com `next` no lugar (ou somada).
+  const all = await listEntities();
+  const merged = all.some((e) => e.name === next.name)
+    ? all.map((e) => (e.name === next.name ? next : e))
+    : [...all, next];
+  const byName = new Map(merged.map((ir) => [ir.name, ir] as const));
+  const entities = fromIR(merged.map((ir) => resolveMirrors(ir, byName)));
+
+  await sql.begin(async (tx) => {
+    await applyMigration(tx, { prev: previous ?? next, next, entities, changes: plan.changes, fill });
+    await tx`
+      INSERT INTO weave_entities (name, ir)
+      VALUES (${next.name}, ${JSON.stringify(next)}::jsonb)
+      ON CONFLICT (name) DO UPDATE SET ir = EXCLUDED.ir, updated_at = now()
+    `;
+  });
+
+  return { status: "applied", name: next.name, plan };
 }

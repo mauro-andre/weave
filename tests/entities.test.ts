@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
-import { action_saveEntity } from "../app/pages/Entities.js";
+import { action_saveEntity, action_planEntity } from "../app/pages/Entities.js";
 
 const productsIR = {
   irVersion: 1,
@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -196,6 +196,319 @@ describe("entidades — criar e materializar", () => {
     expect(defaults["prioridade"]).toBe("1");
     expect(defaults["ativo"]).toBe("true");
     expect(defaults["titulo"]).toBeNull(); // sem default declarado
+  });
+
+  it("garante um id estável em todo campo (recursivo no owned)", async () => {
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "conta",
+          fields: {
+            titular: { kind: "column", type: "text" },
+            enderecos: {
+              kind: "owned",
+              array: true,
+              shape: { cidade: { kind: "column", type: "text" } },
+            },
+          },
+        },
+      },
+    });
+
+    const { getEntity } = await import("../app/engine/control-plane/entities.js");
+    const conta = (await getEntity("conta"))!;
+    const enderecos = conta.fields.enderecos as { id?: string; shape: Record<string, { id?: string }> };
+    expect(typeof conta.fields.titular?.id).toBe("string");
+    expect(conta.fields.titular?.id).toBeTruthy();
+    expect(enderecos.id).toBeTruthy();
+    expect(enderecos.shape.cidade?.id).toBeTruthy();
+  });
+
+  it("mantém o id num re-save sem ids (fallback por nome)", async () => {
+    const { getEntity } = await import("../app/engine/control-plane/entities.js");
+    const titularId = (await getEntity("conta"))!.fields.titular?.id;
+
+    // Cliente "burro" da API: re-salva a mesma forma sem mandar ids.
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "conta",
+          fields: {
+            titular: { kind: "column", type: "text" },
+            enderecos: {
+              kind: "owned",
+              array: true,
+              shape: { cidade: { kind: "column", type: "text" } },
+            },
+          },
+        },
+      },
+    });
+
+    expect((await getEntity("conta"))!.fields.titular?.id).toBe(titularId);
+  });
+
+  it("rename preserva o id (mesmo id, nome novo)", async () => {
+    const { getEntity } = await import("../app/engine/control-plane/entities.js");
+    const titularId = (await getEntity("conta"))!.fields.titular?.id;
+
+    // A GUI renomeia `titular` → `dono` carregando o MESMO id.
+    await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "conta",
+          fields: {
+            dono: { kind: "column", id: titularId, type: "text" },
+            enderecos: {
+              kind: "owned",
+              array: true,
+              shape: { cidade: { kind: "column", type: "text" } },
+            },
+          },
+        },
+      },
+    });
+
+    const conta = (await getEntity("conta"))!;
+    expect(conta.fields.dono?.id).toBe(titularId);
+    expect(conta.fields.titular).toBeUndefined();
+  });
+
+  // ── Plano de mudanças (diff por id, dry-run) — um teste por balde ───────────
+  describe("plano de edição", () => {
+    // Helper: ids do baseline `cliente` pra montar os IRs editados.
+    const baseline = async () => {
+      const { getEntity } = await import("../app/engine/control-plane/entities.js");
+      const c = (await getEntity("cliente"))!;
+      return {
+        nome: c.fields.nome?.id,
+        apelido: c.fields.apelido?.id,
+        idade: c.fields.idade?.id,
+      };
+    };
+    const plan = async (fields: Record<string, unknown>) => {
+      const res = await app.as({ user: master }).action(action_planEntity, {
+        body: { ir: { irVersion: 1, name: "cliente", fields } },
+      });
+      return (await res.json()).plan as {
+        isNew: boolean;
+        changes: { risk: string; op: string; path: string; fillType?: string }[];
+      };
+    };
+
+    it("cria o baseline do diff", async () => {
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: {
+          ir: {
+            irVersion: 1,
+            name: "cliente",
+            fields: {
+              nome: { kind: "column", type: "text" },
+              apelido: { kind: "column", type: "text" },
+              idade: { kind: "column", type: "int4" },
+            },
+          },
+        },
+      });
+      const ids = await baseline();
+      expect(ids.nome).toBeTruthy();
+    });
+
+    it("🟢 rename (mesmo id, nome novo) é auto", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome_completo: { kind: "column", id: id.nome, type: "text" },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4" },
+      });
+      expect(p.changes.find((c) => c.op === "renameField")).toMatchObject({
+        risk: "auto",
+        path: "nome_completo",
+      });
+    });
+
+    it("🟢 adicionar campo opcional é auto", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome: { kind: "column", id: id.nome, type: "text" },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4" },
+        email: { kind: "column", type: "text" },
+      });
+      expect(p.changes.find((c) => c.path === "email")).toMatchObject({ risk: "auto", op: "addField" });
+    });
+
+    it("🔴 remover campo pede confirmação", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome: { kind: "column", id: id.nome, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4" },
+      });
+      expect(p.changes.find((c) => c.op === "removeField")).toMatchObject({
+        risk: "confirm",
+        path: "apelido",
+      });
+    });
+
+    it("🟡 tornar obrigatório precisa de um valor", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome: { kind: "column", id: id.nome, type: "text" },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4", notNull: true },
+      });
+      expect(p.changes.find((c) => c.op === "makeRequired")).toMatchObject({
+        risk: "needsValue",
+        path: "idade",
+        fillType: "int4",
+      });
+    });
+
+    it("⛔ tornar único é bloqueado", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome: { kind: "column", id: id.nome, type: "text", unique: true },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4" },
+      });
+      expect(p.changes.find((c) => c.op === "addUnique")).toMatchObject({ risk: "blocked", path: "nome" });
+    });
+
+    it("⛔ mudar tipo é bloqueado", async () => {
+      const id = await baseline();
+      const p = await plan({
+        nome: { kind: "column", id: id.nome, type: "text" },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "text" }, // int4 → text
+      });
+      expect(p.changes.find((c) => c.op === "retypeField")).toMatchObject({ risk: "blocked", path: "idade" });
+    });
+
+    it("sem id, um rename vira remover + adicionar (drop+add)", async () => {
+      const id = await baseline();
+      // 'nome' some e 'nome_completo' aparece SEM id → não é rename.
+      const p = await plan({
+        nome_completo: { kind: "column", type: "text" },
+        apelido: { kind: "column", id: id.apelido, type: "text" },
+        idade: { kind: "column", id: id.idade, type: "int4" },
+      });
+      expect(p.changes.find((c) => c.op === "renameField")).toBeUndefined();
+      expect(p.changes.find((c) => c.op === "removeField")).toMatchObject({ path: "nome" });
+      expect(p.changes.find((c) => c.op === "addField")).toMatchObject({ path: "nome_completo" });
+    });
+
+    it("entidade nova não tem mudanças a revisar (isNew)", async () => {
+      const res = await app.as({ user: master }).action(action_planEntity, {
+        body: { ir: { irVersion: 1, name: "marca_nova_xyz", fields: { x: { kind: "column", type: "text" } } } },
+      });
+      const p = (await res.json()).plan as { isNew: boolean; changes: unknown[] };
+      expect(p.isNew).toBe(true);
+      expect(p.changes).toEqual([]);
+    });
+  });
+
+  // ── Aplicação real do plano (migração com dado nas tabelas) ─────────────────
+  describe("aplicação do plano", () => {
+    const save = (name: string, fields: Record<string, unknown>, extra: object = {}) =>
+      app.as({ user: master }).action(action_saveEntity, {
+        body: { ir: { irVersion: 1, name, fields }, ...extra },
+      });
+    const idOf = async (ent: string, field: string) => {
+      const { getEntity } = await import("../app/engine/control-plane/entities.js");
+      return (await getEntity(ent))!.fields[field]?.id;
+    };
+    const sqlH = async () => (await import("../app/engine/control-plane/db.js")).db();
+    const columns = async (table: string) => {
+      const sql = await sqlH();
+      const rows = await sql<{ column_name: string; is_nullable: string }[]>`
+        SELECT column_name, is_nullable FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ${table}`;
+      return rows;
+    };
+
+    it("🟢 rename preserva o dado da linha", async () => {
+      await save("ra", { titulo: { kind: "column", type: "text" } });
+      const id = await idOf("ra", "titulo");
+      const sql = await sqlH();
+      await sql`INSERT INTO ra (titulo) VALUES ('hello')`;
+
+      const res = await save("ra", { nome: { kind: "column", id, type: "text" } });
+      expect((await res.json()).status).toBe("applied");
+
+      const [row] = await sql<{ nome: string }[]>`SELECT nome FROM ra`;
+      expect(row?.nome).toBe("hello"); // dado migrou pra coluna renomeada
+      const cols = (await columns("ra")).map((c) => c.column_name);
+      expect(cols).toContain("nome");
+      expect(cols).not.toContain("titulo");
+    });
+
+    it("🔴 remover campo: sem confirmação não aplica; com confirmação dropa", async () => {
+      await save("rb", { a: { kind: "column", type: "text" }, b: { kind: "column", type: "text" } });
+      const idA = await idOf("rb", "a");
+
+      const blocked = await save("rb", { a: { kind: "column", id: idA, type: "text" } });
+      expect((await blocked.json()).status).toBe("needsReview");
+      expect((await columns("rb")).map((c) => c.column_name)).toContain("b"); // intacto
+
+      const ok = await save("rb", { a: { kind: "column", id: idA, type: "text" } }, { confirm: ["b"] });
+      expect((await ok.json()).status).toBe("applied");
+      expect((await columns("rb")).map((c) => c.column_name)).not.toContain("b");
+    });
+
+    it("🟡 obrigatório com vazios: trava sem valor, aplica com backfill", async () => {
+      await save("rc", { nome: { kind: "column", type: "text" }, idade: { kind: "column", type: "int4" } });
+      const idNome = await idOf("rc", "nome");
+      const idIdade = await idOf("rc", "idade");
+      const sql = await sqlH();
+      await sql`INSERT INTO rc (nome) VALUES ('x')`; // idade NULL
+
+      const req = {
+        nome: { kind: "column", id: idNome, type: "text" },
+        idade: { kind: "column", id: idIdade, type: "int4", notNull: true },
+      };
+      const blocked = await save("rc", req);
+      expect((await blocked.json()).status).toBe("needsReview");
+
+      const ok = await save("rc", req, { fill: { idade: 0 } });
+      expect((await ok.json()).status).toBe("applied");
+      const [row] = await sql<{ idade: number }[]>`SELECT idade FROM rc`;
+      expect(row?.idade).toBe(0); // vazio preenchido
+      const col = (await columns("rc")).find((c) => c.column_name === "idade");
+      expect(col?.is_nullable).toBe("NO"); // virou NOT NULL
+    });
+
+    it("🟢 obrigatório sem vazios aplica direto (auto, sem valor)", async () => {
+      await save("rd", { idade: { kind: "column", type: "int4" } });
+      const id = await idOf("rd", "idade");
+      const sql = await sqlH();
+      await sql`INSERT INTO rd (idade) VALUES (7)`; // sem nulos
+
+      const res = await save("rd", { idade: { kind: "column", id, type: "int4", notNull: true } });
+      expect((await res.json()).status).toBe("applied");
+      const col = (await columns("rd")).find((c) => c.column_name === "idade");
+      expect(col?.is_nullable).toBe("NO");
+    });
+
+    it("⛔ único com duplicatas trava; sem duplicatas aplica", async () => {
+      const sql = await sqlH();
+
+      await save("re", { code: { kind: "column", type: "text" } });
+      const idDup = await idOf("re", "code");
+      await sql`INSERT INTO re (code) VALUES ('dup'), ('dup')`;
+      const blocked = await save("re", { code: { kind: "column", id: idDup, type: "text", unique: true } });
+      expect((await blocked.json()).status).toBe("needsReview");
+
+      await save("rf", { code: { kind: "column", type: "text" } });
+      const idOk = await idOf("rf", "code");
+      await sql`INSERT INTO rf (code) VALUES ('a'), ('b')`;
+      const ok = await save("rf", { code: { kind: "column", id: idOk, type: "text", unique: true } });
+      expect((await ok.json()).status).toBe("applied");
+      // a constraint unique passa a barrar duplicata
+      await expect(sql`INSERT INTO rf (code) VALUES ('a')`).rejects.toThrow();
+    });
   });
 
   it("rejeita IR inválido (tipo fora do catálogo)", async () => {

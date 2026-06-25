@@ -3,6 +3,8 @@
 
 export interface ColumnIR {
   kind: "column";
+  /** Identidade estável do campo (UUID), garantida no back. Sobrevive a rename. */
+  id?: string;
   /** Nome do catálogo (`"text"`, `"int4"`, …). */
   type: string;
   array?: boolean;
@@ -14,6 +16,8 @@ export interface ColumnIR {
 
 export interface ReferenceIR {
   kind: "reference";
+  /** Identidade estável do campo (UUID), garantida no back. Sobrevive a rename. */
+  id?: string;
   /** Nome da entidade alvo. */
   target: string;
   cardinality: "one" | "many";
@@ -22,6 +26,8 @@ export interface ReferenceIR {
 
 export interface OwnedIR {
   kind: "owned";
+  /** Identidade estável do campo (UUID), garantida no back. Sobrevive a rename. */
+  id?: string;
   /** `false` = 1:1, `true` = 1:N. */
   array: boolean;
   /**

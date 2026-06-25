@@ -9,13 +9,28 @@ export const loader = async (_args: LoaderArgs) => {
   return await listEntities();
 };
 
-export const action_saveEntity = async ({ body }: ActionArgs<{ ir: unknown }>) => {
-  const { saveEntity } = await import("../engine/control-plane/entities.js");
+export const action_saveEntity = async ({
+  body,
+}: ActionArgs<{ ir: unknown; confirm?: string[]; fill?: Record<string, unknown> }>) => {
+  const { applyEntity } = await import("../engine/control-plane/entities.js");
   try {
-    const ir = await saveEntity(body.ir);
-    return { ok: true, name: ir.name };
+    const out = await applyEntity(body.ir, {
+      ...(body.confirm ? { confirm: body.confirm } : {}),
+      ...(body.fill ? { fill: body.fill } : {}),
+    });
+    return { ok: true, status: out.status, name: out.name, plan: out.plan };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to save entity." };
+  }
+};
+
+// Dry-run: devolve o plano de mudanças (diff por id) sem aplicar nada.
+export const action_planEntity = async ({ body }: ActionArgs<{ ir: unknown }>) => {
+  const { planEntity } = await import("../engine/control-plane/entities.js");
+  try {
+    return { ok: true, plan: await planEntity(body.ir) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to plan entity." };
   }
 };
 
