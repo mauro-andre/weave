@@ -628,14 +628,23 @@ do engine que já existem seguem como guarda do compilador/DDL.
 
 ### Da porta pra dentro (plataforma + GUI)
 
-> **Status (jun/2026) — construído & testado (246 testes verdes):**
-> - **Camada de IR** completa: `toIR`/`fromIR`/`validateIR`/`normalizeEntityIR`/`resolveMirrors`, com **mirror + campos locais**, **defaults**, **ids estáveis de campo** (rename preserva dado) e **bloqueio de nomes reservados** (mensagem amigável, sem SQL).
-> - **Metastore** `weave_entities` (IR em `jsonb`) sobre **uma `DATABASE` única** (multi-projeto / `CREATE DATABASE` ainda não).
-> - **Designer visual de entidades** + **edição segura**: diff por id → **plano classificado por risco** (🟢 auto / 🔴 confirma / 🟡 backfill / ⛔ bloqueado) → **folha de revisão** → **aplicação transacional** (rename real preservando dado, backfill uniforme, drops confirmados). Sync aditivo reusado do engine.
-> - **Browser de dados** com **CRUD completo**: cards recursivos (owned aninhado + reference expandida), criar/editar **inline**, **deletar** com `ConfirmModal` (cascata de owned/N:N; bloqueio amigável se referenciado).
-> - **Filtro por caminho aninhado**: árvore booleana **AND/OR** recursiva, atravessa owned/reference (`EXISTS` aninhado), listas com semântica **"any"** (`unnest`), `id`/`created at`/`updated at`. **Ordenação multi-chave** (aninhada por galho single, managed fields). Contagem ao vivo. Tudo **refresh-safe na URL**.
-> - **Seed de cenário** (`npm run seed`) populando milhares de objetos pelas actions.
-> - **Falta:** F5 scopes + designer de scopes, playground, e tudo da "porta pra fora" (HTTP, identidade, SDK).
+> **Status (jun/2026) — construído & testado (271 testes verdes):** o Weave saiu de "GUI sobre o engine" e virou um **backend de objetos programável**.
+>
+> _Da porta pra dentro:_
+> - **Camada de IR** completa: `toIR`/`fromIR`/`validateIR`/`normalizeEntityIR`/`resolveMirrors`, com **mirror + campos locais**, **defaults**, **ids estáveis de campo** (rename preserva dado; scopes por id) e **bloqueio de nomes reservados**.
+> - **Metastore** `weave_entities` (IR em `jsonb`) sobre **uma `DATABASE` única** (multi-projeto ainda não).
+> - **Designer de entidades** + **edição segura**: diff por id → **plano por risco** (🟢/🔴/🟡/⛔) → **folha de revisão** → **aplicação transacional** (rename real, backfill uniforme, drops confirmados).
+> - **Browser de dados** CRUD: cards recursivos, criar/editar inline, deletar (`ConfirmModal`), **filtro por caminho aninhado** (árvore AND/OR, `EXISTS` em owned/reference, listas "any", managed fields), **sort multi-chave**, contagem ao vivo, tudo **refresh-safe na URL**.
+> - **Seed de cenário** (`npm run seed`).
+>
+> _Da porta pra fora (já construído):_
+> - **API REST de dados** `/api/:entity` (GET/POST/GET-one/PATCH/DELETE), auth `x-api-key` (master key do `.env` **ou** keys do banco). Grupo de rota aninhado.
+> - **API keys** CRUD (`weave_api_keys`, sha256, mostra-uma-vez, revogável) — GUI na página API.
+> - **Scopes** (F5 ✅): `weave_scopes`, por entidade **verbos + filtro-de-objetos aninhado (value/param) + projeção aninhada (include/exclude)**, tudo **por id de campo (rename-proof)**. Enforcement no handler: sem scope = god; com `x-weave-scope` + `x-weave-params` → checa verbo, AND-a o filtro do scope, poda a projeção. **Designer de scopes** completo na GUI. `op: in` somado ao compilador.
+> - **API de admin** `/admin/entities` (**plan/apply** por HTTP: PUT → 200 applied | 409 needsReview + plano; GET/DELETE) e `/admin/scopes` (CRUD), **mesma `apiKeyMiddleware`** (a key é o limite de confiança — decisão do dev). Destrava SDK/codegen + IaC.
+> - **Identidade por requisição** = params abertos (`x-weave-params`), sem contrato rígido — o caller confiável (dev) os fornece (§6.3).
+>
+> - **Próxima fronteira:** **SDK / `weave gen`** (puxa `/admin/entities` + `/admin/scopes` → tipos TS + client tipado + **views por scope**). Depois: playground na página API, multi-projeto, realtime.
 
 - ✅ **F0 — Fundação da app VeloJS.** Shell do painel (login da plataforma +
   `AdminLayout` + páginas vazias com o menu), **control-plane** (`weave_users` +

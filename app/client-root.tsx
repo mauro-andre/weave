@@ -8,7 +8,7 @@ export const Component = ({ children }: { children?: ComponentChildren }) => (
       <meta charSet="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Weave</title>
-      <Scripts />
+      <Scripts favicon="/favicon.svg" />
     </head>
     <body>{children}</body>
   </html>
