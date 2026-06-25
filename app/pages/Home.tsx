@@ -1,1 +1,7 @@
-export const Component = () => <h1>Home</h1>;
+import { Page } from "../components/Page.js";
+
+export const Component = () => (
+  <Page title="Home">
+    <p>Welcome to Weave.</p>
+  </Page>
+);

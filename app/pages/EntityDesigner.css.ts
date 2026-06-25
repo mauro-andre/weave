@@ -1,38 +1,6 @@
 import { style } from "@vanilla-extract/css";
 import { vars } from "../styles/theme.css.js";
 
-export const page = style({
-  maxWidth: "860px",
-});
-
-export const header = style({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: vars.space.lg,
-});
-
-export const title = style({
-  margin: 0,
-  fontSize: "22px",
-  fontWeight: 700,
-});
-
-export const save = style({
-  padding: "9px 18px",
-  background: vars.color.teal,
-  border: "none",
-  borderRadius: "8px",
-  color: vars.color.bg,
-  fontWeight: 600,
-  fontSize: "14px",
-  cursor: "pointer",
-  selectors: {
-    "&:hover": { filter: "brightness(1.06)" },
-    "&:disabled": { opacity: 0.5, cursor: "not-allowed" },
-  },
-});
-
 export const nameField = style({
   display: "flex",
   flexDirection: "column",

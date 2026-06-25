@@ -99,28 +99,3 @@ export const foot = style({
   borderTop: `1px solid ${vars.color.border}`,
 });
 
-export const cancel = style({
-  padding: "9px 16px",
-  background: "transparent",
-  border: `1px solid ${vars.color.border}`,
-  borderRadius: "8px",
-  color: vars.color.text,
-  fontSize: "14px",
-  cursor: "pointer",
-  selectors: { "&:hover": { borderColor: vars.color.muted } },
-});
-
-export const apply = style({
-  padding: "9px 18px",
-  background: vars.color.teal,
-  border: "none",
-  borderRadius: "8px",
-  color: vars.color.bg,
-  fontWeight: 600,
-  fontSize: "14px",
-  cursor: "pointer",
-  selectors: {
-    "&:hover": { filter: "brightness(1.06)" },
-    "&:disabled": { opacity: 0.45, cursor: "not-allowed" },
-  },
-});

@@ -1,1 +1,7 @@
-export const Component = () => <h1>API</h1>;
+import { Page } from "../components/Page.js";
+
+export const Component = () => (
+  <Page title="API">
+    <p>API explorer coming soon.</p>
+  </Page>
+);

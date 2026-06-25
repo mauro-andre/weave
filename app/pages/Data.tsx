@@ -2,8 +2,10 @@ import type { ActionArgs, LoaderArgs } from "@mauroandre/velojs";
 import { useLoader, touch } from "@mauroandre/velojs/hooks";
 import { useSignal } from "@preact/signals";
 import { useEffect, useState } from "preact/hooks";
+import { Page } from "../components/Page.js";
 import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
 import type { ObjectPage } from "../engine/control-plane/data.js";
+import * as btn from "../styles/button.css.js";
 import * as css from "./Data.css.js";
 
 const SHOW_LIMIT = 6; // campos visíveis antes do "show all fields"
@@ -62,16 +64,16 @@ export const Component = () => {
   const reload = () => data && load(data.root, data.currentPage);
 
   return (
-    <div class={css.page}>
-      <header class={css.header}>
-        <h1 class={css.title}>Data</h1>
-        {data ? (
-          <button class={css.newBtn} onClick={() => (creating.value = true)}>
+    <Page
+      title="Data"
+      actions={
+        data ? (
+          <button class={btn.primary} onClick={() => (creating.value = true)}>
             + New {data.root}
           </button>
-        ) : null}
-      </header>
-
+        ) : undefined
+      }
+    >
       {entities.length === 0 ? (
         <p class={css.empty}>No entities yet. Create one first.</p>
       ) : (
@@ -130,7 +132,7 @@ export const Component = () => {
           ) : null}
         </>
       ) : null}
-    </div>
+    </Page>
   );
 };
 
@@ -188,15 +190,15 @@ function RootCard({
         <div class={css.actions}>
           {editing.value ? (
             <>
-              <button class={css.btnGhost} onClick={cancel}>
+              <button class={btn.ghost} onClick={cancel}>
                 Cancel
               </button>
-              <button class={css.btnPrimary} disabled={saving.value} onClick={save}>
+              <button class={btn.primary} disabled={saving.value} onClick={save}>
                 {saving.value ? "Saving…" : "Save"}
               </button>
             </>
           ) : (
-            <button class={css.btnGhost} onClick={startEdit}>
+            <button class={btn.ghost} onClick={startEdit}>
               Edit
             </button>
           )}

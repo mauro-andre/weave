@@ -1,7 +1,9 @@
 import type { ActionArgs, LoaderArgs } from "@mauroandre/velojs";
 import { Link } from "@mauroandre/velojs";
 import { useLoader } from "@mauroandre/velojs/hooks";
+import { Page } from "../components/Page.js";
 import type { EntityIR } from "../engine/ir/types.js";
+import * as btn from "../styles/button.css.js";
 import * as css from "./Entities.css.js";
 
 export const loader = async (_args: LoaderArgs) => {
@@ -38,13 +40,14 @@ export const Component = () => {
   const { data } = useLoader<EntityIR[]>();
   const entities = data.value ?? [];
   return (
-    <div>
-      <header class={css.header}>
-        <h1 class={css.title}>Entities</h1>
-        <Link to="~/entities/new" class={css.newBtn}>
+    <Page
+      title="Entities"
+      actions={
+        <Link to="~/entities/new" class={btn.primary}>
           + New entity
         </Link>
-      </header>
+      }
+    >
       {entities.length === 0 ? (
         <p class={css.empty}>No entities yet. Create the first one.</p>
       ) : (
@@ -56,6 +59,6 @@ export const Component = () => {
           ))}
         </div>
       )}
-    </div>
+    </Page>
   );
 };

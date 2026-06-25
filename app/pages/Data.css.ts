@@ -1,17 +1,6 @@
 import { style } from "@vanilla-extract/css";
 import { vars } from "../styles/theme.css.js";
 
-export const page = style({ maxWidth: "920px" });
-
-export const header = style({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginBottom: vars.space.md,
-});
-
-export const title = style({ margin: 0, fontSize: "22px", fontWeight: 700 });
-
 export const picker = style({
   display: "flex",
   flexWrap: "wrap",
@@ -152,45 +141,6 @@ export const cardHead = style({
 });
 
 export const actions = style({ display: "flex", gap: "6px", flexShrink: 0 });
-
-export const btnGhost = style({
-  padding: "5px 12px",
-  background: "transparent",
-  border: `1px solid ${vars.color.border}`,
-  borderRadius: "7px",
-  color: vars.color.muted,
-  fontSize: "12px",
-  fontWeight: 600,
-  cursor: "pointer",
-  selectors: { "&:hover": { borderColor: vars.color.muted, color: vars.color.text } },
-});
-
-export const btnPrimary = style({
-  padding: "5px 14px",
-  background: vars.color.teal,
-  border: "none",
-  borderRadius: "7px",
-  color: vars.color.bg,
-  fontSize: "12px",
-  fontWeight: 600,
-  cursor: "pointer",
-  selectors: {
-    "&:hover": { filter: "brightness(1.06)" },
-    "&:disabled": { opacity: 0.5, cursor: "not-allowed" },
-  },
-});
-
-export const newBtn = style({
-  padding: "7px 14px",
-  background: vars.color.teal,
-  border: "none",
-  borderRadius: "8px",
-  color: vars.color.bg,
-  fontSize: "13px",
-  fontWeight: 600,
-  cursor: "pointer",
-  selectors: { "&:hover": { filter: "brightness(1.06)" } },
-});
 
 export const editInput = style({
   flex: 1,

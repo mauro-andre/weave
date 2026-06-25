@@ -9,7 +9,9 @@ import { slug } from "../engine/util/slug.js";
 import type { ColumnIR, EntityIR, FieldIR, OwnedIR } from "../engine/ir/types.js";
 import { action_saveEntity } from "./Entities.js";
 import { ReviewSheet } from "./ReviewSheet.js";
+import { Page } from "../components/Page.js";
 import type { EntityDiff } from "../engine/ir/diff.js";
+import * as btn from "../styles/button.css.js";
 import * as css from "./EntityDesigner.css.js";
 
 // As 6 possibilidades (§ designer): primitivo/objeto × único/lista × owned/reference.
@@ -499,14 +501,14 @@ export const Component = () => {
   const tables = previewTables(model.value.name || "entity", model.value.fields, byName);
 
   return (
-    <div class={css.page}>
-      <header class={css.header}>
-        <h1 class={css.title}>{isNew ? "New entity" : `Entity: ${model.value.name}`}</h1>
-        <button class={css.save} disabled={saving.value || !model.value.name} onClick={save}>
+    <Page
+      title={isNew ? "New entity" : `Entity: ${model.value.name}`}
+      actions={
+        <button class={btn.primary} disabled={saving.value || !model.value.name} onClick={save}>
           {saving.value ? "Saving…" : "Save"}
         </button>
-      </header>
-
+      }
+    >
       <div class={css.nameField}>
         <span class={css.label}>Entity name</span>
         <input
@@ -552,6 +554,6 @@ export const Component = () => {
           onApply={(confirm, fill) => submit(confirm, fill)}
         />
       ) : null}
-    </div>
+    </Page>
   );
 };

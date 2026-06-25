@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import type { EntityDiff, FieldChange } from "../engine/ir/diff.js";
+import * as btn from "../styles/button.css.js";
 import * as css from "./ReviewSheet.css.js";
 
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
@@ -122,10 +123,10 @@ export function ReviewSheet({
         </div>
 
         <div class={css.foot}>
-          <button type="button" class={css.cancel} onClick={onCancel}>
+          <button type="button" class={btn.ghost} onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" class={css.apply} disabled={!canApply} onClick={apply}>
+          <button type="button" class={btn.primary} disabled={!canApply} onClick={apply}>
             {saving ? "Applying…" : "Apply changes"}
           </button>
         </div>

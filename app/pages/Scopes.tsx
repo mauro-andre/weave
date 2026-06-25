@@ -1,1 +1,7 @@
-export const Component = () => <h1>Scopes</h1>;
+import { Page } from "../components/Page.js";
+
+export const Component = () => (
+  <Page title="Scopes">
+    <p>Scopes coming soon.</p>
+  </Page>
+);
