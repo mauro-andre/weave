@@ -31,7 +31,7 @@ import type {
   InferSelect,
   ExpandInput,
   SelectInput,
-} from "../schema/entity.js";
+} from "@mauroandre/weave-core";
 import {
   compileFind,
   compileCount,
@@ -42,7 +42,7 @@ import {
 } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
-import type { Projection, AnyProjection } from "../schema/projection.js";
+import type { Projection, AnyProjection } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;

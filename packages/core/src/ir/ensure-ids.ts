@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { EntityIR, FieldIR } from "./types.js";
 
 // Garante que todo campo do IR tenha um `id` estável. Regra de resolução:
@@ -21,7 +20,7 @@ function ensureFields(
 }
 
 function ensureNode(node: FieldIR, prev: FieldIR | undefined): FieldIR {
-  const id = node.id ?? prev?.id ?? randomUUID();
+  const id = node.id ?? prev?.id ?? globalThis.crypto.randomUUID();
   if (node.kind === "owned" && node.shape) {
     const prevShape = prev?.kind === "owned" ? prev.shape : undefined;
     return { ...node, id, shape: ensureFields(node.shape, prevShape) };

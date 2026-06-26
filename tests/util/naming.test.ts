@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { camelToSnake, indexName } from "../../app/engine/util/naming.js";
+import { camelToSnake, indexName } from "@mauroandre/weave-core";
 
 describe("camelToSnake", () => {
   it("splits camelCase boundaries", () => {

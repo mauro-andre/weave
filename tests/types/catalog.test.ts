@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allTypes, catalog } from "../../app/engine/types/index.js";
+import { allTypes, catalog } from "@mauroandre/weave-core";
 
 /**
  * Each entry's runtime facts. OIDs are the stable Postgres `pg_type` values;

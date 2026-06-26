@@ -4,10 +4,10 @@
 // e coluna-array) ganha semântica "any" (algum elemento/linha casa) de graça.
 // Valores sempre vão como parâmetro vinculado ($n) — nunca concatenados.
 
-import { camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "../util/naming.js";
-import { singularize } from "../util/inflect.js";
-import { slug } from "../util/slug.js";
-import type { EntityIR, FieldIR } from "../ir/types.js";
+import { camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { singularize } from "@mauroandre/weave-core";
+import { slug } from "@mauroandre/weave-core";
+import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 /** Uma folha do filtro: um caminho até um escalar + operador + valor. */
 export interface Condition {

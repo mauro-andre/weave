@@ -7,7 +7,7 @@ import { Select } from "../components/Select.js";
 import { FilterBar } from "./FilterBar.js";
 import { SortBar } from "./SortBar.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
-import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
+import type { ColumnIR, FieldIR } from "@mauroandre/weave-core";
 import type { ObjectPage } from "../engine/control-plane/data.js";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { SortKey } from "../engine/control-plane/sort.js";

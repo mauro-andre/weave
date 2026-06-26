@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Select, type SelectOption } from "../components/Select.js";
-import type { ColumnIR, FieldIR } from "../engine/ir/types.js";
+import type { ColumnIR, FieldIR } from "@mauroandre/weave-core";
 import type { Condition, Filter } from "../engine/control-plane/filter.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./FilterBar.css.js";

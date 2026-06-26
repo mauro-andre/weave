@@ -3,10 +3,10 @@
 // correlacionada que projeta o valor. Lista não é ordenável (ambíguo). Campos
 // gerenciados (created at / updated at / id) são chaves válidas em qualquer nível.
 
-import { camelToSnake, ownedChildTable, ownedFkColumn } from "../util/naming.js";
-import { singularize } from "../util/inflect.js";
-import { slug } from "../util/slug.js";
-import type { EntityIR, FieldIR } from "../ir/types.js";
+import { camelToSnake, ownedChildTable, ownedFkColumn } from "@mauroandre/weave-core";
+import { singularize } from "@mauroandre/weave-core";
+import { slug } from "@mauroandre/weave-core";
+import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 export interface SortKey {
   path: string[];

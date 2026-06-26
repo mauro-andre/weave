@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { uuidv7 } from "../../app/engine/util/uuid.js";
+import { uuidv7 } from "@mauroandre/weave-core";
 
 describe("uuidv7", () => {
   it("produces a canonical uuid string", () => {

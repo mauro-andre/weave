@@ -1,0 +1,16 @@
+{
+  "name": "@mauroandre/weave-core",
+  "version": "0.0.0",
+  "description": "Weave core — pure schema-as-code + IR + type inference. Zero runtime deps; shared by the engine and the SDK.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./catalog": {
+      "types": "./src/types/catalog.ts",
+      "import": "./src/types/catalog.ts"
+    }
+  }
+}

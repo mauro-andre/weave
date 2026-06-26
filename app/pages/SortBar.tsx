@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { Select, type SelectOption } from "../components/Select.js";
-import type { FieldIR } from "../engine/ir/types.js";
+import type { FieldIR } from "@mauroandre/weave-core";
 import type { SortKey } from "../engine/control-plane/sort.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./SortBar.css.js";

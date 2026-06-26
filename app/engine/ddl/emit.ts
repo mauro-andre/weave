@@ -17,10 +17,10 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig } from "../schema/column.js";
-import type { Entity, ShapeRecord } from "../schema/entity.js";
-import { Owned, type OwnedShape } from "../schema/owned.js";
-import { Reference } from "../schema/reference.js";
+import { Column, type ColumnConfig } from "@mauroandre/weave-core";
+import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
+import { Owned, type OwnedShape } from "@mauroandre/weave-core";
+import { Reference } from "@mauroandre/weave-core";
 import {
   camelToSnake,
   indexName,
@@ -28,8 +28,8 @@ import {
   ownedFkColumn,
   joinTableName,
   joinTargetFk,
-} from "../util/naming.js";
-import { singularize } from "../util/inflect.js";
+} from "@mauroandre/weave-core";
+import { singularize } from "@mauroandre/weave-core";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 

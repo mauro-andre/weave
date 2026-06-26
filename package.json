@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "Code-first object abstraction over PostgreSQL: think in nested objects, never write SQL.",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "license": "MIT",
   "author": "Mauro André",
   "exports": {

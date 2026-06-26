@@ -2,7 +2,7 @@ import type { ActionArgs, LoaderArgs } from "@mauroandre/velojs";
 import { Link } from "@mauroandre/velojs";
 import { useLoader } from "@mauroandre/velojs/hooks";
 import { Page } from "../components/Page.js";
-import type { EntityIR } from "../engine/ir/types.js";
+import type { EntityIR } from "@mauroandre/weave-core";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Entities.css.js";
 

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { action_saveEntity, loader as entitiesLoader } from "../app/pages/Entities.js";
-import type { EntityIR, FieldIR } from "../app/engine/ir/types.js";
+import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 // O client pode mandar `id` por campo desde a CRIAÇÃO (write-back inline / `$id`
 // à mão). O servidor RESPEITA o que veio e CUNHA onde falta. Depois disso, o

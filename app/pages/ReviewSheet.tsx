@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import type { EntityDiff, FieldChange } from "../engine/ir/diff.js";
+import type { EntityDiff, FieldChange } from "@mauroandre/weave-core";
 import * as btn from "../styles/button.css.js";
 import * as css from "./ReviewSheet.css.js";
 

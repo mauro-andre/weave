@@ -17,18 +17,18 @@
  * Phase 3.
  */
 
-import { Column, type InferColumn } from "../schema/column.js";
-import type { Entity, ShapeRecord } from "../schema/entity.js";
-import { Owned, type OwnedShape } from "../schema/owned.js";
-import { Reference } from "../schema/reference.js";
+import { Column, type InferColumn } from "@mauroandre/weave-core";
+import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
+import { Owned, type OwnedShape } from "@mauroandre/weave-core";
+import { Reference } from "@mauroandre/weave-core";
 import {
   camelToSnake,
   ownedChildTable,
   ownedFkColumn,
   joinTableName,
   joinTargetFk,
-} from "../util/naming.js";
-import { singularize } from "../util/inflect.js";
+} from "@mauroandre/weave-core";
+import { singularize } from "@mauroandre/weave-core";
 
 // Field discriminators / extractors (by phantom / kind tag).
 type IsColumn<V> = V extends { _types: unknown } ? true : false;

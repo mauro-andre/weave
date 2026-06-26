@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Verb } from "../engine/control-plane/scopes.js";
-import type { EntityIR, FieldIR } from "../engine/ir/types.js";
+import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 export class ScopeError extends Error {
   status: number;
@@ -70,7 +70,7 @@ export function prune(doc: Record<string, unknown>, projection: ResolvedProjecti
 // ── internals ─────────────────────────────────────────────────────────────────
 async function resolvedShapes(): Promise<Map<string, EntityIR>> {
   const { listEntities } = await import("../engine/control-plane/entities.js");
-  const { resolveMirrors } = await import("../engine/ir/resolve-mirrors.js");
+  const { resolveMirrors } = await import("@mauroandre/weave-core");
   const irs = await listEntities();
   const raw = new Map(irs.map((e) => [e.name, e] as const));
   return new Map(irs.map((e) => [e.name, resolveMirrors(e, raw)] as const));

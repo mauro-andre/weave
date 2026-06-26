@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { Page } from "../components/Page.js";
 import { Select, type SelectOption } from "../components/Select.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
-import type { ColumnIR, EntityIR, FieldIR } from "../engine/ir/types.js";
+import type { ColumnIR, EntityIR, FieldIR } from "@mauroandre/weave-core";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Scope, EntityRule, Verb } from "../engine/control-plane/scopes.js";
 import * as btn from "../styles/button.css.js";
@@ -53,7 +53,7 @@ interface LoaderData {
 export const loader = async ({ params }: LoaderArgs): Promise<LoaderData> => {
   const { getScope } = await import("../engine/control-plane/scopes.js");
   const { listEntities } = await import("../engine/control-plane/entities.js");
-  const { resolveMirrors } = await import("../engine/ir/resolve-mirrors.js");
+  const { resolveMirrors } = await import("@mauroandre/weave-core");
   const irs = await listEntities();
   const raw = new Map(irs.map((e) => [e.name, e] as const));
   const entities = irs.map((e) => resolveMirrors(e, raw));

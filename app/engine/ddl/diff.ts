@@ -11,7 +11,7 @@
  * drop+add in a diff, so they surface as drift too.
  */
 
-import { byName } from "../types/registry.js";
+import { byName } from "@mauroandre/weave-core";
 import {
   renderColumnDef,
   renderCreateTable,

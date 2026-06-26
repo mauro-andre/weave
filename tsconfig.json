@@ -27,6 +27,6 @@
 
     "ignoreDeprecations": "6.0"
   },
-  "include": ["app", "tests", "scripts"],
+  "include": ["app", "tests", "scripts", "packages"],
   "exclude": ["dist", "node_modules"]
 }

@@ -1,6 +1,8 @@
 import { describe, it, expectTypeOf } from "vitest";
+import { type Infer } from "@mauroandre/weave-core";
+// Os PgTypes CRUS vêm do subpath /catalog — no barrel principal os nomes `int4`,
+// `text`, … são os CONSTRUTORES de coluna (`int4()`), não os PgType.
 import {
-  type Infer,
   int2,
   int4,
   int8,
@@ -20,7 +22,7 @@ import {
   json,
   jsonb,
   bytea,
-} from "../../app/engine/types/index.js";
+} from "@mauroandre/weave-core/catalog";
 
 /**
  * Compile-time tests: the phantom `tsType` must recover the exact TS type a
