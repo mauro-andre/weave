@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import { veloPlugin } from "@mauroandre/velojs/vite";
 import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
+import { DATABASE_URL } from "./tests/global-setup";
 
 // Config dedicada do seed de cenário. Roda pelo runner do Vitest pra reusar o
 // transform do Vite (as actions importam páginas com css/jsx), e popula o banco
@@ -13,7 +14,7 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 600_000,
     env: {
-      DATABASE_URL: "postgres://weave:weave@localhost:5432/weave",
+      DATABASE_URL,
       MASTER_USERNAME: "master",
       MASTER_PASSWORD: "masterpass",
       SESSION_SECRET: "test-session-secret",

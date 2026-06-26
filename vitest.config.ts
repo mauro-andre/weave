@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import { veloPlugin } from "@mauroandre/velojs/vite";
 import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
+import { DATABASE_URL } from "./tests/global-setup";
 
 // Um config só: o Weave é uma aplicação velojs. Os testes rodam pelo motor do
 // velojs (actions + rotas), e os testes existentes do engine (regra de negócio)
@@ -15,7 +16,7 @@ export default defineConfig({
     // corrida nas tabelas de control-plane (weave_users/weave_entities) e DDL.
     fileParallelism: false,
     env: {
-      DATABASE_URL: "postgres://weave:weave@localhost:5432/weave",
+      DATABASE_URL,
       MASTER_USERNAME: "master",
       MASTER_PASSWORD: "masterpass",
       SESSION_SECRET: "test-session-secret",

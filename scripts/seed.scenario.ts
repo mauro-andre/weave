@@ -110,19 +110,20 @@ it(
       if ((i + 1) % 50 === 0) console.log(`users: ${i + 1}/${USERS}`);
     }
 
-    const products: { id: string; name: string; sku: string; price: number }[] = [];
+    const products: { id: string; name: string; sku: string; price: number; categoryId: string }[] = [];
     for (let i = 0; i < PRODUCTS; i++) {
       const name = faker.commerce.productName();
       const sku = `SKU-${pad(i)}`;
       const price = Math.round(Number(faker.commerce.price({ min: 5, max: 800 })));
+      const categoryId = faker.helpers.arrayElement(categoryIds);
       const id = await create("products", {
         name,
         sku,
         price,
         description: faker.commerce.productDescription(),
-        category: { id: faker.helpers.arrayElement(categoryIds) },
+        category: { id: categoryId },
       });
-      products.push({ id, name, sku, price });
+      products.push({ id, name, sku, price, categoryId });
       if ((i + 1) % 100 === 0) console.log(`products: ${i + 1}/${PRODUCTS}`);
     }
 
@@ -130,7 +131,8 @@ it(
       const chosen = faker.helpers.arrayElements(products, faker.number.int({ min: 1, max: 5 }));
       const items = chosen.map((p) => {
         const quantity = faker.number.int({ min: 1, max: 4 });
-        return { name: p.name, sku: p.sku, price: p.price, quantity, lineTotal: p.price * quantity };
+        // snapshot do produto no item: inclui a category espelhada (reference dentro do owned).
+        return { name: p.name, sku: p.sku, price: p.price, quantity, lineTotal: p.price * quantity, category: { id: p.categoryId } };
       });
       const total = items.reduce((s, it) => s + it.lineTotal, 0);
       await create("orders", {

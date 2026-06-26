@@ -1,3 +1,4 @@
+import { DATABASE_URL } from "../global-setup.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import process from "node:process";
 import { parseArgs, runCommand } from "../../app/engine/cli.js";
@@ -21,7 +22,7 @@ describe("parseArgs", () => {
 });
 
 const noDb = process.env.WEAVE_NO_DB === "1";
-const url = process.env.DATABASE_URL ?? "postgres://weave:weave@localhost:5432/weave";
+const url = DATABASE_URL;
 
 const userV1 = defineEntity("weave_cli_users", { name: text().notNull() });
 const userV2 = defineEntity("weave_cli_users", { name: text().notNull(), age: int4() });

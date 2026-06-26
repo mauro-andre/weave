@@ -6,7 +6,7 @@ import { fromIR } from "../ir/from-ir.js";
 import { slug } from "../util/slug.js";
 import { compileFilter, type Filter } from "./filter.js";
 import { compileSort, type SortKey } from "./sort.js";
-import type { EntityIR, FieldIR } from "../ir/types.js";
+import type { FieldIR } from "../ir/types.js";
 
 export interface ObjectPage {
   root: string;
@@ -79,7 +79,7 @@ export async function listObjects(
 
     let docs: Record<string, unknown>[] = [];
     if (ids.length > 0) {
-      const expand = buildExpand(rootIr);
+      const expand = buildExpand(rootIr.fields);
       const opts: Record<string, unknown> = { where: { id: { in: ids } } };
       if (Object.keys(expand).length) opts.expand = expand;
       const found = await find(entities[name], opts);
@@ -187,11 +187,25 @@ export async function deleteObject(name: string, id: string): Promise<void> {
   }
 }
 
-/** Expande toda reference de topo (um nível), pra os dados do alvo aparecerem. */
-function buildExpand(ir: EntityIR): Record<string, true> {
-  const expand: Record<string, true> = {};
-  for (const [name, node] of Object.entries(ir.fields)) {
-    if (node.kind === "reference") expand[name] = true;
+/** Mapa de expand recursivo: references em TODO nível (topo e dentro de owned). */
+type ExpandSpec = { [field: string]: true | ExpandSpec };
+
+/**
+ * Expande references um nível, em qualquer profundidade de `owned`. Reference de
+ * topo vira `{ ref: true }`; reference DENTRO de um owned vira `{ owned: { ref:
+ * true } }` — o engine repassa esse mapa pro filho. Sem isso, uma reference
+ * aninhada (ex.: o `category` de um item espelhado) voltava como `categoryId`
+ * cru, nunca expandida.
+ */
+function buildExpand(fields: Record<string, FieldIR>): ExpandSpec {
+  const expand: ExpandSpec = {};
+  for (const [name, node] of Object.entries(fields)) {
+    if (node.kind === "reference") {
+      expand[name] = true;
+    } else if (node.kind === "owned") {
+      const nested = buildExpand(node.shape ?? {});
+      if (Object.keys(nested).length) expand[name] = nested;
+    }
   }
   return expand;
 }

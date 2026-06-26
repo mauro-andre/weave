@@ -1,9 +1,10 @@
+import { DATABASE_URL } from "../global-setup.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import process from "node:process";
 import { array, defineEntity, owned, reference, text, weave, type Weave } from "../../app/engine/index.js";
 
 const noDb = process.env.WEAVE_NO_DB === "1";
-const url = process.env.DATABASE_URL ?? "postgres://weave:weave@localhost:5432/weave";
+const url = DATABASE_URL;
 
 const tag = defineEntity("weave_nf_tags", { label: text().notNull() });
 const post = defineEntity("weave_nf_posts", {
