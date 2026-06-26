@@ -22,16 +22,7 @@ import {
   type ActualSchema,
   type ChangeSet,
 } from "../ddl/diff.js";
-import type {
-  Entity,
-  ShapeRecord,
-  InferEntity,
-  InferRead,
-  InferInsert,
-  InferSelect,
-  ExpandInput,
-  SelectInput,
-} from "@mauroandre/weave-core";
+import { type Entity, type ShapeRecord, type InferEntity, type InferRead, type InferInsert, type InferSelect, type ExpandInput, type SelectInput, type Projection, type AnyProjection } from "@mauroandre/weave-core";
 import {
   compileFind,
   compileCount,
@@ -42,7 +33,6 @@ import {
 } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
-import type { Projection, AnyProjection } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;

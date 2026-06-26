@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { toIR } from "@mauroandre/weave-core";
-import { fromIR } from "@mauroandre/weave-core";
+import { toIR, fromIR, type EntityIR } from "@mauroandre/weave-core";
 import { defineEntity, text, int4, owned, reference, array } from "../app/engine/index.js";
-import type { EntityIR } from "@mauroandre/weave-core";
 
 // `toIR` é o caminho de IDA (Entity → IR), inverso do `fromIR`. Testes puros, sem
 // banco. Duas direções: (1) round-trip IR→fromIR→toIR reproduz o IR canônico;

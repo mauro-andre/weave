@@ -17,18 +17,7 @@
  * Phase 3.
  */
 
-import { Column, type InferColumn } from "@mauroandre/weave-core";
-import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
-import { Owned, type OwnedShape } from "@mauroandre/weave-core";
-import { Reference } from "@mauroandre/weave-core";
-import {
-  camelToSnake,
-  ownedChildTable,
-  ownedFkColumn,
-  joinTableName,
-  joinTargetFk,
-} from "@mauroandre/weave-core";
-import { singularize } from "@mauroandre/weave-core";
+import { Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 // Field discriminators / extractors (by phantom / kind tag).
 type IsColumn<V> = V extends { _types: unknown } ? true : false;

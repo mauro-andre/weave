@@ -1,12 +1,6 @@
 import { db } from "./db.js";
-import { validateIR } from "@mauroandre/weave-core";
-import { normalizeEntityIR } from "@mauroandre/weave-core";
-import { ensureFieldIds } from "@mauroandre/weave-core";
-import { resolveMirrors } from "@mauroandre/weave-core";
-import { fromIR } from "@mauroandre/weave-core";
-import { diffEntityIR, type EntityDiff } from "@mauroandre/weave-core";
+import { validateIR, normalizeEntityIR, ensureFieldIds, resolveMirrors, fromIR, diffEntityIR, type EntityDiff, type EntityIR } from "@mauroandre/weave-core";
 import { probePlan, applyMigration } from "./migrate.js";
-import type { EntityIR } from "@mauroandre/weave-core";
 
 /** Lista as plantas (IR) guardadas no metastore. */
 export async function listEntities(): Promise<EntityIR[]> {

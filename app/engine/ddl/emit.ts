@@ -17,19 +17,7 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig } from "@mauroandre/weave-core";
-import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
-import { Owned, type OwnedShape } from "@mauroandre/weave-core";
-import { Reference } from "@mauroandre/weave-core";
-import {
-  camelToSnake,
-  indexName,
-  ownedChildTable,
-  ownedFkColumn,
-  joinTableName,
-  joinTargetFk,
-} from "@mauroandre/weave-core";
-import { singularize } from "@mauroandre/weave-core";
+import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 

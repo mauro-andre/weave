@@ -6,12 +6,7 @@
 import type postgres from "postgres";
 import { weave } from "../index.js";
 import { emitChanges } from "../ddl/diff.js";
-import { camelToSnake, ownedChildTable, indexName } from "@mauroandre/weave-core";
-import { singularize } from "@mauroandre/weave-core";
-import { slug } from "@mauroandre/weave-core";
-import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
-import type { EntityDiff, FieldChange } from "@mauroandre/weave-core";
-import type { ColumnIR, EntityIR } from "@mauroandre/weave-core";
+import { camelToSnake, ownedChildTable, indexName, singularize, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;

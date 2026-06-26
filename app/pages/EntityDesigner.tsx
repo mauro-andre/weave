@@ -2,15 +2,10 @@ import type { LoaderArgs } from "@mauroandre/velojs";
 import { useLoader, useParams, useNavigate, touch } from "@mauroandre/velojs/hooks";
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
-import { catalog } from "@mauroandre/weave-core";
-import { ownedChildTable } from "@mauroandre/weave-core";
-import { singularize } from "@mauroandre/weave-core";
-import { slug } from "@mauroandre/weave-core";
-import type { ColumnIR, EntityIR, FieldIR, OwnedIR } from "@mauroandre/weave-core";
+import { catalog, ownedChildTable, singularize, slug, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
 import { action_saveEntity } from "./Entities.js";
 import { ReviewSheet } from "./ReviewSheet.js";
 import { Page } from "../components/Page.js";
-import type { EntityDiff } from "@mauroandre/weave-core";
 import * as btn from "../styles/button.css.js";
 import * as css from "./EntityDesigner.css.js";
 

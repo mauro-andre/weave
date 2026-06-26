@@ -14,19 +14,7 @@
  * `reference` is not handled here (Phase 3).
  */
 
-import { Column } from "@mauroandre/weave-core";
-import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
-import { Owned, type OwnedShape } from "@mauroandre/weave-core";
-import { Reference } from "@mauroandre/weave-core";
-import {
-  camelToSnake,
-  ownedChildTable,
-  ownedFkColumn,
-  joinTableName,
-  joinTargetFk,
-} from "@mauroandre/weave-core";
-import { singularize } from "@mauroandre/weave-core";
-import { uuidv7 } from "@mauroandre/weave-core";
+import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize, uuidv7 } from "@mauroandre/weave-core";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
 export interface Executor {

@@ -1,12 +1,9 @@
 import { weave } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
-import { resolveMirrors } from "@mauroandre/weave-core";
-import { fromIR } from "@mauroandre/weave-core";
-import { slug } from "@mauroandre/weave-core";
+import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
 import { compileFilter, type Filter } from "./filter.js";
 import { compileSort, type SortKey } from "./sort.js";
-import type { FieldIR } from "@mauroandre/weave-core";
 
 export interface ObjectPage {
   root: string;

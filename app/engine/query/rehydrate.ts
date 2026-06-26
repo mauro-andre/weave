@@ -14,11 +14,7 @@
  * already be lossy by the time they reach here — a known v1 limitation.
  */
 
-import { Column } from "@mauroandre/weave-core";
-import type { ShapeRecord } from "@mauroandre/weave-core";
-import { Owned, type OwnedShape } from "@mauroandre/weave-core";
-import { Reference } from "@mauroandre/weave-core";
-import type { TsLabel } from "@mauroandre/weave-core";
+import { Column, type ShapeRecord, Owned, type OwnedShape, Reference, type TsLabel } from "@mauroandre/weave-core";
 
 function rehydrateScalar(label: TsLabel, value: unknown): unknown {
   if (value === null || value === undefined) return value;
