@@ -87,7 +87,7 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
     const all = await w.sdkprod.find();
     expect(all.some((x) => x.name === "Clean Code")).toBe(true);
 
-    const one = await w.sdkprod.findOne({ filter: { path: ["name"], op: "equals", value: "Clean Code" } });
+    const one = await w.sdkprod.findOne({ where: { name: { eq: "Clean Code" } } });
     expect(one?.price).toBe(80);
   });
 
@@ -98,7 +98,7 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
 
     const found = await w.sdkprod.find({
       expand: { category: true },
-      filter: { path: ["name"], op: "equals", value: "Watchmen" },
+      where: { name: { eq: "Watchmen" } },
     });
     const p = found[0]!;
     expect(p.categoryId).toBe(cat.id);
@@ -112,10 +112,25 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
     const cat = await w.sdkcat.create({ name: "Sci-Fi" });
     await w.sdkprod.create({ name: "Dune", price: 40, categoryId: cat.id });
 
-    const found = await w.sdkprod.find({ filter: { path: ["name"], op: "equals", value: "Dune" } });
+    const found = await w.sdkprod.find({ where: { name: { eq: "Dune" } } });
     const p = found[0]! as Record<string, unknown>;
     expect(p["categoryId"]).toBe(cat.id);
     expect("category" in p).toBe(false);
+  });
+
+  it("where com operadores + orderBy tipados (caminho compileFind)", async () => {
+    const w = weave();
+    await w.sdkprod.create({ name: "cheap", price: 5 });
+    await w.sdkprod.create({ name: "mid", price: 50 });
+    await w.sdkprod.create({ name: "pricey", price: 500 });
+
+    const found = await w.sdkprod.find({
+      where: { price: { gte: 50 } },
+      orderBy: { price: "desc" },
+    });
+    const prices = found.map((p) => p.price);
+    expect(found.every((p) => p.price >= 50)).toBe(true);
+    expect(prices).toEqual([...prices].sort((a, b) => b - a)); // ordenado desc
   });
 
   it("update faz merge (campo omitido é preservado)", async () => {

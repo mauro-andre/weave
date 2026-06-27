@@ -5,6 +5,8 @@ import type {
   InferInsert,
   InferRead,
   ExpandInput,
+  WhereInput,
+  OrderByInput,
 } from "@mauroandre/weave-core";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
@@ -25,14 +27,14 @@ export interface ClientOptions<S> {
 }
 
 /**
- * Opções de leitura. `expand` é tipado pela entidade (`ExpandInput`) e **dirige o
- * tipo do retorno** (`InferRead<E, X>`). `filter`/`sort` são pass-through pro JSON
- * da API por enquanto (typed where/orderBy = F2b).
+ * Opções de leitura, todas **tipadas pela entidade**: `where` (`WhereInput`),
+ * `orderBy` (`OrderByInput`), e `expand` (`ExpandInput`) que ainda **dirige o tipo
+ * do retorno** (`InferRead<E, X>`). Mesmo idioma do engine e da GUI.
  */
 export interface FindArgs<E extends Entity<string, ShapeRecord>, X> {
+  where?: WhereInput<E>;
+  orderBy?: OrderByInput<E>;
   expand?: X & ExpandInput<E>;
-  filter?: unknown;
-  sort?: unknown;
   page?: number;
   perPage?: number;
 }
@@ -75,7 +77,7 @@ interface ListResponse {
 }
 
 // Forma frouxa das opções, usada SÓ na implementação (a interface dá os tipos).
-type AnyArgs = { expand?: unknown; filter?: unknown; sort?: unknown; page?: number; perPage?: number };
+type AnyArgs = { where?: unknown; orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
 
 /**
  * Cria o client tipado a partir do schema-as-code. Casca fina sobre a API HTTP do
@@ -123,11 +125,12 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     return json;
   }
 
-  // `expand` vai SEMPRE (default `{}` = não expande nada → tipo determinístico).
+  // `where` e `expand` vão SEMPRE (default `{}`): `where={}` força o caminho
+  // WhereInput na API e o `expand={}` deixa o tipo de retorno determinístico.
   const queryFrom = (o: AnyArgs): Record<string, string | undefined> => ({
     expand: JSON.stringify(o.expand ?? {}),
-    filter: o.filter !== undefined ? JSON.stringify(o.filter) : undefined,
-    sort: o.sort !== undefined ? JSON.stringify(o.sort) : undefined,
+    where: JSON.stringify(o.where ?? {}),
+    orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,
     perPage: o.perPage !== undefined ? String(o.perPage) : undefined,
   });

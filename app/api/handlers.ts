@@ -37,16 +37,18 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const { listObjects } = await import("../engine/control-plane/data.js");
     const page = Math.max(1, Number(query.page) || 1);
     const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
-    const userFilter = parseJson<Filter>(query.filter);
-    const filter = access.god ? userFilter : andFilter(access.rows, userFilter);
-    const res = await listObjects(
-      entity,
-      page,
-      perPage,
-      filter,
-      parseJson<SortKey[]>(query.sort),
-      parseJson<ExpandSpec>(query.expand),
-    );
+    const expand = parseJson<ExpandSpec>(query.expand);
+    const where = parseJson<Record<string, unknown>>(query.where);
+    const orderBy = parseJson<Record<string, unknown>>(query.orderBy);
+    let res;
+    if (access.god && (where != null || orderBy != null)) {
+      // Caminho WhereInput (SDK): linguagem nova, god-mode. Scopes seguem no legado.
+      res = await listObjects(entity, page, perPage, null, null, expand, where, orderBy);
+    } else {
+      const userFilter = parseJson<Filter>(query.filter);
+      const filter = access.god ? userFilter : andFilter(access.rows, userFilter);
+      res = await listObjects(entity, page, perPage, filter, parseJson<SortKey[]>(query.sort), expand);
+    }
     if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
     return c.json(res);
   } catch (e) {

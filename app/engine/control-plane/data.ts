@@ -1,9 +1,14 @@
-import { weave } from "../index.js";
+import { weave, compileCount } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
 import { compileFilter, type Filter } from "./filter.js";
 import { compileSort, type SortKey } from "./sort.js";
+
+// `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API;
+// aqui tratamos como mapas frouxos e repassamos pro engine (compileFind/compileCount).
+type WhereArg = Record<string, unknown>;
+type OrderArg = Record<string, unknown>;
 
 export interface ObjectPage {
   root: string;
@@ -28,6 +33,8 @@ export async function listObjects(
   filter?: Filter | null,
   sort?: SortKey[] | null,
   expand?: ExpandSpec | null,
+  where?: WhereArg | null,
+  orderBy?: OrderArg | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
@@ -48,52 +55,58 @@ export async function listObjects(
   const find = (client as unknown as { find(e: unknown, o: unknown): Promise<Record<string, unknown>[]> }).find.bind(
     client,
   );
+  const count = compileCount as unknown as (e: unknown, w: unknown) => { text: string; params: unknown[] };
   try {
-    let where = "";
-    let params: unknown[] = [];
-    if (filter) {
-      const compiled = compileFilter(name, rootIr.fields, byName, filter);
-      where = `WHERE ${compiled.sql}`;
-      params = compiled.params;
-    }
-
     const p = Math.max(1, Math.floor(page));
     const pp = Math.max(1, Math.floor(perPage));
     const offset = (p - 1) * pp;
+    // expand explícito (do SDK/API) tem precedência; ausente (GUI) = auto 1 nível.
+    const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
+    const entity = entities[name];
+    const page_ = (docs: Record<string, unknown>[], docsQuantity: number): ObjectPage =>
+      jsonSafe({ root: name, shapes, docs, docsQuantity, pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)), currentPage: p });
 
-    const countRows = (await sql.unsafe(`SELECT count(*)::int AS n FROM ${table} root ${where}`, params)) as {
+    // ── Caminho WhereInput (engine compileFind + count) — SDK/god-mode. ──────────
+    if (where != null || orderBy != null) {
+      const w = where ?? {};
+      const countQ = count(entity, w);
+      const countRows = (await sql.unsafe(countQ.text, countQ.params)) as { n: number }[];
+      const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
+      const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
+      if (Object.keys(expandMap).length) opts.expand = expandMap;
+      const docs = await find(entity, opts);
+      return page_(docs, countRows[0]?.n ?? 0);
+    }
+
+    // ── Caminho path-based (legado: GUI + scopes). Aposentado no Estágio 5. ──────
+    let whereSql = "";
+    let params: unknown[] = [];
+    if (filter) {
+      const compiled = compileFilter(name, rootIr.fields, byName, filter);
+      whereSql = `WHERE ${compiled.sql}`;
+      params = compiled.params;
+    }
+    const countRows = (await sql.unsafe(`SELECT count(*)::int AS n FROM ${table} root ${whereSql}`, params)) as {
       n: number;
     }[];
     const docsQuantity = countRows[0]?.n ?? 0;
-
-    // `id` (uuidv7) entra sempre como desempate estável da paginação.
-    const orderBy =
+    const orderSql =
       sort && sort.length > 0 ? `${compileSort(name, rootIr.fields, byName, sort)}, root.id` : "root.id";
     const idRows = (await sql.unsafe(
-      `SELECT id FROM ${table} root ${where} ORDER BY ${orderBy} LIMIT ${pp} OFFSET ${offset}`,
+      `SELECT id FROM ${table} root ${whereSql} ORDER BY ${orderSql} LIMIT ${pp} OFFSET ${offset}`,
       params,
     )) as { id: string }[];
     const ids = idRows.map((r) => r.id);
 
     let docs: Record<string, unknown>[] = [];
     if (ids.length > 0) {
-      // expand explícito (do SDK/API) tem precedência; ausente (GUI) = auto 1 nível.
-      const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
       const opts: Record<string, unknown> = { where: { id: { in: ids } } };
       if (Object.keys(expandMap).length) opts.expand = expandMap;
-      const found = await find(entities[name], opts);
+      const found = await find(entity, opts);
       const byId = new Map(found.map((d) => [d.id as string, d]));
       docs = ids.map((id) => byId.get(id)).filter((d): d is Record<string, unknown> => !!d);
     }
-
-    return jsonSafe({
-      root: name,
-      shapes,
-      docs,
-      docsQuantity,
-      pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)),
-      currentPage: p,
-    });
+    return page_(docs, docsQuantity);
   } finally {
     await client.close();
   }
