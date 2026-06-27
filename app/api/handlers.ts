@@ -1,14 +1,14 @@
 import type { EndpointHandlerArgs } from "@mauroandre/velojs";
 import type { Context } from "hono";
-import { resolveAccess, andFilter, prune, ScopeError } from "./scope.js";
-import type { Filter } from "../engine/control-plane/filter.js";
-import type { SortKey } from "../engine/control-plane/sort.js";
+import { resolveAccess, andWhere, prune, ScopeError } from "./scope.js";
 import type { ExpandSpec } from "../engine/control-plane/data.js";
 
 // API wildcard de dados. Casca fina de transporte sobre o control-plane (mesmo
 // contrato JSON da GUI). Cada handler resolve o ACESSO (god, ou um scope vindo do
-// header `x-weave-scope`): checa o verbo, AND-a o filtro de linhas e poda a
-// projeção. Sem `x-weave-scope` = god (a API key é o segredo confiável).
+// header `x-weave-scope`): checa o verbo, AND-a o filtro de linhas (WhereInput) e
+// poda a projeção. Sem `x-weave-scope` = god (a API key é o segredo confiável).
+
+type WNode = Record<string, unknown>;
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "Request failed.");
 const statusFor = (m: string) => (/unknown entity|not found/i.test(m) ? 404 : 400);
@@ -28,7 +28,7 @@ function parseJson<T>(raw: string | undefined): T | null {
   }
 }
 
-const idEquals = (id: string) => ({ path: ["id"], op: "equals", value: id });
+const idEquals = (id: string): WNode => ({ id: { eq: id } });
 
 export async function apiList({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
@@ -38,17 +38,10 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const page = Math.max(1, Number(query.page) || 1);
     const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
     const expand = parseJson<ExpandSpec>(query.expand);
-    const where = parseJson<Record<string, unknown>>(query.where);
-    const orderBy = parseJson<Record<string, unknown>>(query.orderBy);
-    let res;
-    if (access.god && (where != null || orderBy != null)) {
-      // Caminho WhereInput (SDK): linguagem nova, god-mode. Scopes seguem no legado.
-      res = await listObjects(entity, page, perPage, null, null, expand, where, orderBy);
-    } else {
-      const userFilter = parseJson<Filter>(query.filter);
-      const filter = access.god ? userFilter : andFilter(access.rows, userFilter);
-      res = await listObjects(entity, page, perPage, filter, parseJson<SortKey[]>(query.sort), expand);
-    }
+    const orderBy = parseJson<WNode>(query.orderBy);
+    const userWhere = parseJson<WNode>(query.where);
+    const where = access.god ? userWhere : andWhere(access.rows, userWhere);
+    const res = await listObjects(entity, page, perPage, where, orderBy, expand);
     if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
     return c.json(res);
   } catch (e) {
@@ -61,8 +54,8 @@ export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Prom
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "read");
     const { listObjects } = await import("../engine/control-plane/data.js");
-    const filter = access.god ? idEquals(params.id ?? "") : andFilter(access.rows, idEquals(params.id ?? ""));
-    const obj = (await listObjects(entity, 1, 1, filter, null, parseJson<ExpandSpec>(query.expand))).docs[0];
+    const where = andWhere(access.rows, idEquals(params.id ?? ""));
+    const obj = (await listObjects(entity, 1, 1, where, null, parseJson<ExpandSpec>(query.expand))).docs[0];
     if (!obj) return c.json({ error: "Not found." }, 404);
     return c.json(access.god ? obj : prune(obj, access.projection));
   } catch (e) {
@@ -88,8 +81,8 @@ export async function apiUpdate({ c, params }: EndpointHandlerArgs): Promise<Res
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "update");
     const { listObjects, saveObject } = await import("../engine/control-plane/data.js");
-    const filter = access.god ? idEquals(params.id ?? "") : andFilter(access.rows, idEquals(params.id ?? ""));
-    const existing = (await listObjects(entity, 1, 1, filter)).docs[0];
+    const where = andWhere(access.rows, idEquals(params.id ?? ""));
+    const existing = (await listObjects(entity, 1, 1, where)).docs[0];
     if (!existing) return c.json({ error: "Not found." }, 404);
     const body = (await c.req.json()) as Record<string, unknown>;
     // PATCH = merge: campos omitidos vêm do objeto atual (owned/refs preservados).
@@ -105,8 +98,8 @@ export async function apiDelete({ c, params }: EndpointHandlerArgs): Promise<Res
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "delete");
     const { listObjects, deleteObject } = await import("../engine/control-plane/data.js");
-    const filter = access.god ? idEquals(params.id ?? "") : andFilter(access.rows, idEquals(params.id ?? ""));
-    const existing = (await listObjects(entity, 1, 1, filter)).docs[0];
+    const where = andWhere(access.rows, idEquals(params.id ?? ""));
+    const existing = (await listObjects(entity, 1, 1, where)).docs[0];
     if (!existing) return c.json({ error: "Not found." }, 404);
     await deleteObject(entity, params.id ?? "");
     return c.json({ ok: true });

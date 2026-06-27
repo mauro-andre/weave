@@ -82,8 +82,8 @@ describe("API REST + API keys", () => {
   it("filtro via query string", async () => {
     await app.post("/api/widget", { headers: KEY(), body: { name: "Beta", qty: 1 } });
     await app.post("/api/widget", { headers: KEY(), body: { name: "Gamma", qty: 2 } });
-    const filter = JSON.stringify({ path: ["name"], op: "contains", value: "amm" });
-    const res = await app.get("/api/widget", { headers: KEY(), query: { filter } });
+    const where = JSON.stringify({ name: { ilike: "%amm%" } });
+    const res = await app.get("/api/widget", { headers: KEY(), query: { where } });
     expect((await res.json()).docs.map((d: { name: string }) => d.name)).toEqual(["Gamma"]);
   });
 

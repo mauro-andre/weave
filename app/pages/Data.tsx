@@ -41,7 +41,7 @@ export const loader = async ({ query }: LoaderArgs): Promise<DataLoaded> => {
   let page: ObjectPage | null = null;
   if (selected) {
     const { listObjects } = await import("../engine/control-plane/data.js");
-    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, null, null, undefined, where ?? {}, orderBy);
+    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, where ?? {}, orderBy);
   }
   return { entities, selected, page, where, orderBy };
 };
@@ -67,7 +67,7 @@ export const action_listObjects = async ({
 }: ActionArgs<{ name: string; page?: number; where?: WNode | null; orderBy?: WNode | null }>) => {
   const { listObjects } = await import("../engine/control-plane/data.js");
   try {
-    return await listObjects(body.name, body.page ?? 1, 20, null, null, undefined, body.where ?? {}, body.orderBy ?? null);
+    return await listObjects(body.name, body.page ?? 1, 20, body.where ?? {}, body.orderBy ?? null);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to load objects." };
   }

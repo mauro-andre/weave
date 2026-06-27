@@ -23,9 +23,12 @@ interface ResolvedProjection {
   paths: string[][]; // já em NOMES
 }
 
+/** Fragmento WhereInput (frouxo) — o filtro de linhas do scope resolvido. */
+type WNode = Record<string, unknown>;
+
 export interface Access {
   god: boolean;
-  rows: Filter | null; // resolvido: nomes + params preenchidos
+  rows: WNode | null; // WhereInput resolvido (nomes + params preenchidos)
   projection: ResolvedProjection | null;
 }
 
@@ -54,11 +57,12 @@ export async function resolveAccess(c: Context, entity: string, verb: Verb): Pro
   return { god: false, rows, projection };
 }
 
-/** Combina o filtro do scope com o do usuário (AND). */
-export function andFilter(scopeRows: Filter | null, userFilter: Filter | null): Filter | null {
-  if (!scopeRows) return userFilter;
-  if (!userFilter) return scopeRows;
-  return { and: [scopeRows, userFilter] };
+/** Combina o WhereInput do scope com o do usuário (AND). `{}` do usuário = sem filtro. */
+export function andWhere(scopeRows: WNode | null, userWhere: WNode | null): WNode | null {
+  const u = userWhere && Object.keys(userWhere).length ? userWhere : null;
+  if (!scopeRows) return u;
+  if (!u) return scopeRows;
+  return { and: [scopeRows, u] };
 }
 
 /** Poda um objeto pela projeção (recursivo em owned/reference). `id` sempre fica. */
@@ -86,12 +90,15 @@ function parseParams(raw: string | undefined): Record<string, unknown> {
   }
 }
 
+// Resolve o filtro de linhas armazenado (por-id, rename-proof) num **fragmento
+// WhereInput** (por-nome): ids→nomes, params preenchidos, e o caminho path-based
+// vira objeto aninhado com `some` em to-many (mesmo idioma do engine/GUI/SDK).
 function resolveFilter(
   rootEntity: string,
   byName: Map<string, EntityIR>,
   node: Filter,
   params: Record<string, unknown>,
-): Filter {
+): WNode {
   if ("and" in node) return { and: node.and.map((n) => resolveFilter(rootEntity, byName, n, params)) };
   if ("or" in node) return { or: node.or.map((n) => resolveFilter(rootEntity, byName, n, params)) };
 
@@ -103,7 +110,73 @@ function resolveFilter(
     if (!(name in params)) throw new ScopeError(`Missing param '${name}' for this scope.`, 400);
     value = params[name];
   }
-  return { path: names, op: node.op, value };
+  return conditionToWhere(rootEntity, byName, names, node.op, value);
+}
+
+/** Caminho de nomes + op + valor → WhereInput aninhado (`some` em to-many). */
+function conditionToWhere(
+  rootEntity: string,
+  byName: Map<string, EntityIR>,
+  names: string[],
+  op: string,
+  value: unknown,
+): WNode {
+  const build = (fields: Record<string, FieldIR>, idx: number): WNode => {
+    const seg = names[idx]!;
+    const node = fields[seg];
+    if (idx === names.length - 1) {
+      const sc = leafOp(op, value);
+      const isArray = node?.kind === "column" && node.array === true;
+      return { [seg]: isArray && op !== "isEmpty" ? { some: sc } : sc };
+    }
+    let nextFields: Record<string, FieldIR> = {};
+    let toMany = false;
+    if (node?.kind === "owned") {
+      nextFields = node.shape ?? {};
+      toMany = node.array === true;
+    } else if (node?.kind === "reference") {
+      nextFields = byName.get(node.target)?.fields ?? {};
+      toMany = node.cardinality === "many";
+    }
+    const inner = build(nextFields, idx + 1);
+    return { [seg]: toMany ? { some: inner } : inner };
+  };
+  return build(byName.get(rootEntity)?.fields ?? {}, 0);
+}
+
+/** Operador armazenado → objeto de operador WhereInput. */
+function leafOp(op: string, value: unknown): WNode {
+  switch (op) {
+    case "contains":
+      return { ilike: `%${value}%` };
+    case "startsWith":
+      return { ilike: `${value}%` };
+    case "equals":
+      return { eq: value };
+    case "notEquals":
+      return { ne: value };
+    case "gt":
+    case "gte":
+    case "lt":
+    case "lte":
+      return { [op]: value };
+    case "in":
+      return { in: value };
+    case "on":
+      return { eq: value };
+    case "before":
+      return { lt: value };
+    case "after":
+      return { gt: value };
+    case "isTrue":
+      return { eq: true };
+    case "isFalse":
+      return { eq: false };
+    case "isEmpty":
+      return { isNull: true };
+    default:
+      return { eq: value };
+  }
 }
 
 function resolvePaths(rootEntity: string, byName: Map<string, EntityIR>, idPaths: string[][]): string[][] {

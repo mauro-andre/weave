@@ -2,10 +2,8 @@ import { weave, compileCount } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
-import { compileFilter, type Filter } from "./filter.js";
-import { compileSort, type SortKey } from "./sort.js";
 
-// `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API;
+// `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API/GUI;
 // aqui tratamos como mapas frouxos e repassamos pro engine (compileFind/compileCount).
 type WhereArg = Record<string, unknown>;
 type OrderArg = Record<string, unknown>;
@@ -30,23 +28,19 @@ export async function listObjects(
   name: string,
   page = 1,
   perPage = 20,
-  filter?: Filter | null,
-  sort?: SortKey[] | null,
-  expand?: ExpandSpec | null,
   where?: WhereArg | null,
   orderBy?: OrderArg | null,
+  expand?: ExpandSpec | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
 
   const rawByName = new Map(irs.map((e) => [e.name, e] as const));
   const resolved = irs.map((e) => resolveMirrors(e, rawByName));
-  const byName = new Map(resolved.map((e) => [e.name, e] as const)); // resolvido, p/ o filtro
   const entities = fromIR(resolved);
   const shapes: Record<string, Record<string, FieldIR>> = {};
   for (const r of resolved) shapes[r.name] = r.fields;
-  const rootIr = byName.get(name)!;
-  const table = slug(name);
+  const rootIr = resolved.find((e) => e.name === name)!;
 
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
@@ -60,53 +54,28 @@ export async function listObjects(
     const p = Math.max(1, Math.floor(page));
     const pp = Math.max(1, Math.floor(perPage));
     const offset = (p - 1) * pp;
-    // expand explícito (do SDK/API) tem precedência; ausente (GUI) = auto 1 nível.
+    // expand explícito (SDK/API) tem precedência; ausente (GUI sem param) = auto 1 nível.
     const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
     const entity = entities[name];
-    const page_ = (docs: Record<string, unknown>[], docsQuantity: number): ObjectPage =>
-      jsonSafe({ root: name, shapes, docs, docsQuantity, pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)), currentPage: p });
+    const w = where ?? {};
 
-    // ── Caminho WhereInput (engine compileFind + count) — SDK/god-mode. ──────────
-    if (where != null || orderBy != null) {
-      const w = where ?? {};
-      const countQ = count(entity, w);
-      const countRows = (await sql.unsafe(countQ.text, countQ.params)) as { n: number }[];
-      const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
-      const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
-      if (Object.keys(expandMap).length) opts.expand = expandMap;
-      const docs = await find(entity, opts);
-      return page_(docs, countRows[0]?.n ?? 0);
-    }
-
-    // ── Caminho path-based (legado: GUI + scopes). Aposentado no Estágio 5. ──────
-    let whereSql = "";
-    let params: unknown[] = [];
-    if (filter) {
-      const compiled = compileFilter(name, rootIr.fields, byName, filter);
-      whereSql = `WHERE ${compiled.sql}`;
-      params = compiled.params;
-    }
-    const countRows = (await sql.unsafe(`SELECT count(*)::int AS n FROM ${table} root ${whereSql}`, params)) as {
-      n: number;
-    }[];
+    const countQ = count(entity, w);
+    const countRows = (await sql.unsafe(countQ.text, countQ.params)) as { n: number }[];
     const docsQuantity = countRows[0]?.n ?? 0;
-    const orderSql =
-      sort && sort.length > 0 ? `${compileSort(name, rootIr.fields, byName, sort)}, root.id` : "root.id";
-    const idRows = (await sql.unsafe(
-      `SELECT id FROM ${table} root ${whereSql} ORDER BY ${orderSql} LIMIT ${pp} OFFSET ${offset}`,
-      params,
-    )) as { id: string }[];
-    const ids = idRows.map((r) => r.id);
 
-    let docs: Record<string, unknown>[] = [];
-    if (ids.length > 0) {
-      const opts: Record<string, unknown> = { where: { id: { in: ids } } };
-      if (Object.keys(expandMap).length) opts.expand = expandMap;
-      const found = await find(entity, opts);
-      const byId = new Map(found.map((d) => [d.id as string, d]));
-      docs = ids.map((id) => byId.get(id)).filter((d): d is Record<string, unknown> => !!d);
-    }
-    return page_(docs, docsQuantity);
+    const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
+    const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
+    if (Object.keys(expandMap).length) opts.expand = expandMap;
+    const docs = await find(entity, opts);
+
+    return jsonSafe({
+      root: name,
+      shapes,
+      docs,
+      docsQuantity,
+      pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)),
+      currentPage: p,
+    });
   } finally {
     await client.close();
   }
@@ -176,7 +145,7 @@ function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unkn
 
 /** Lê um objeto pela id (owned aninhado + references expandidas), ou null. */
 export async function getObject(name: string, id: string): Promise<Record<string, unknown> | null> {
-  const page = await listObjects(name, 1, 1, { path: ["id"], op: "equals", value: id });
+  const page = await listObjects(name, 1, 1, { id: { eq: id } });
   return page.docs[0] ?? null;
 }
 
