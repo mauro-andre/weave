@@ -24,6 +24,10 @@ export interface ClientOptions<S> {
   schema: S;
   /** Transporte. Default: `globalThis.fetch`. Nos testes: `app.hono.fetch`. */
   fetch?: FetchLike;
+  /** @internal — scope ativo (`x-weave-scope`), definido via `weave.as(...)`. */
+  scope?: string;
+  /** @internal — params do scope (`x-weave-params`). */
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -64,9 +68,12 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   delete(id: string): Promise<void>;
 }
 
-/** O client completo: uma propriedade por entidade do schema. */
+/** O client completo: uma propriedade por entidade do schema + `as` (scope). */
 export type WeaveClient<S extends Record<string, Entity<string, ShapeRecord>>> = {
   [K in keyof S]: EntityClient<S[K]>;
+} & {
+  /** Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. */
+  as(scope: string, params?: Record<string, unknown>): WeaveClient<S>;
 };
 
 interface ListResponse {
@@ -106,6 +113,10 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     }
 
     const headers: Record<string, string> = { "x-api-key": options.key };
+    if (options.scope) {
+      headers["x-weave-scope"] = options.scope;
+      if (options.params) headers["x-weave-params"] = JSON.stringify(options.params);
+    }
     const init: RequestInit = { method, headers };
     if (opts.body !== undefined) {
       headers["content-type"] = "application/json";
@@ -179,6 +190,10 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
       },
     };
   }
+
+  // `weave.as(scope, params)` → novo client com os headers de scope em toda req.
+  client["as"] = (scope: string, params?: Record<string, unknown>) =>
+    createClient({ ...options, scope, ...(params ? { params } : {}) });
 
   return client as unknown as WeaveClient<S>;
 }
