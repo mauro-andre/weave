@@ -17,112 +17,8 @@
  * Phase 3.
  */
 
-import { Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
-// Field discriminators / extractors (by phantom / kind tag).
-type IsColumn<V> = V extends { _types: unknown } ? true : false;
-type IsOwned<V> = V extends { kind: "owned" } ? true : false;
-type IsRefOne<V> = V extends { _phantom: { cardinality: "one" } } ? true : false;
-type IsRefMany<V> = V extends { _phantom: { cardinality: "many" } } ? true : false;
-type ColumnData<V> = V extends { _types: { data: infer D } } ? D : never;
-type RefTargetShape<V> = V extends { _phantom: { target: Entity<string, infer TS> } } ? TS : never;
-
-/** Recursion-depth budget for nested filters (cyclic/deep guard). */
-type WBudget = [unknown, unknown, unknown, unknown, unknown, unknown];
-type WDrop<D extends unknown[]> = D extends [unknown, ...infer R] ? R : [];
-
-/** String-only operators, added when the column's data type is `string`. */
-type StringOps = { like?: string; ilike?: string };
-
-/** Comparison/membership operators for a scalar column of type `T`. */
-type ScalarOps<T> = {
-  eq?: T | null; // null → IS NULL
-  ne?: T | null; // null → IS NOT NULL
-  gt?: T;
-  gte?: T;
-  lt?: T;
-  lte?: T;
-  in?: T[];
-  notIn?: T[];
-  isNull?: boolean;
-} & ([T] extends [string] ? StringOps : {});
-
-/** A scalar column filter: a bare value (eq shorthand) or an operator object. */
-export type Filter<T> = T | ScalarOps<T>;
-
-/** Operators for a scalar-array column (`text[]`, …). */
-export type ArrayFilter<E> = {
-  has?: E;
-  hasSome?: E[];
-  hasEvery?: E[];
-  isEmpty?: boolean;
-};
-
-/** A column's filter — array operators for `type[]`, scalar operators otherwise. */
-type ColumnFilter<V> = ColumnData<V> extends (infer E)[] ? ArrayFilter<E> : Filter<ColumnData<V>>;
-
-/** Quantifiers over a to-many relationship (owned 1:N / reference N:N). */
-type Quantifier<W> = { some?: W; every?: W; none?: W };
-
-type WhereShape<TShape, D extends unknown[] = WBudget> = {
-  id?: Filter<string>;
-  and?: WhereShape<TShape, D>[];
-  or?: WhereShape<TShape, D>[];
-  not?: WhereShape<TShape, D>;
-} & (D extends []
-  ? {}
-  : {
-      // scalar / array columns
-      [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: ColumnFilter<TShape[K]>;
-    } & {
-      // owned 1:1 → nested filter; owned 1:N → quantifier
-      [K in keyof TShape as IsOwned<TShape[K]> extends true ? K : never]?: TShape[K] extends Owned<
-        infer S,
-        infer C
-      >
-        ? C extends "many"
-          ? Quantifier<WhereShape<S, WDrop<D>>>
-          : WhereShape<S, WDrop<D>>
-        : never;
-    } & {
-      // reference N:1 → nested filter on the target
-      [K in keyof TShape as IsRefOne<TShape[K]> extends true ? K : never]?: WhereShape<
-        RefTargetShape<TShape[K]>,
-        WDrop<D>
-      >;
-    } & {
-      // reference N:1 → also filter by the FK directly
-      [K in keyof TShape as IsRefOne<TShape[K]> extends true ? `${K & string}Id` : never]?: Filter<string>;
-    } & {
-      // reference N:N → quantifier over linked targets
-      [K in keyof TShape as IsRefMany<TShape[K]> extends true ? K : never]?: Quantifier<
-        WhereShape<RefTargetShape<TShape[K]>, WDrop<D>>
-      >;
-    });
-
-/**
- * Filter over an entity. Scalar operators (`gt`/`in`/`ilike`/…), array operators
- * (`has`/`hasSome`/…), logical `and`/`or`/`not`, and **nested** filtering over
- * `owned`/`reference` with quantifiers `some`/`every`/`none` — compiled to
- * indexed `EXISTS` subqueries.
- */
-export type WhereInput<E> = E extends Entity<string, infer TShape> ? WhereShape<TShape> : never;
-
-/** Sort direction. */
-export type SortDir = "asc" | "desc";
-
-type OrderByShape<TShape> = {
-  id?: SortDir;
-  createdAt?: SortDir;
-  updatedAt?: SortDir;
-} & {
-  [K in keyof TShape as IsColumn<TShape[K]> extends true ? K : never]?: SortDir;
-};
-
-/** Order by the entity's `id`, timestamps, or root scalar columns. */
-export type OrderByInput<E> = E extends Entity<string, infer TShape>
-  ? OrderByShape<TShape>
-  : never;
 
 export interface FindOptions<E> {
   where?: WhereInput<E>;
@@ -386,6 +282,15 @@ function compileWhere(
       conds.push(compileFieldFilter(`${table}.id`, val, params));
       continue;
     }
+    // Campos gerenciados (não estão no shape, mas existem em toda tabela).
+    if (key === "createdAt") {
+      conds.push(compileFieldFilter(`${table}.created_at`, val, params));
+      continue;
+    }
+    if (key === "updatedAt") {
+      conds.push(compileFieldFilter(`${table}.updated_at`, val, params));
+      continue;
+    }
 
     const field = shape[key];
     if (field instanceof Column) {
@@ -446,20 +351,73 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
 
   const lines = [`SELECT ${obj} AS data`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
-  lines.push(`ORDER BY ${compileOrderBy(table, options.orderBy)}`);
+  lines.push(`ORDER BY ${compileOrderBy(table, singularize(table), entity.columns, options.orderBy)}`);
   if (options.limit != null) lines.push(`LIMIT ${bind(params, options.limit)}`);
   if (options.offset != null) lines.push(`OFFSET ${bind(params, options.offset)}`);
 
   return { text: lines.join("\n"), params };
 }
 
-/** Render the `ORDER BY` body (defaults to `created_at` when none given). */
-function compileOrderBy(table: string, orderBy: Record<string, unknown> | undefined): string {
+/**
+ * Render the `ORDER BY` body (defaults to `created_at` when none given).
+ * Suporta caminho ANINHADO (owned 1:1 / reference N:1) via subquery correlata:
+ * `{ buyer: { name: "asc" } }` → `(SELECT buyer.name FROM buyer WHERE buyer.id =
+ * root.buyer_id LIMIT 1) ASC`. A direção fica na FOLHA; o aninhamento é single-branch.
+ */
+function compileOrderBy(
+  table: string,
+  prefix: string,
+  shape: ShapeRecord | OwnedShape,
+  orderBy: Record<string, unknown> | undefined,
+): string {
   const entries = Object.entries(orderBy ?? {});
   if (entries.length === 0) return `${table}.created_at`;
   return entries
-    .map(([col, dir]) => `${table}.${camelToSnake(col)} ${dir === "desc" ? "DESC" : "ASC"}`)
+    .map(([key, val]) => {
+      const { expr, dir } = orderScalar(table, prefix, shape, key, val);
+      return `${expr} ${dir}`;
+    })
     .join(", ");
+}
+
+/** Resolve um termo de ordenação (single-branch) numa expressão escalar + direção. */
+function orderScalar(
+  table: string,
+  prefix: string,
+  shape: ShapeRecord | OwnedShape,
+  key: string,
+  val: unknown,
+): { expr: string; dir: "ASC" | "DESC" } {
+  const dir = (): "ASC" | "DESC" => (val === "desc" ? "DESC" : "ASC");
+  if (key === "id") return { expr: `${table}.id`, dir: dir() };
+  if (key === "createdAt") return { expr: `${table}.created_at`, dir: dir() };
+  if (key === "updatedAt") return { expr: `${table}.updated_at`, dir: dir() };
+
+  const field = shape[key];
+  if (field instanceof Column) return { expr: `${table}.${camelToSnake(key)}`, dir: dir() };
+
+  // Aninhado: o valor é um sub-orderby `{ <subKey>: ... }` (single-branch).
+  const [subKey, subVal] = Object.entries((val ?? {}) as Record<string, unknown>)[0] ?? [];
+  if (subKey === undefined) throw new Error(`weave: empty orderBy branch at '${key}'.`);
+
+  if (field instanceof Reference && field.cardinality === "one") {
+    const t = field.target.name;
+    const inner = orderScalar(t, singularize(t), field.target.columns, subKey, subVal);
+    return {
+      expr: `(SELECT ${inner.expr} FROM ${t} WHERE ${t}.id = ${table}.${camelToSnake(key)}_id LIMIT 1)`,
+      dir: inner.dir,
+    };
+  }
+  if (field instanceof Owned && field.cardinality === "one") {
+    const childTable = ownedChildTable(prefix, camelToSnake(key), field.options.table);
+    const fk = ownedFkColumn(prefix);
+    const inner = orderScalar(childTable, childTable, field.shape, subKey, subVal);
+    return {
+      expr: `(SELECT ${inner.expr} FROM ${childTable} WHERE ${childTable}.${fk} = ${table}.id LIMIT 1)`,
+      dir: inner.dir,
+    };
+  }
+  throw new Error(`weave: cannot order by '${key}'.`);
 }
 
 /** Compile a `count` into parameterized SQL. */

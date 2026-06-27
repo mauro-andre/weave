@@ -22,13 +22,11 @@ import {
   type ActualSchema,
   type ChangeSet,
 } from "../ddl/diff.js";
-import { type Entity, type ShapeRecord, type InferEntity, type InferRead, type InferInsert, type InferSelect, type ExpandInput, type SelectInput, type Projection, type AnyProjection } from "@mauroandre/weave-core";
+import { type Entity, type ShapeRecord, type InferEntity, type InferRead, type InferInsert, type InferSelect, type ExpandInput, type SelectInput, type Projection, type AnyProjection, type WhereInput, type OrderByInput } from "@mauroandre/weave-core";
 import {
   compileFind,
   compileCount,
   type FindOptions,
-  type WhereInput,
-  type OrderByInput,
   type SelectMap,
 } from "../query/read.js";
 import { rehydrate } from "../query/rehydrate.js";

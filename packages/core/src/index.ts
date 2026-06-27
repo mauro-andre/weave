@@ -5,6 +5,15 @@
 // ── Schema (builders + tipos Infer) ──────────────────────────────────────────
 export * from "./schema/index.js";
 
+// ── Linguagem de query tipada (filtro + ordenação) — compartilhada engine/GUI/SDK ──
+export {
+  type WhereInput,
+  type OrderByInput,
+  type SortDir,
+  type Filter,
+  type ArrayFilter,
+} from "./schema/where.js";
+
 // ── IR (planta serializável + serialização/validação) ────────────────────────
 export * from "./ir/types.js";
 export { toIR } from "./ir/to-ir.js";
