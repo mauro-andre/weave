@@ -12,6 +12,10 @@ export type {
   FetchLike,
 } from "./client.js";
 export type { Infer, InferUpdate } from "./types.js";
+export { pushSchema } from "./push.js";
+export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";
+export { defineConfig } from "./config.js";
+export type { WeaveConfig } from "./config.js";
 export {
   WeaveError,
   WeaveAuthError,
