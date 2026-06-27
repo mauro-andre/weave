@@ -16,6 +16,10 @@ export { pushSchema } from "./push.js";
 export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";
 export { defineConfig } from "./config.js";
 export type { WeaveConfig } from "./config.js";
+export { defineScope, pushScopes } from "./scope.js";
+export type { ScopeDef, ScopeEntityRule, Verb, PushScopesOptions } from "./scope.js";
+export { irToSource, genClientSource, pullSchema } from "./gen.js";
+export type { PullOptions } from "./gen.js";
 export {
   WeaveError,
   WeaveAuthError,

@@ -2,10 +2,18 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverSchema, type ModuleLoader } from "./discover.js";
 import { pushSchema } from "./push.js";
+import { pullSchema, genClientSource } from "./gen.js";
 
 // Barrel node-only (`@mauroandre/weave-sdk/cli`): a descoberta usa `node:fs`, então
 // fica fora do barrel principal (que é portável p/ browser).
 export { discoverSchema, type ModuleLoader } from "./discover.js";
+
+/** Escreve um arquivo (criando dirs). Injetável pra teste. */
+async function defaultWrite(file: string, content: string): Promise<void> {
+  const fs = await import("node:fs/promises");
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, content, "utf8");
+}
 import type { WeaveConfig } from "./config.js";
 import type { FetchLike } from "./client.js";
 
@@ -55,6 +63,8 @@ export interface CliDeps {
   load?: ModuleLoader;
   /** Transporte HTTP. Default: globalThis.fetch. */
   fetch?: FetchLike;
+  /** Escreve arquivo (pull/gen). Default: fs. */
+  write?: (file: string, content: string) => Promise<void>;
   cwd?: string;
   log?: (msg: string) => void;
 }
@@ -69,8 +79,8 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
   const load: ModuleLoader = deps.load ?? ((p) => import(pathToFileURL(p).href));
   const cwd = deps.cwd ?? process.cwd();
 
-  if (args.command !== "push") {
-    log(`Unknown command '${args.command}'. Try: weave push`);
+  if (!["push", "pull", "gen"].includes(args.command)) {
+    log(`Unknown command '${args.command}'. Try: weave push | pull | gen`);
     return 1;
   }
 
@@ -80,18 +90,37 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
     log("Invalid weave.config.ts — needs { entities, url, key }.");
     return 1;
   }
-
   const entitiesDir = path.resolve(path.dirname(configPath), config.entities);
+  const net = { url: config.url, key: config.key, ...(deps.fetch ? { fetch: deps.fetch } : {}) };
+  const write = deps.write ?? defaultWrite;
+
+  // pull: puxa os IRs remotos → escreve os arquivos de entidade (codegen).
+  if (args.command === "pull") {
+    const { files, names } = await pullSchema(net);
+    for (const [file, content] of Object.entries(files)) await write(path.join(entitiesDir, file), content);
+    log(`✓ pulled ${names.length} ${names.length === 1 ? "entity" : "entities"} → ${config.entities}`);
+    return 0;
+  }
+
+  // push/gen descobrem as entidades locais.
   const schema = await discoverSchema(entitiesDir, load);
   if (Object.keys(schema).length === 0) {
     log(`No entities found in ${config.entities}.`);
     return 1;
   }
 
+  // gen: gera o barrel do client tipado a partir das entidades locais.
+  if (args.command === "gen") {
+    const names = Object.keys(schema);
+    const out = path.resolve(entitiesDir, "../_generated/client.ts");
+    await write(out, genClientSource(names));
+    log(`✓ generated client (${names.length} ${names.length === 1 ? "entity" : "entities"}) → _generated/client.ts`);
+    return 0;
+  }
+
+  // push.
   const res = await pushSchema(schema, {
-    url: config.url,
-    key: config.key,
-    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...net,
     confirm: args.confirm,
     fill: args.fill,
     renames: args.renames,
