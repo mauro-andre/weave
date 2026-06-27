@@ -10,6 +10,16 @@ transactions, and the Postgres optimizer for free — you just never see SQL.
 
 > **Status:** pre-release / alpha. The API may still change.
 
+**Two ways to use it.** *Embedded* — your app talks to Postgres directly via
+`weave({ ... })` (most of the docs below). Or as a **client of a Weave server**
+over HTTP, thinking only in objects, never in HTTP or JSON — that's the
+**[SDK](#the-sdk--weave-over-http)** (`@mauroandre/weave-sdk`). The schema-as-code is
+the same either way.
+
+The repo is a monorepo: **`@mauroandre/weave-core`** (pure schema + IR + type
+inference, zero runtime deps), **`@mauroandre/weave`** (`core` + Postgres — the
+embedded library), and **`@mauroandre/weave-sdk`** (`core` + the HTTP client).
+
 ## Why
 
 The object–relational impedance mismatch forces a bad trade:
@@ -143,10 +153,18 @@ await db.find(post, {
 
 - **Operators:** `eq` (bare value), `ne`, `gt`/`gte`/`lt`/`lte`, `in`/`notIn`,
   `like`/`ilike`, `isNull`.
-- **Array columns:** `has`, `hasSome`, `hasEvery`, `isEmpty`.
+- **Array columns:** `has`, `hasSome`, `hasEvery`, `isEmpty`, and `some` — *any
+  element matches scalar ops*, e.g. `{ scores: { some: { gte: 5 } } }`.
 - **Quantifiers** (1:N owned, N:N reference): `some` / `every` / `none`.
 - **Logic:** `and` / `or` / `not`, nestable at any level.
 - Filtering by a reference's raw FK: `{ authorId: "..." }`.
+- **Managed fields:** filter by `id`, `createdAt`, `updatedAt`. `orderBy` accepts
+  those plus **nested paths** (`{ author: { name: "asc" } }`, compiled to a
+  correlated subquery).
+
+This `where`/`orderBy` is a single, shared query language (`WhereInput`/
+`OrderByInput`, in `@mauroandre/weave-core`): the same object you build by clicking
+in the GUI, write in the SDK, and pass to `db.find` here — from the click to the SQL.
 
 ### Pagination
 
@@ -203,9 +221,11 @@ it's multi-instance safe). Destructive/altering drift (dropped columns, type
 changes) is **reported, never applied** — that's the honest residual tax of
 code-first on a real relational database.
 
-### CLI
+### CLI (embedded mode)
 
-Point it at a config that default-exports your `weave({ ... })` instance:
+For the embedded library, point a CLI at a config that default-exports your
+`weave({ ... })` instance (the client/server **SDK** has its own `weave push`/`pull`/
+`gen` — see [The SDK](#the-sdk--weave-over-http)):
 
 ```bash
 weave status     # show pending additive changes and drift warnings
@@ -218,6 +238,129 @@ weave sync       # apply additive changes
 import { db } from "./src/db.js";
 export default db;
 ```
+
+## The SDK — Weave over HTTP
+
+Everything above runs **embedded**: your app is the database layer. The other way
+to use Weave is as a **client of a Weave server** (the Platform), over HTTP — your
+app thinks in objects, and HTTP/JSON/SQL stay invisible. That's the SDK.
+
+```bash
+npm install @mauroandre/weave-sdk
+```
+
+### Schema as code — the same builders
+
+Declare entities with the **same** `defineEntity` builders. The schema is
+*isomorphic*: hand-written code, the GUI designer, and codegen all produce the same
+thing. One file per entity, default-exported:
+
+```ts
+// weave/entities/product.ts
+import { defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
+import category from "./category.js";
+
+export default defineEntity("product", {
+  name:     text().notNull(),
+  price:    int4().notNull(),
+  category: reference(category),
+});
+```
+
+### A typed client
+
+```ts
+import { createClient } from "@mauroandre/weave-sdk";
+import category from "./weave/entities/category.js";
+import product  from "./weave/entities/product.js";
+
+const weave = createClient({
+  url: process.env.WEAVE_URL!,
+  key: process.env.WEAVE_KEY!,
+  schema: { category, product },
+});
+
+const cat = await weave.category.create({ name: "Books" });   // arg is InferInsert — typed
+const p   = await weave.product.create({ name: "Clean Code", price: 80, categoryId: cat.id });
+
+p.price;       // number  (inferred)
+p.createdAt;   // Date    (revived from JSON)
+
+const found = await weave.product.find({
+  where:   { price: { gte: 50 }, category: { name: { ilike: "%book%" } } },
+  orderBy: { price: "desc" },
+  expand:  { category: true },
+});
+found[0].category.name;   // typed & present — only because you expanded it
+```
+
+CRUD per entity: `create` / `get` / `find` / `findOne` / `paginate` / `update` /
+`delete`. `where` / `orderBy` / `expand` are the **same `WhereInput` language** as
+the embedded `db.find` — one query language from the GUI click to the SDK call to
+the SQL. The return type **self-types by your `expand`** (`InferRead<E, X>`), so you
+never write a result type by hand.
+
+### Migrations from the terminal
+
+Editing an entity file doesn't touch the database. Migrating is an explicit, gated
+step — `weave push` — that diffs the whole schema at once and applies it with the
+same risk buckets the GUI shows (🟢 auto · 🔴 confirm · 🟡 needs value · ⛔ blocked).
+
+```ts
+// weave.config.ts
+import { defineConfig } from "@mauroandre/weave-sdk";
+export default defineConfig({
+  entities: "./weave/entities",
+  url: process.env.WEAVE_URL!,
+  key: process.env.WEAVE_KEY!,
+});
+```
+
+```bash
+weave push                              # discover entities (by folder) → plan → apply
+weave push --confirm product.legacy     # confirm a destructive drop
+weave push --fill product.sku="N/A"     # backfill a new required field
+weave push --rename product.name=title  # a rename: data preserved, not drop+add
+weave pull                              # remote schema → entity files (codegen)
+weave gen                               # generate the typed client barrel
+```
+
+Renaming a field in code is otherwise indistinguishable from drop+add — `--rename`
+tells the server it's a rename (the field's stable id is preserved), so the data
+survives. (This CLI is `@mauroandre/weave-sdk`'s, for the client/server model —
+distinct from the embedded engine's own CLI above.)
+
+### Scopes — access control as code
+
+A scope shapes access per entity: which **verbs**, which **rows**, which **fields**.
+You write it by name; it's stored by stable field-id (rename-proof) and enforced on
+the server.
+
+```ts
+import { defineScope, pushScopes } from "@mauroandre/weave-sdk";
+
+const storefront = defineScope("storefront", {
+  product: {
+    verbs:  ["read"],
+    where:  { company: { eq: { param: "companyId" } } },  // row filter, with a request param
+    fields: { exclude: ["cost"] },                         // projection
+  },
+});
+await pushScopes({ storefront }, { url, key });
+```
+
+Then narrow any client to a scope, per request, with `weave.as` — every call carries
+the scope and its params, and the server enforces them:
+
+```ts
+const store = weave.as("storefront", { companyId: 42 });
+await store.product.find();        // only the rows/fields the scope allows
+await store.product.create(/*…*/); // verb not granted → WeaveScopeError (403)
+```
+
+Without `weave.as`, the API key is god-mode (it's the trust boundary). Errors come
+back **typed** — `WeaveScopeError` (403), `WeaveValidationError` (400),
+`WeaveNotFoundError` (404), `WeaveAuthError` (401) — never a raw SQL stack.
 
 ## Design references
 
