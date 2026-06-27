@@ -1,4 +1,11 @@
-import type { Entity, ShapeRecord, InferEntity, InferInsert } from "@mauroandre/weave-core";
+import type {
+  Entity,
+  ShapeRecord,
+  InferEntity,
+  InferInsert,
+  InferRead,
+  ExpandInput,
+} from "@mauroandre/weave-core";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
 
@@ -17,8 +24,13 @@ export interface ClientOptions<S> {
   fetch?: FetchLike;
 }
 
-/** Opções de leitura. `filter`/`sort` são pass-through pro JSON da API (typed where = F2). */
-export interface FindOptions {
+/**
+ * Opções de leitura. `expand` é tipado pela entidade (`ExpandInput`) e **dirige o
+ * tipo do retorno** (`InferRead<E, X>`). `filter`/`sort` são pass-through pro JSON
+ * da API por enquanto (typed where/orderBy = F2b).
+ */
+export interface FindArgs<E extends Entity<string, ShapeRecord>, X> {
+  expand?: X & ExpandInput<E>;
   filter?: unknown;
   sort?: unknown;
   page?: number;
@@ -32,13 +44,20 @@ export interface PageResult<T> {
   currentPage: number;
 }
 
-/** Client tipado de UMA entidade. Reads se auto-tipam; writes recebem `InferInsert`. */
+/**
+ * Client tipado de UMA entidade. Os reads se **auto-tipam pelo `expand`** que você
+ * passa (`const X`), então `find({ expand: { category: true } })` já devolve o
+ * objeto com `category` expandido e tipado — sem escrever nenhum `Infer`.
+ */
 export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   create(input: InferInsert<E>): Promise<InferEntity<E>>;
-  get(id: string): Promise<InferEntity<E> | null>;
-  find(opts?: FindOptions): Promise<InferEntity<E>[]>;
-  findOne(opts?: FindOptions): Promise<InferEntity<E> | null>;
-  paginate(opts?: FindOptions): Promise<PageResult<InferEntity<E>>>;
+  get<const X = {}>(
+    id: string,
+    opts?: { expand?: X & ExpandInput<E> },
+  ): Promise<InferRead<E, X> | null>;
+  find<const X = {}>(opts?: FindArgs<E, X>): Promise<InferRead<E, X>[]>;
+  findOne<const X = {}>(opts?: FindArgs<E, X>): Promise<InferRead<E, X> | null>;
+  paginate<const X = {}>(opts?: FindArgs<E, X>): Promise<PageResult<InferRead<E, X>>>;
   update(id: string, patch: Partial<InferInsert<E>>): Promise<InferEntity<E>>;
   delete(id: string): Promise<void>;
 }
@@ -55,10 +74,14 @@ interface ListResponse {
   currentPage: number;
 }
 
+// Forma frouxa das opções, usada SÓ na implementação (a interface dá os tipos).
+type AnyArgs = { expand?: unknown; filter?: unknown; sort?: unknown; page?: number; perPage?: number };
+
 /**
  * Cria o client tipado a partir do schema-as-code. Casca fina sobre a API HTTP do
- * Weave: monta o request, manda o `x-api-key`, e revive `obj↔json` (datas) pela
- * forma da entidade. O `fetch` é injetável — em teste, `app.hono.fetch`.
+ * Weave: monta o request, manda o `x-api-key`, revive `obj↔json` (datas) pela forma
+ * da entidade, e serializa o `expand` no param. O `fetch` é injetável — em teste,
+ * `app.hono.fetch`.
  */
 export function createClient<S extends Record<string, Entity<string, ShapeRecord>>>(
   options: ClientOptions<S>,
@@ -100,50 +123,55 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     return json;
   }
 
-  const queryFrom = (o: FindOptions): Record<string, string | undefined> => ({
+  // `expand` vai SEMPRE (default `{}` = não expande nada → tipo determinístico).
+  const queryFrom = (o: AnyArgs): Record<string, string | undefined> => ({
+    expand: JSON.stringify(o.expand ?? {}),
     filter: o.filter !== undefined ? JSON.stringify(o.filter) : undefined,
     sort: o.sort !== undefined ? JSON.stringify(o.sort) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,
     perPage: o.perPage !== undefined ? String(o.perPage) : undefined,
   });
 
-  const client: Record<string, EntityClient<Entity<string, ShapeRecord>>> = {};
+  const client: Record<string, unknown> = {};
 
   for (const [key, entity] of Object.entries(options.schema)) {
     const shape = entity.columns;
     const path = `/api/${entity.name}`;
-    const revive = (o: unknown) => reviveShape(shape, o) as never;
+    const revive = (o: unknown) => reviveShape(shape, o);
+    const list = async (o: AnyArgs): Promise<ListResponse> =>
+      (await request("GET", path, { query: queryFrom(o) })) as ListResponse;
 
     client[key] = {
-      async create(input) {
+      async create(input: unknown) {
         return revive(await request("POST", path, { body: input }));
       },
-      async get(id) {
-        const r = await request("GET", `${path}/${encodeURIComponent(id)}`, { allowNull: true });
+      async get(id: string, o: { expand?: unknown } = {}) {
+        const r = await request("GET", `${path}/${encodeURIComponent(id)}`, {
+          query: { expand: JSON.stringify(o.expand ?? {}) },
+          allowNull: true,
+        });
         return r === null ? null : revive(r);
       },
-      async find(opts = {}) {
-        const page = (await request("GET", path, { query: queryFrom(opts) })) as ListResponse;
-        return (page.docs ?? []).map(revive);
+      async find(o: AnyArgs = {}) {
+        return (await list(o)).docs?.map(revive) ?? [];
       },
-      async findOne(opts = {}) {
-        const page = (await request("GET", path, { query: queryFrom({ ...opts, perPage: 1 }) })) as ListResponse;
-        const d = page.docs?.[0];
+      async findOne(o: AnyArgs = {}) {
+        const d = (await list({ ...o, perPage: 1 })).docs?.[0];
         return d === undefined ? null : revive(d);
       },
-      async paginate(opts = {}) {
-        const page = (await request("GET", path, { query: queryFrom(opts) })) as ListResponse;
+      async paginate(o: AnyArgs = {}) {
+        const page = await list(o);
         return {
-          docs: (page.docs ?? []).map(revive),
+          docs: page.docs?.map(revive) ?? [],
           docsQuantity: page.docsQuantity,
           pageQuantity: page.pageQuantity,
           currentPage: page.currentPage,
         };
       },
-      async update(id, patch) {
+      async update(id: string, patch: unknown) {
         return revive(await request("PATCH", `${path}/${encodeURIComponent(id)}`, { body: patch }));
       },
-      async delete(id) {
+      async delete(id: string) {
         await request("DELETE", `${path}/${encodeURIComponent(id)}`);
       },
     };

@@ -27,6 +27,7 @@ export async function listObjects(
   perPage = 20,
   filter?: Filter | null,
   sort?: SortKey[] | null,
+  expand?: ExpandSpec | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
@@ -76,9 +77,10 @@ export async function listObjects(
 
     let docs: Record<string, unknown>[] = [];
     if (ids.length > 0) {
-      const expand = buildExpand(rootIr.fields);
+      // expand explícito (do SDK/API) tem precedência; ausente (GUI) = auto 1 nível.
+      const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
       const opts: Record<string, unknown> = { where: { id: { in: ids } } };
-      if (Object.keys(expand).length) opts.expand = expand;
+      if (Object.keys(expandMap).length) opts.expand = expandMap;
       const found = await find(entities[name], opts);
       const byId = new Map(found.map((d) => [d.id as string, d]));
       docs = ids.map((id) => byId.get(id)).filter((d): d is Record<string, unknown> => !!d);
@@ -185,7 +187,7 @@ export async function deleteObject(name: string, id: string): Promise<void> {
 }
 
 /** Mapa de expand recursivo: references em TODO nível (topo e dentro de owned). */
-type ExpandSpec = { [field: string]: true | ExpandSpec };
+export type ExpandSpec = { [field: string]: true | ExpandSpec };
 
 /**
  * Expande references um nível, em qualquer profundidade de `owned`. Reference de

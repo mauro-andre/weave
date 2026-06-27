@@ -7,7 +7,7 @@ export type {
   WeaveClient,
   EntityClient,
   ClientOptions,
-  FindOptions,
+  FindArgs,
   PageResult,
   FetchLike,
 } from "./client.js";

@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { resolveAccess, andFilter, prune, ScopeError } from "./scope.js";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { SortKey } from "../engine/control-plane/sort.js";
+import type { ExpandSpec } from "../engine/control-plane/data.js";
 
 // API wildcard de dados. Casca fina de transporte sobre o control-plane (mesmo
 // contrato JSON da GUI). Cada handler resolve o ACESSO (god, ou um scope vindo do
@@ -38,7 +39,14 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
     const userFilter = parseJson<Filter>(query.filter);
     const filter = access.god ? userFilter : andFilter(access.rows, userFilter);
-    const res = await listObjects(entity, page, perPage, filter, parseJson<SortKey[]>(query.sort));
+    const res = await listObjects(
+      entity,
+      page,
+      perPage,
+      filter,
+      parseJson<SortKey[]>(query.sort),
+      parseJson<ExpandSpec>(query.expand),
+    );
     if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
     return c.json(res);
   } catch (e) {
@@ -46,13 +54,13 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
   }
 }
 
-export async function apiGetOne({ c, params }: EndpointHandlerArgs): Promise<Response> {
+export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "read");
     const { listObjects } = await import("../engine/control-plane/data.js");
     const filter = access.god ? idEquals(params.id ?? "") : andFilter(access.rows, idEquals(params.id ?? ""));
-    const obj = (await listObjects(entity, 1, 1, filter)).docs[0];
+    const obj = (await listObjects(entity, 1, 1, filter, null, parseJson<ExpandSpec>(query.expand))).docs[0];
     if (!obj) return c.json({ error: "Not found." }, 404);
     return c.json(access.god ? obj : prune(obj, access.projection));
   } catch (e) {

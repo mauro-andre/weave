@@ -91,6 +91,33 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
     expect(one?.price).toBe(80);
   });
 
+  it("expand tipado: o retorno se auto-tipa pelo expand (category expandida)", async () => {
+    const w = weave();
+    const cat = await w.sdkcat.create({ name: "Comics" });
+    await w.sdkprod.create({ name: "Watchmen", price: 30, categoryId: cat.id });
+
+    const found = await w.sdkprod.find({
+      expand: { category: true },
+      filter: { path: ["name"], op: "equals", value: "Watchmen" },
+    });
+    const p = found[0]!;
+    expect(p.categoryId).toBe(cat.id);
+    // `p.category` só EXISTE no tipo por causa do expand — e o revive desce nela.
+    expect(p.category?.name).toBe("Comics");
+    expect(p.category?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("sem expand: reference vem só como id (não auto-expande)", async () => {
+    const w = weave();
+    const cat = await w.sdkcat.create({ name: "Sci-Fi" });
+    await w.sdkprod.create({ name: "Dune", price: 40, categoryId: cat.id });
+
+    const found = await w.sdkprod.find({ filter: { path: ["name"], op: "equals", value: "Dune" } });
+    const p = found[0]! as Record<string, unknown>;
+    expect(p["categoryId"]).toBe(cat.id);
+    expect("category" in p).toBe(false);
+  });
+
   it("update faz merge (campo omitido é preservado)", async () => {
     const w = weave();
     const p = await w.sdkprod.create({ name: "Widget", price: 10 });
