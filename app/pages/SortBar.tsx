@@ -1,18 +1,22 @@
 import { useState } from "preact/hooks";
 import { Select, type SelectOption } from "../components/Select.js";
 import type { FieldIR } from "@mauroandre/weave-core";
-import type { SortKey } from "../engine/control-plane/sort.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./SortBar.css.js";
 
 type Shapes = Record<string, Record<string, FieldIR>>;
+/** Nó de OrderByInput em JSON (frouxo — entidade dinâmica). */
+type WNode = Record<string, unknown>;
+/** Chave de ordenação (modelo interno do widget). Emitida como OrderByInput. */
+type Sort = { path: string[]; dir: "asc" | "desc" };
 
 const MANAGED: Record<string, string> = { createdAt: "created at", updatedAt: "updated at" };
 
 /**
  * Barra de ordenação multi-chave (espelha o Filter). Drill-down atravessa só
  * galhos SINGLE (object/link) e termina num escalar; coleções/N:N não aparecem
- * (ambíguo p/ ordenar). Campos gerenciados (created/updated at) são chaves.
+ * (ambíguo p/ ordenar). **Emite e decodifica `OrderByInput` nativo** — caminho vira
+ * chaves aninhadas (`{ buyer: { name: "asc" } }`), igual ao que o dev escreve.
  */
 export function SortBar({
   shapes,
@@ -22,16 +26,16 @@ export function SortBar({
 }: {
   shapes: Shapes;
   root: string;
-  active: SortKey[] | null;
-  onChange: (s: SortKey[] | null) => void;
+  active: WNode | null;
+  onChange: (s: WNode | null) => void;
 }) {
-  const [keys, setKeys] = useState<SortKey[]>(active ?? []);
+  const [keys, setKeys] = useState<Sort[]>(decodeOrderBy(active));
 
-  const emit = (next: SortKey[]) => {
+  const emit = (next: Sort[]) => {
     setKeys(next);
-    onChange(next.length === 0 ? null : next);
+    onChange(buildOrderBy(next));
   };
-  const add = (k: SortKey) => emit([...keys, k]);
+  const add = (k: Sort) => emit([...keys, k]);
   const remove = (i: number) => emit(keys.filter((_, j) => j !== i));
   const flip = (i: number) =>
     emit(keys.map((k, j) => (j === i ? { ...k, dir: k.dir === "asc" ? "desc" : "asc" } : k)));
@@ -85,7 +89,7 @@ function KeyPath({ shapes, root, path }: { shapes: Shapes; root: string; path: s
 }
 
 // Drill-down: ao escolher um escalar (ou managed), vira chave (asc) na hora.
-function SortBuilder({ shapes, root, onAdd }: { shapes: Shapes; root: string; onAdd: (k: SortKey) => void }) {
+function SortBuilder({ shapes, root, onAdd }: { shapes: Shapes; root: string; onAdd: (k: Sort) => void }) {
   const [segments, setSegments] = useState<string[]>([]);
   const { chosen, nextFields } = resolve(shapes, root, segments);
 
@@ -122,6 +126,41 @@ function SortBuilder({ shapes, root, onAdd }: { shapes: Shapes; root: string; on
       />
     </div>
   );
+}
+
+// ── OrderByInput: build (chaves → objeto) e decode (objeto → chaves) ───────────
+
+/** Chaves → OrderByInput aninhado. Caminho vira chaves; a folha é a direção. */
+function buildOrderBy(keys: Sort[]): WNode | null {
+  if (keys.length === 0) return null;
+  const ob: WNode = {};
+  for (const { path, dir } of keys) {
+    let cur = ob;
+    for (let i = 0; i < path.length - 1; i++) {
+      const seg = path[i]!;
+      if (!cur[seg] || typeof cur[seg] !== "object") cur[seg] = {};
+      cur = cur[seg] as WNode;
+    }
+    cur[path[path.length - 1]!] = dir;
+  }
+  return ob;
+}
+
+/** OrderByInput → chaves (galhos aninhados viram caminho; a string é a folha). */
+function decodeOrderBy(active: WNode | null): Sort[] {
+  if (!active) return [];
+  const out: Sort[] = [];
+  const walk = (path: string[], val: unknown): void => {
+    if (val === "asc" || val === "desc") {
+      out.push({ path, dir: val });
+      return;
+    }
+    if (val && typeof val === "object") {
+      for (const [k, v] of Object.entries(val)) walk([...path, k], v);
+    }
+  };
+  for (const [k, v] of Object.entries(active)) walk([k], v);
+  return out;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

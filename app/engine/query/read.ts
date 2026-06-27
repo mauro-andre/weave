@@ -210,6 +210,15 @@ function compileArrayFilter(col: string, val: unknown, params: unknown[]): strin
       case "isEmpty":
         conds.push(v ? `cardinality(${col}) = 0` : `cardinality(${col}) > 0`);
         break;
+      case "some": {
+        // Algum elemento casa os operadores escalares: EXISTS sobre o unnest.
+        const sub =
+          v && typeof v === "object"
+            ? Object.entries(v as Record<string, unknown>).map(([sop, sv]) => renderOperator("e", sop, sv, params))
+            : [];
+        conds.push(`EXISTS (SELECT 1 FROM unnest(${col}) AS e WHERE ${sub.length ? sub.join(" AND ") : "TRUE"})`);
+        break;
+      }
       default:
         throw new Error(`weave: unknown array operator '${op}'.`);
     }

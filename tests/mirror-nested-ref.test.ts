@@ -62,7 +62,7 @@ describe("mirror trazendo reference dentro de owned (via actions)", () => {
     });
 
     const page = (await action_listObjects({
-      body: { name: "mord", filter: { path: ["id"], op: "equals", value: order.id } },
+      body: { name: "mord", where: { id: { eq: order.id } } },
     })) as { docs?: Record<string, unknown>[]; error?: string };
     if (page.error) throw new Error(page.error);
     const item = (page.docs![0]!.items as Record<string, unknown>[])[0];

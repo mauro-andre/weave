@@ -37,12 +37,14 @@ type ScalarOps<T> = {
 /** Filtro de uma coluna escalar: um valor cru (atalho de `eq`) ou um objeto de operadores. */
 export type Filter<T> = T | ScalarOps<T>;
 
-/** Operadores pra uma coluna de array escalar (`text[]`, …). */
+/** Operadores pra uma coluna de array escalar (`text[]`, `int4[]`, …). */
 export type ArrayFilter<E> = {
   has?: E;
   hasSome?: E[];
   hasEvery?: E[];
   isEmpty?: boolean;
+  /** Algum elemento casa estes operadores escalares (o "any …" da GUI). */
+  some?: ScalarOps<E>;
 };
 
 /** Filtro de uma coluna — operadores de array pra `type[]`, escalares senão. */

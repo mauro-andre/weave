@@ -166,8 +166,8 @@ describe("data browser — leitura de objetos", () => {
     type Page = { docs: { code?: string; name?: string }[]; docsQuantity: number };
     const save = (name: string, object: Record<string, unknown>) =>
       app.as({ user: master }).action(action_saveObject, { body: { name, object } });
-    const filter = async (name: string, f: unknown): Promise<Page> => {
-      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, filter: f } });
+    const filter = async (name: string, w: unknown): Promise<Page> => {
+      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, where: w } });
       return (await res.json()) as Page;
     };
 
@@ -208,41 +208,41 @@ describe("data browser — leitura de objetos", () => {
     });
 
     it("🚩 orders cujo user tem ALGUM address com city ~ (ref → owned → texto)", async () => {
-      const p = await filter("ord", { path: ["buyer", "addresses", "city"], op: "contains", value: "paulo" });
+      const p = await filter("ord", { buyer: { addresses: { some: { city: { ilike: "%paulo%" } } } } });
       expect(p.docsQuantity).toBe(1);
       expect(p.docs[0]?.code).toBe("O1");
     });
 
     it("reference N:1 direta (buyer.name)", async () => {
-      const p = await filter("ord", { path: ["buyer", "name"], op: "contains", value: "ali" });
+      const p = await filter("ord", { buyer: { name: { ilike: "%ali%" } } });
       expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
     });
 
     it("owned direto (addresses.city)", async () => {
-      const p = await filter("usr", { path: ["addresses", "city"], op: "contains", value: "rio" });
+      const p = await filter("usr", { addresses: { some: { city: { ilike: "%rio%" } } } });
       expect(p.docs.map((d) => d.name)).toEqual(["Alice"]);
     });
 
     it("coluna-array de texto: algum elemento contains", async () => {
-      const p = await filter("prod", { path: ["tags"], op: "contains", value: "maç" });
+      const p = await filter("prod", { tags: { some: { ilike: "%maç%" } } });
       expect(p.docs.map((d) => d.name)).toEqual(["X"]);
     });
 
     it("coluna-array de número: algum elemento >= 5", async () => {
-      const p = await filter("prod", { path: ["scores"], op: "gte", value: "5" });
+      const p = await filter("prod", { scores: { some: { gte: 5 } } });
       expect(p.docs.map((d) => d.name)).toEqual(["X"]);
     });
 
     it("escalar de topo (equals)", async () => {
-      const p = await filter("ord", { path: ["code"], op: "equals", value: "O2" });
+      const p = await filter("ord", { code: { eq: "O2" } });
       expect(p.docs.map((d) => d.code)).toEqual(["O2"]);
     });
 
     it("AND combina condições (match all)", async () => {
       const p = await filter("ord", {
         and: [
-          { path: ["buyer", "name"], op: "contains", value: "ali" },
-          { path: ["code"], op: "equals", value: "O1" },
+          { buyer: { name: { ilike: "%ali%" } } },
+          { code: { eq: "O1" } },
         ],
       });
       expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
@@ -251,8 +251,8 @@ describe("data browser — leitura de objetos", () => {
     it("AND sem interseção retorna vazio", async () => {
       const p = await filter("ord", {
         and: [
-          { path: ["buyer", "name"], op: "contains", value: "ali" },
-          { path: ["code"], op: "equals", value: "O2" },
+          { buyer: { name: { ilike: "%ali%" } } },
+          { code: { eq: "O2" } },
         ],
       });
       expect(p.docsQuantity).toBe(0);
@@ -261,8 +261,8 @@ describe("data browser — leitura de objetos", () => {
     it("OR une condições (match any)", async () => {
       const p = await filter("ord", {
         or: [
-          { path: ["code"], op: "equals", value: "O1" },
-          { path: ["code"], op: "equals", value: "O2" },
+          { code: { eq: "O1" } },
+          { code: { eq: "O2" } },
         ],
       });
       expect(p.docs.map((d) => d.code).sort()).toEqual(["O1", "O2"]);
@@ -273,11 +273,11 @@ describe("data browser — leitura de objetos", () => {
         or: [
           {
             and: [
-              { path: ["buyer", "name"], op: "contains", value: "bob" },
-              { path: ["code"], op: "equals", value: "O2" },
+              { buyer: { name: { ilike: "%bob%" } } },
+              { code: { eq: "O2" } },
             ],
           },
-          { path: ["code"], op: "equals", value: "O1" },
+          { code: { eq: "O1" } },
         ],
       });
       expect(p.docs.map((d) => d.code).sort()).toEqual(["O1", "O2"]);
@@ -287,15 +287,15 @@ describe("data browser — leitura de objetos", () => {
       const res = await app.as({ user: master }).action(action_listObjects, { body: { name: "ord" } });
       const docs = (await res.json()).docs as { id: string; code: string }[];
       const o1 = docs.find((d) => d.code === "O1")!;
-      const p = await filter("ord", { path: ["id"], op: "equals", value: o1.id });
+      const p = await filter("ord", { id: { eq: o1.id } });
       expect(p.docs.map((d) => d.code)).toEqual(["O1"]);
     });
 
     it("SSR: filtro na URL renderiza só o resultado (refresh-safe)", async () => {
       const f = encodeURIComponent(
-        JSON.stringify({ path: ["buyer", "addresses", "city"], op: "contains", value: "paulo" }),
+        JSON.stringify({ buyer: { addresses: { some: { city: { ilike: "%paulo%" } } } } }),
       );
-      const res = await app.as({ user: master }).get(`/data?entity=ord&filter=${f}`);
+      const res = await app.as({ user: master }).get(`/data?entity=ord&where=${f}`);
       expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain("O1");
@@ -307,7 +307,7 @@ describe("data browser — leitura de objetos", () => {
   describe("ordenação", () => {
     type Page = { docs: { code?: string; title?: string; year?: number }[] };
     const sortBy = async (name: string, s: unknown): Promise<Page> => {
-      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, sort: s } });
+      const res = await app.as({ user: master }).action(action_listObjects, { body: { name, orderBy: s } });
       return (await res.json()) as Page;
     };
 
@@ -330,25 +330,22 @@ describe("data browser — leitura de objetos", () => {
     });
 
     it("ordena por escalar de topo (desc)", async () => {
-      const p = await sortBy("ord", [{ path: ["code"], dir: "desc" }]);
+      const p = await sortBy("ord", { code: "desc" });
       expect(p.docs.map((d) => d.code)).toEqual(["O2", "O1"]);
     });
 
     it("ordena por caminho aninhado N:1 (buyer.name asc)", async () => {
-      const p = await sortBy("ord", [{ path: ["buyer", "name"], dir: "asc" }]);
+      const p = await sortBy("ord", { buyer: { name: "asc" } });
       expect(p.docs.map((d) => d.code)).toEqual(["O1", "O2"]); // Alice < Bob
     });
 
     it("múltiplas chaves (title asc, year asc)", async () => {
-      const p = await sortBy("book", [
-        { path: ["title"], dir: "asc" },
-        { path: ["year"], dir: "asc" },
-      ]);
+      const p = await sortBy("book", { title: "asc", year: "asc" });
       expect(p.docs.map((d) => d.year)).toEqual([1990, 2010, 2000]); // Alpha 1990, Alpha 2010, Beta 2000
     });
 
     it("ordena por campo gerenciado (created at)", async () => {
-      const p = await sortBy("book", [{ path: ["createdAt"], dir: "asc" }]);
+      const p = await sortBy("book", { createdAt: "asc" });
       expect(p.docs.map((d) => d.title)).toEqual(["Beta", "Alpha", "Alpha"]); // ordem de criação
     });
   });

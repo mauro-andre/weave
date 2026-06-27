@@ -9,10 +9,11 @@ import { SortBar } from "./SortBar.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
 import type { ColumnIR, FieldIR } from "@mauroandre/weave-core";
 import type { ObjectPage } from "../engine/control-plane/data.js";
-import type { Filter } from "../engine/control-plane/filter.js";
-import type { SortKey } from "../engine/control-plane/sort.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Data.css.js";
+
+/** WhereInput / OrderByInput em JSON (frouxo — entidade dinâmica na GUI). */
+type WNode = Record<string, unknown>;
 
 const SHOW_LIMIT = 6; // campos visíveis antes do "show all fields"
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
@@ -23,32 +24,32 @@ interface DataLoaded {
   selected: string | null;
   /** Página de objetos da entidade selecionada (null se nenhuma selecionada). */
   page: ObjectPage | null;
-  /** Filtro ativo, decodificado da URL (`?filter=` em JSON). */
-  filter: Filter | null;
-  /** Ordenação ativa, decodificada da URL (`?sort=` em JSON). */
-  sort: SortKey[] | null;
+  /** Filtro ativo (WhereInput), decodificado da URL (`?where=` em JSON). */
+  where: WNode | null;
+  /** Ordenação ativa (OrderByInput), decodificada da URL (`?orderBy=` em JSON). */
+  orderBy: WNode | null;
 }
 
-// Estado na URL (`?entity=&page=&filter=&sort=`) → o loader busca server-side,
+// Estado na URL (`?entity=&page=&where=&orderBy=`) → o loader busca server-side,
 // então refresh e link direto funcionam. Sem `entity`, nada é mostrado.
 export const loader = async ({ query }: LoaderArgs): Promise<DataLoaded> => {
   const { listEntities } = await import("../engine/control-plane/entities.js");
   const entities = (await listEntities()).map((e) => e.name);
   const selected = query.entity && entities.includes(query.entity) ? query.entity : null;
-  const filter = selected ? parseJson<Filter>(query.filter) : null;
-  const sort = selected ? parseJson<SortKey[]>(query.sort) : null;
+  const where = selected ? parseJson<WNode>(query.where) : null;
+  const orderBy = selected ? parseJson<WNode>(query.orderBy) : null;
   let page: ObjectPage | null = null;
   if (selected) {
     const { listObjects } = await import("../engine/control-plane/data.js");
-    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, filter, sort);
+    page = await listObjects(selected, Math.max(1, Number(query.page) || 1), 20, null, null, undefined, where ?? {}, orderBy);
   }
-  return { entities, selected, page, filter, sort };
+  return { entities, selected, page, where, orderBy };
 };
 
-function urlFor(entity: string, p: number, f: Filter | null, s: SortKey[] | null): string {
+function urlFor(entity: string, p: number, w: WNode | null, ob: WNode | null): string {
   let u = `/data?entity=${encodeURIComponent(entity)}&page=${p}`;
-  if (f) u += `&filter=${encodeURIComponent(JSON.stringify(f))}`;
-  if (s && s.length) u += `&sort=${encodeURIComponent(JSON.stringify(s))}`;
+  if (w) u += `&where=${encodeURIComponent(JSON.stringify(w))}`;
+  if (ob) u += `&orderBy=${encodeURIComponent(JSON.stringify(ob))}`;
   return u;
 }
 
@@ -63,10 +64,10 @@ function parseJson<T>(raw: string | undefined): T | null {
 
 export const action_listObjects = async ({
   body,
-}: ActionArgs<{ name: string; page?: number; filter?: Filter | null; sort?: SortKey[] | null }>) => {
+}: ActionArgs<{ name: string; page?: number; where?: WNode | null; orderBy?: WNode | null }>) => {
   const { listObjects } = await import("../engine/control-plane/data.js");
   try {
-    return await listObjects(body.name, body.page ?? 1, 20, body.filter ?? null, body.sort ?? null);
+    return await listObjects(body.name, body.page ?? 1, 20, null, null, undefined, body.where ?? {}, body.orderBy ?? null);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to load objects." };
   }
@@ -104,8 +105,8 @@ export const Component = () => {
   // Estado vivo (client). Inicializa do loader (refresh/link diretos via URL).
   const selected = useSignal<string | null>(loaded?.selected ?? null);
   const page = useSignal<ObjectPage | null>(loaded?.page ?? null);
-  const filter = useSignal<Filter | null>(loaded?.filter ?? null);
-  const sort = useSignal<SortKey[] | null>(loaded?.sort ?? null);
+  const where = useSignal<WNode | null>(loaded?.where ?? null);
+  const orderBy = useSignal<WNode | null>(loaded?.orderBy ?? null);
   const loading = useSignal(false);
   const creating = useSignal(false);
   const inited = useRef(false);
@@ -115,20 +116,20 @@ export const Component = () => {
     if (!loaded || inited.current) return;
     selected.value = loaded.selected;
     page.value = loaded.page;
-    filter.value = loaded.filter;
-    sort.value = loaded.sort;
+    where.value = loaded.where;
+    orderBy.value = loaded.orderBy;
     inited.current = true;
   }, [loaded]);
 
   // Troca de entidade / página / filtro / sort: busca via action E reflete na URL.
-  const load = async (entity: string, p: number, f: Filter | null, s: SortKey[] | null) => {
+  const load = async (entity: string, p: number, w: WNode | null, ob: WNode | null) => {
     selected.value = entity;
-    filter.value = f;
-    sort.value = s;
+    where.value = w;
+    orderBy.value = ob;
     creating.value = false;
     loading.value = true;
-    navigate(urlFor(entity, p, f, s));
-    const res = (await action_listObjects({ body: { name: entity, page: p, filter: f, sort: s } })) as
+    navigate(urlFor(entity, p, w, ob));
+    const res = (await action_listObjects({ body: { name: entity, page: p, where: w, orderBy: ob } })) as
       | ObjectPage
       | { error: string };
     loading.value = false;
@@ -136,7 +137,7 @@ export const Component = () => {
   };
   const reload = () => {
     creating.value = false;
-    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, filter.value, sort.value);
+    if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, where.value, orderBy.value);
   };
 
   const sel = selected.value;
@@ -167,7 +168,7 @@ export const Component = () => {
           {sel && cur ? (
             <span class={css.countBadge}>
               <span class={css.countNum}>{cur.docsQuantity.toLocaleString()}</span>
-              {filter.value ? "matching" : cur.docsQuantity === 1 ? "object" : "objects"}
+              {where.value ? "matching" : cur.docsQuantity === 1 ? "object" : "objects"}
             </span>
           ) : null}
         </div>
@@ -175,21 +176,21 @@ export const Component = () => {
 
       {sel && cur ? (
         <FilterBar
-          key={`f:${sel}:${JSON.stringify(filter.value)}`}
+          key={`f:${sel}:${JSON.stringify(where.value)}`}
           shapes={cur.shapes}
           root={cur.root}
-          active={filter.value}
-          onChange={(f) => load(sel, 1, f, sort.value)}
+          active={where.value}
+          onChange={(f) => load(sel, 1, f, orderBy.value)}
         />
       ) : null}
 
       {sel && cur ? (
         <SortBar
-          key={`s:${sel}:${JSON.stringify(sort.value)}`}
+          key={`s:${sel}:${JSON.stringify(orderBy.value)}`}
           shapes={cur.shapes}
           root={cur.root}
-          active={sort.value}
-          onChange={(s) => load(sel, 1, filter.value, s)}
+          active={orderBy.value}
+          onChange={(s) => load(sel, 1, where.value, s)}
         />
       ) : null}
 
@@ -223,7 +224,7 @@ export const Component = () => {
               <button
                 class={css.pagerBtn}
                 disabled={cur.currentPage <= 1}
-                onClick={() => load(cur.root, cur.currentPage - 1, filter.value, sort.value)}
+                onClick={() => load(cur.root, cur.currentPage - 1, where.value, orderBy.value)}
               >
                 ◀
               </button>
@@ -233,7 +234,7 @@ export const Component = () => {
               <button
                 class={css.pagerBtn}
                 disabled={cur.currentPage >= cur.pageQuantity}
-                onClick={() => load(cur.root, cur.currentPage + 1, filter.value, sort.value)}
+                onClick={() => load(cur.root, cur.currentPage + 1, where.value, orderBy.value)}
               >
                 ▶
               </button>

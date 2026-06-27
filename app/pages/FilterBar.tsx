@@ -1,11 +1,15 @@
 import { useState } from "preact/hooks";
 import { Select, type SelectOption } from "../components/Select.js";
 import type { ColumnIR, FieldIR } from "@mauroandre/weave-core";
-import type { Condition, Filter } from "../engine/control-plane/filter.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./FilterBar.css.js";
 
 type Shapes = Record<string, Record<string, FieldIR>>;
+
+/** Nó de WhereInput em JSON (frouxo — a entidade é dinâmica na GUI). */
+type WNode = Record<string, unknown>;
+/** Linha do drill-down (modelo interno do widget). Emitida como WhereInput. */
+type Cond = { path: string[]; op: string; value?: unknown };
 
 const TEXT = new Set(["text", "varchar", "bpchar"]);
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
@@ -40,10 +44,11 @@ const OP_LABEL: Record<string, string> = {
 };
 
 /**
- * Barra de filtro multi-condição. A UI monta uma lista plana combinada por
- * `all` (AND) ou `any` (OR), mas o modelo é uma árvore booleana — a API aceita
- * qualquer aninhamento. Cada condição é construída por drill-down sobre as
- * formas resolvidas (owned/reference viram galhos; escalar é a folha).
+ * Barra de filtro multi-condição. A UI monta uma lista plana combinada por `all`
+ * (AND) ou `any` (OR) via drill-down sobre as formas resolvidas; mas o que ela
+ * **emite e decodifica é WhereInput nativo** — o mesmo objeto que o dev escreve no
+ * SDK. Não há formato path-based: o caminho vira chaves aninhadas, owned/ref to-many
+ * viram `some`, e o operador é o do WhereInput (com label amigável).
  */
 export function FilterBar({
   shapes,
@@ -53,17 +58,15 @@ export function FilterBar({
 }: {
   shapes: Shapes;
   root: string;
-  active: Filter | null;
-  onChange: (f: Filter | null) => void;
+  active: WNode | null;
+  onChange: (w: WNode | null) => void;
 }) {
-  const decoded = decode(active);
+  const decoded = decode(active, shapes, root);
   const [match, setMatch] = useState<"all" | "any">(decoded.match);
-  const [conditions, setConditions] = useState<Condition[]>(decoded.conditions);
+  const [conditions, setConditions] = useState<Cond[]>(decoded.conditions);
 
-  const emit = (conds: Condition[], m: "all" | "any") => {
-    onChange(conds.length === 0 ? null : m === "all" ? { and: conds } : { or: conds });
-  };
-  const add = (c: Condition) => {
+  const emit = (conds: Cond[], m: "all" | "any") => onChange(buildWhere(conds, m, shapes, root));
+  const add = (c: Cond) => {
     const next = [...conditions, c];
     setConditions(next);
     emit(next, match);
@@ -126,7 +129,7 @@ function ConditionRow({
 }: {
   shapes: Shapes;
   root: string;
-  condition: Condition;
+  condition: Cond;
   onRemove: () => void;
 }) {
   const { chosen, leaf } = resolvePath(shapes, root, condition.path);
@@ -161,7 +164,7 @@ function ConditionBuilder({
 }: {
   shapes: Shapes;
   root: string;
-  onAdd: (c: Condition) => void;
+  onAdd: (c: Cond) => void;
 }) {
   const [segments, setSegments] = useState<string[]>([]);
   const [op, setOp] = useState<string>("");
@@ -237,17 +240,147 @@ function ConditionBuilder({
   );
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-function decode(active: Filter | null): { match: "all" | "any"; conditions: Condition[] } {
-  if (!active) return { match: "all", conditions: [] };
-  if ("and" in active) return { match: "all", conditions: active.and.filter(isCondition) };
-  if ("or" in active) return { match: "any", conditions: active.or.filter(isCondition) };
-  return { match: "all", conditions: [active] };
-}
-function isCondition(n: Filter): n is Condition {
-  return "path" in n;
+// ── WhereInput: build (linhas → objeto) e decode (objeto → linhas) ─────────────
+
+/** Monta o WhereInput a partir das linhas + match. 0 → null; 1 → folha; N → and/or. */
+function buildWhere(conditions: Cond[], match: "all" | "any", shapes: Shapes, root: string): WNode | null {
+  if (conditions.length === 0) return null;
+  const leaves = conditions.map((c) => buildLeaf(c, shapes, root));
+  if (leaves.length === 1) return leaves[0]!;
+  return match === "all" ? { and: leaves } : { or: leaves };
 }
 
+/** Caminho → objeto aninhado (`some` em to-many) + filtro de folha no operador. */
+function buildLeaf(cond: Cond, shapes: Shapes, root: string): WNode {
+  const { chosen } = resolvePath(shapes, root, cond.path);
+  if (chosen.length === 0) return {};
+  const last = chosen[chosen.length - 1]!;
+  let acc: WNode = { [last.name]: leafFilter(last.node, cond.op, cond.value) };
+  for (let i = chosen.length - 2; i >= 0; i--) {
+    const { name, node } = chosen[i]!;
+    const toMany =
+      node.kind === "owned" ? node.array : node.kind === "reference" ? node.cardinality === "many" : false;
+    acc = { [name]: toMany ? { some: acc } : acc };
+  }
+  return acc;
+}
+
+/**
+ * Operador da UI → objeto de operador WhereInput (curinga automático em
+ * contains/startsWith). Em coluna array, o operador escalar é embrulhado em
+ * `{ some: … }` ("algum elemento casa") — exceto `isEmpty`.
+ */
+function leafFilter(node: FieldIR | undefined, op: string, value: unknown): WNode {
+  const isArray = node?.kind === "column" && node.array === true;
+  const t = node?.kind === "column" ? node.type : "";
+  const v = NUMERIC.has(t) ? Number(value) : value;
+  let sc: WNode;
+  switch (op) {
+    case "contains":
+      sc = { ilike: `%${value}%` };
+      break;
+    case "startsWith":
+      sc = { ilike: `${value}%` };
+      break;
+    case "equals":
+      sc = { eq: v };
+      break;
+    case "notEquals":
+      sc = { ne: v };
+      break;
+    case "gt":
+    case "gte":
+    case "lt":
+    case "lte":
+      sc = { [op]: v };
+      break;
+    case "on":
+      sc = { eq: v };
+      break;
+    case "before":
+      sc = { lt: v };
+      break;
+    case "after":
+      sc = { gt: v };
+      break;
+    case "isTrue":
+      sc = { eq: true };
+      break;
+    case "isFalse":
+      sc = { eq: false };
+      break;
+    case "isEmpty":
+      return isArray ? { isEmpty: true } : { isNull: true };
+    default:
+      sc = { eq: v };
+  }
+  return isArray ? { some: sc } : sc;
+}
+
+/** Decodifica um WhereInput (saída desta barra) de volta em linhas + match. */
+function decode(active: WNode | null, shapes: Shapes, root: string): { match: "all" | "any"; conditions: Cond[] } {
+  if (!active) return { match: "all", conditions: [] };
+  if (Array.isArray(active["and"])) {
+    return { match: "all", conditions: (active["and"] as WNode[]).map((n) => decodeBranch(n, shapes, root)) };
+  }
+  if (Array.isArray(active["or"])) {
+    return { match: "any", conditions: (active["or"] as WNode[]).map((n) => decodeBranch(n, shapes, root)) };
+  }
+  return { match: "all", conditions: [decodeBranch(active, shapes, root)] };
+}
+
+const isObj = (v: unknown): v is WNode => !!v && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * Desce o galho single-branch até a folha (uma COLUNA, detectada via `resolvePath`).
+ * Relações (owned/ref) são desembrulhadas — `some` em to-many — até chegar na coluna;
+ * em coluna array, o operador escalar está sob `some`.
+ */
+function decodeBranch(node: WNode, shapes: Shapes, root: string): Cond {
+  const path: string[] = [];
+  let cur: WNode = node;
+  for (let guard = 0; guard < 16; guard++) {
+    const entry = Object.entries(cur)[0];
+    if (!entry) break;
+    const [key, val] = entry;
+    path.push(key);
+    const { leaf } = resolvePath(shapes, root, path);
+    if (leaf) {
+      const opObj = leaf.array && isObj(val) && "some" in val ? ((val as { some: WNode }).some ?? {}) : (val as WNode);
+      return { path, ...decodeLeaf(opObj, leaf) };
+    }
+    cur = isObj(val) && "some" in val ? ((val as { some: WNode }).some ?? {}) : (val as WNode);
+  }
+  return { path, op: "equals" };
+}
+
+/** Objeto de operador WhereInput → operador da UI + valor (inverso do leafFilter). */
+function decodeLeaf(val: WNode, leaf: ColumnIR): { op: string; value?: unknown } {
+  const isDate = DATE.has(leaf.type);
+  const unwrap = (s: unknown): { op: string; value: unknown } => {
+    const str = String(s);
+    if (str.startsWith("%") && str.endsWith("%")) return { op: "contains", value: str.slice(1, -1) };
+    if (str.endsWith("%")) return { op: "startsWith", value: str.slice(0, -1) };
+    return { op: "contains", value: str };
+  };
+  if ("ilike" in val) return unwrap(val["ilike"]);
+  if ("hasIlike" in val) return unwrap(val["hasIlike"]);
+  if ("has" in val) return { op: "equals", value: val["has"] };
+  if ("eq" in val) {
+    if (val["eq"] === true) return { op: "isTrue" };
+    if (val["eq"] === false) return { op: "isFalse" };
+    return { op: isDate ? "on" : "equals", value: val["eq"] };
+  }
+  if ("ne" in val) return { op: "notEquals", value: val["ne"] };
+  if ("gt" in val) return { op: isDate ? "after" : "gt", value: val["gt"] };
+  if ("gte" in val) return { op: "gte", value: val["gte"] };
+  if ("lt" in val) return { op: isDate ? "before" : "lt", value: val["lt"] };
+  if ("lte" in val) return { op: "lte", value: val["lte"] };
+  if ("isNull" in val || "isEmpty" in val) return { op: "isEmpty" };
+  return { op: "equals" };
+}
+
+// ── helpers de drill-down (inalterados) ───────────────────────────────────────
 function resolvePath(shapes: Shapes, root: string, segments: string[]) {
   const chosen: { name: string; node: FieldIR }[] = [];
   let fields = shapes[root] ?? {};
