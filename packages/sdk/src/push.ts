@@ -66,24 +66,24 @@ function depsOf(ir: EntityIR): Set<string> {
 }
 
 /**
- * Empurra o schema-as-code pro Weave: serializa cada entidade (`toIR`) e aplica via
+ * Empurra o entities-as-code pro Weave: serializa cada entidade (`toIR`) e aplica via
  * `/admin/entities` (plan/apply seguro). Aplica em **ordem de dependência** (a
  * entidade referida antes da que referencia). Devolve o que foi aplicado e o que
  * precisa de revisão (com o plano por risco) — em vocabulário de objeto, sem SQL.
  *
  * `confirm`/`fill` (por entidade) destravam drops confirmados e backfills.
  */
-export async function pushSchema(
-  schema: Record<string, Entity<string, ShapeRecord>>,
+export async function pushEntities(
+  entities: Record<string, Entity<string, ShapeRecord>>,
   options: PushOptions,
 ): Promise<PushResult> {
   const transport: FetchLike = options.fetch ?? ((req) => globalThis.fetch(req));
   const base = options.url.replace(/\/$/, "");
 
-  const irs = Object.values(schema).map((e) => ({ name: e.name, ir: toIR(e) }));
+  const irs = Object.values(entities).map((e) => ({ name: e.name, ir: toIR(e) }));
   const byName = new Map(irs.map((x) => [x.name, x] as const));
 
-  // Topo-sort: dependências (dentro do schema) aplicadas primeiro.
+  // Topo-sort: dependências (dentro do entities) aplicadas primeiro.
   const ordered: { name: string; ir: EntityIR }[] = [];
   const seen = new Set<string>();
   const visit = (x: { name: string; ir: EntityIR }): void => {

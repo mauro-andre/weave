@@ -2,12 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { pushSchema, createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
+import { pushEntities, createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
 
-// F3: schema.push — schema-as-code → /admin/entities (plan/apply), em ordem de
+// F3: entities.push — entities-as-code → /admin/entities (plan/apply), em ordem de
 // dependência, devolvendo applied / review (plano por risco). Via app.hono.fetch.
 
-describe("SDK schema push (F3)", () => {
+describe("SDK entities push (F3)", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
   let key = "";
   const opts = () => ({ url: "http://localhost", key, fetch: (r: Request) => app.hono.fetch(r) });
@@ -46,12 +46,12 @@ describe("SDK schema push (F3)", () => {
     const product = defineEntity("pushprod", { name: text().notNull(), category: reference(category) });
 
     // Passa product ANTES de category de propósito — o topo-sort tem que reordenar.
-    const res = await pushSchema({ product, category }, opts());
+    const res = await pushEntities({ product, category }, opts());
     expect(res.review).toEqual([]);
     expect(res.applied).toEqual(["pushcat", "pushprod"]); // category aplicada primeiro
 
     // De fato funcional: criar um product com a reference via SDK.
-    const weave = createClient({ ...opts(), schema: { pushcat: category, pushprod: product } });
+    const weave = createClient({ ...opts(), entities: { pushcat: category, pushprod: product } });
     const cat = await weave.pushcat.create({ name: "Books" });
     const p = await weave.pushprod.create({ name: "Clean Code", categoryId: cat.id });
     expect(p.categoryId).toBe(cat.id);
@@ -59,26 +59,26 @@ describe("SDK schema push (F3)", () => {
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {
     const acct = defineEntity("pushacct", { label: text() });
-    expect((await pushSchema({ acct }, opts())).applied).toEqual(["pushacct"]);
-    const again = await pushSchema({ acct }, opts());
+    expect((await pushEntities({ acct }, opts())).applied).toEqual(["pushacct"]);
+    const again = await pushEntities({ acct }, opts());
     expect(again.applied).toEqual(["pushacct"]);
     expect(again.review).toEqual([]);
   });
 
   it("rename: injeta o id do campo antigo → o servidor vê RENAME (dado preservado)", async () => {
     const v1 = defineEntity("pushren", { name: text().notNull(), price: int4() });
-    await pushSchema({ x: v1 }, opts());
-    const w1 = createClient({ ...opts(), schema: { pushren: v1 } });
+    await pushEntities({ x: v1 }, opts());
+    const w1 = createClient({ ...opts(), entities: { pushren: v1 } });
     const row = await w1.pushren.create({ name: "Widget", price: 10 });
 
     // renomeia `name` → `title` no código + diz que é rename
     const v2 = defineEntity("pushren", { title: text().notNull(), price: int4() });
-    const res = await pushSchema({ x: v2 }, { ...opts(), renames: { pushren: { name: "title" } } });
+    const res = await pushEntities({ x: v2 }, { ...opts(), renames: { pushren: { name: "title" } } });
     expect(res.applied).toContain("pushren");
     expect(res.review).toEqual([]); // rename é seguro (não vira drop+add)
 
     // o dado sobreviveu: a linha agora tem `title` = "Widget"
-    const w2 = createClient({ ...opts(), schema: { pushren: v2 } });
+    const w2 = createClient({ ...opts(), entities: { pushren: v2 } });
     const got = (await w2.pushren.get(row.id)) as { title?: string; price?: number } | null;
     expect(got?.title).toBe("Widget");
     expect(got?.price).toBe(10);
@@ -86,16 +86,16 @@ describe("SDK schema push (F3)", () => {
 
   it("🟡 mudança que precisa de valor → review com plano; fill → applied", async () => {
     // pushacct.label já existe (nullable) do teste anterior. Cria uma linha NULL.
-    const weave = createClient({ ...opts(), schema: { pushacct: defineEntity("pushacct", { label: text() }) } });
+    const weave = createClient({ ...opts(), entities: { pushacct: defineEntity("pushacct", { label: text() }) } });
     await weave.pushacct.create({}); // label = NULL
 
     const acctNN = defineEntity("pushacct", { label: text().notNull() });
-    const review = await pushSchema({ acct: acctNN }, opts());
+    const review = await pushEntities({ acct: acctNN }, opts());
     expect(review.applied).not.toContain("pushacct");
     const plan = review.review.find((r) => r.name === "pushacct")!;
     expect(plan.plan.changes.some((c) => c.risk === "needsValue")).toBe(true);
 
-    const applied = await pushSchema({ acct: acctNN }, { ...opts(), fill: { pushacct: { label: "filled" } } });
+    const applied = await pushEntities({ acct: acctNN }, { ...opts(), fill: { pushacct: { label: "filled" } } });
     expect(applied.applied).toContain("pushacct");
     expect(applied.review).toEqual([]);
   });

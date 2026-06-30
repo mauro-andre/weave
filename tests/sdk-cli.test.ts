@@ -5,7 +5,7 @@ import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
 import { createClient } from "@mauroandre/weave-sdk";
-import { parseArgs, runCli, discoverSchema } from "@mauroandre/weave-sdk/cli";
+import { parseArgs, runCli, discoverEntities } from "@mauroandre/weave-sdk/cli";
 import category from "./fixtures/cli/entities/category.js";
 import product from "./fixtures/cli/entities/product.js";
 
@@ -28,11 +28,11 @@ describe("SDK CLI (F3) — parseArgs + weave push", () => {
     expect(a.renames).toEqual({ product: { name: "title" } });
   });
 
-  it("discoverSchema: lê a pasta e chaveia pelo nome da entidade (default export)", async () => {
+  it("discoverEntities: lê a pasta e chaveia pelo nome da entidade (default export)", async () => {
     const load = async (p: string) =>
       p.endsWith("category.ts") ? { default: category } : { default: product };
-    const schema = await discoverSchema(entitiesDir, load);
-    expect(Object.keys(schema).sort()).toEqual(["clicat", "cliprod"]);
+    const entities = await discoverEntities(entitiesDir, load);
+    expect(Object.keys(entities).sort()).toEqual(["clicat", "cliprod"]);
   });
 });
 
@@ -94,7 +94,7 @@ describe("SDK CLI (F3) — weave push integração", () => {
       url: "http://localhost",
       key,
       fetch: (r) => app.hono.fetch(r),
-      schema: { clicat: category, cliprod: product },
+      entities: { clicat: category, cliprod: product },
     });
     const cat = await weave.clicat.create({ name: "Books" });
     const p = await weave.cliprod.create({ name: "Clean Code", price: 80, categoryId: cat.id });

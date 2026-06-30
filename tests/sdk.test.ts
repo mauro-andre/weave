@@ -4,14 +4,14 @@ import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
 import { createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
 
-// Schema-as-code, exatamente como o dev escreveria. Nomes únicos (banco compartilhado).
+// Entities-as-code, exatamente como o dev escreveria. Nomes únicos (banco compartilhado).
 const category = defineEntity("sdkcat", { name: text().notNull() });
 const product = defineEntity("sdkprod", {
   name: text().notNull(),
   price: int4().notNull(),
   category: reference(category),
 });
-const schema = { sdkcat: category, sdkprod: product };
+const entities = { sdkcat: category, sdkprod: product };
 
 describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
@@ -19,7 +19,7 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
 
   // O `fetch` injetado: manda o Request direto pro app Hono em memória (sem rede).
   const weave = () =>
-    createClient({ url: "http://localhost", key, schema, fetch: (req) => app.hono.fetch(req) });
+    createClient({ url: "http://localhost", key, entities, fetch: (req) => app.hono.fetch(req) });
 
   beforeAll(async () => {
     app = await createTestApp({
@@ -159,7 +159,7 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
     const bad = createClient({
       url: "http://localhost",
       key: "weave_sk_nope",
-      schema,
+      entities,
       fetch: (req) => app.hono.fetch(req),
     });
     await expect(bad.sdkcat.find()).rejects.toMatchObject({ status: 401 });

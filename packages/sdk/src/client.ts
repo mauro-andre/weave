@@ -20,8 +20,8 @@ export interface ClientOptions<S> {
   url: string;
   /** API key (`x-api-key`). */
   key: string;
-  /** O schema-as-code: `{ nome: defineEntity(...) }`. */
-  schema: S;
+  /** O entities-as-code: `{ nome: defineEntity(...) }`. */
+  entities: S;
   /** Transporte. Default: `globalThis.fetch`. Nos testes: `app.hono.fetch`. */
   fetch?: FetchLike;
   /** @internal — scope ativo (`x-weave-scope`), definido via `weave.as(...)`. */
@@ -68,7 +68,7 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   delete(id: string): Promise<void>;
 }
 
-/** O client completo: uma propriedade por entidade do schema + `as` (scope). */
+/** O client completo: uma propriedade por entidade do entities + `as` (scope). */
 export type WeaveClient<S extends Record<string, Entity<string, ShapeRecord>>> = {
   [K in keyof S]: EntityClient<S[K]>;
 } & {
@@ -87,7 +87,7 @@ interface ListResponse {
 type AnyArgs = { where?: unknown; orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
 
 /**
- * Cria o client tipado a partir do schema-as-code. Casca fina sobre a API HTTP do
+ * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
  * Weave: monta o request, manda o `x-api-key`, revive `obj↔json` (datas) pela forma
  * da entidade, e serializa o `expand` no param. O `fetch` é injetável — em teste,
  * `app.hono.fetch`.
@@ -148,7 +148,7 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
 
   const client: Record<string, unknown> = {};
 
-  for (const [key, entity] of Object.entries(options.schema)) {
+  for (const [key, entity] of Object.entries(options.entities)) {
     const shape = entity.columns;
     const path = `/api/${entity.name}`;
     const revive = (o: unknown) => reviveShape(shape, o);

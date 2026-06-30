@@ -14,10 +14,10 @@ const isEntity = (v: unknown): v is Entity<string, ShapeRecord> =>
 
 /**
  * Lê a pasta de entidades, importa o `default` de cada arquivo, e monta o objeto
- * `schema` chaveado pelo nome da entidade — o mesmo que o `pushSchema`/`createClient`
+ * `entities` chaveado pelo nome da entidade — o mesmo que o `pushEntities`/`createClient`
  * consomem. Ignora arquivos sem `export default defineEntity(...)`.
  */
-export async function discoverSchema(
+export async function discoverEntities(
   entitiesDir: string,
   load: ModuleLoader = (p) => import(pathToFileURL(p).href),
 ): Promise<Record<string, Entity<string, ShapeRecord>>> {
@@ -25,10 +25,10 @@ export async function discoverSchema(
     .filter((f) => /\.(ts|tsx|mts|js|mjs)$/.test(f) && !f.endsWith(".d.ts"))
     .sort();
 
-  const schema: Record<string, Entity<string, ShapeRecord>> = {};
+  const entities: Record<string, Entity<string, ShapeRecord>> = {};
   for (const f of files) {
     const mod = await load(path.resolve(entitiesDir, f));
-    if (isEntity(mod.default)) schema[mod.default.name] = mod.default;
+    if (isEntity(mod.default)) entities[mod.default.name] = mod.default;
   }
-  return schema;
+  return entities;
 }

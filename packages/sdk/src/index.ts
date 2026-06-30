@@ -1,5 +1,5 @@
-// @mauroandre/weave-sdk — a cola. Schema-as-code in, objetos tipados out, HTTP/JSON
-// invisível. v1 (F1): createClient + CRUD tipado. Typed where (F2), schema.push +
+// @mauroandre/weave-sdk — a cola. Entities-as-code in, objetos tipados out, HTTP/JSON
+// invisível. v1 (F1): createClient + CRUD tipado. Typed where (F2), entities.push +
 // CLI (F3), scope-as-code/weave.as (F4) vêm depois.
 
 export { createClient } from "./client.js";
@@ -12,13 +12,13 @@ export type {
   FetchLike,
 } from "./client.js";
 export type { Infer, InferUpdate } from "./types.js";
-export { pushSchema } from "./push.js";
+export { pushEntities } from "./push.js";
 export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";
 export { defineConfig } from "./config.js";
 export type { WeaveConfig } from "./config.js";
 export { defineScope, pushScopes } from "./scope.js";
 export type { ScopeDef, ScopeEntityRule, Verb, PushScopesOptions } from "./scope.js";
-export { irToSource, genClientSource, pullSchema } from "./gen.js";
+export { irToSource, genClientSource, pullEntities } from "./gen.js";
 export type { PullOptions } from "./gen.js";
 export {
   WeaveError,
@@ -28,7 +28,7 @@ export {
   WeaveValidationError,
 } from "./errors.js";
 
-// Re-export do núcleo: o dev escreve o schema com os MESMOS builders do core
+// Re-export do núcleo: o dev escreve o entities com os MESMOS builders do core
 // (isomorfismo GUI ≡ código), e pode nomear os tipos de entidade quando precisar.
 export {
   defineEntity,

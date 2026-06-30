@@ -69,7 +69,7 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
     const out = await pushScopes({ storefront }, base());
     expect(out.pushed).toEqual(["sdkstore2"]);
 
-    const store = createClient({ ...base(), schema: { sdkpur2: purchase } }).as("sdkstore2", { company: 1 });
+    const store = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkstore2", { company: 1 });
     const rows = await store.sdkpur2.find();
     expect(rows.length).toBe(3); // só company 1 (filtro de linhas resolvido por id)
     expect(rows.every((r) => !("cost" in (r as Record<string, unknown>)))).toBe(true); // cost podado

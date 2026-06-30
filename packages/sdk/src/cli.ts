@@ -1,12 +1,12 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { discoverSchema, type ModuleLoader } from "./discover.js";
-import { pushSchema } from "./push.js";
-import { pullSchema, genClientSource } from "./gen.js";
+import { discoverEntities, type ModuleLoader } from "./discover.js";
+import { pushEntities } from "./push.js";
+import { pullEntities, genClientSource } from "./gen.js";
 
 // Barrel node-only (`@mauroandre/weave-sdk/cli`): a descoberta usa `node:fs`, então
 // fica fora do barrel principal (que é portável p/ browser).
-export { discoverSchema, type ModuleLoader } from "./discover.js";
+export { discoverEntities, type ModuleLoader } from "./discover.js";
 
 /** Escreve um arquivo (criando dirs). Injetável pra teste. */
 async function defaultWrite(file: string, content: string): Promise<void> {
@@ -18,7 +18,7 @@ import type { WeaveConfig } from "./config.js";
 import type { FetchLike } from "./client.js";
 
 // CLI `weave`. Hoje: `weave push` — carrega o weave.config.ts, descobre as entidades
-// por pasta (default export), e empurra via pushSchema (plan/apply, ordem de dep).
+// por pasta (default export), e empurra via pushEntities (plan/apply, ordem de dep).
 // Flags: --config, --confirm, --fill, --rename. Carrega TS via runtime TS-capaz
 // (Node 22.6+ com --experimental-strip-types, ou tsx/jiti).
 
@@ -96,22 +96,22 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
 
   // pull: puxa os IRs remotos → escreve os arquivos de entidade (codegen).
   if (args.command === "pull") {
-    const { files, names } = await pullSchema(net);
+    const { files, names } = await pullEntities(net);
     for (const [file, content] of Object.entries(files)) await write(path.join(entitiesDir, file), content);
     log(`✓ pulled ${names.length} ${names.length === 1 ? "entity" : "entities"} → ${config.entities}`);
     return 0;
   }
 
   // push/gen descobrem as entidades locais.
-  const schema = await discoverSchema(entitiesDir, load);
-  if (Object.keys(schema).length === 0) {
+  const entities = await discoverEntities(entitiesDir, load);
+  if (Object.keys(entities).length === 0) {
     log(`No entities found in ${config.entities}.`);
     return 1;
   }
 
   // gen: gera o barrel do client tipado a partir das entidades locais.
   if (args.command === "gen") {
-    const names = Object.keys(schema);
+    const names = Object.keys(entities);
     const out = path.resolve(entitiesDir, "../_generated/client.ts");
     await write(out, genClientSource(names));
     log(`✓ generated client (${names.length} ${names.length === 1 ? "entity" : "entities"}) → _generated/client.ts`);
@@ -119,7 +119,7 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
   }
 
   // push.
-  const res = await pushSchema(schema, {
+  const res = await pushEntities(entities, {
     ...net,
     confirm: args.confirm,
     fill: args.fill,

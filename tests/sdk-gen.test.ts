@@ -37,7 +37,7 @@ describe("SDK codegen (F5) — irToSource / genClientSource", () => {
     const src = genClientSource(["category", "product"]);
     expect(src).toContain('import category from "../entities/category.js";');
     expect(src).toContain('import product from "../entities/product.js";');
-    expect(src).toContain("export const schema = { category, product };");
+    expect(src).toContain("export const entities = { category, product };");
     expect(src).toContain("createClient({ url: process.env.WEAVE_URL!");
   });
 });

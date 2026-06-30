@@ -69,14 +69,14 @@ export function irToSource(ir: EntityIR): string {
 /** Gera o barrel do client (`_generated/client.ts`) importando as entidades. */
 export function genClientSource(entityNames: string[], entitiesRelPath = "../entities"): string {
   const imports = entityNames.map((n) => `import ${n} from "${entitiesRelPath}/${n}.js";`).join("\n");
-  const schema = entityNames.join(", ");
+  const entities = entityNames.join(", ");
   return [
     `// GERADO por \`weave gen\` — não edite à mão.`,
     `import { createClient } from "@mauroandre/weave-sdk";`,
     imports,
     "",
-    `export const schema = { ${schema} };`,
-    `export const weave = createClient({ url: process.env.WEAVE_URL!, key: process.env.WEAVE_KEY!, schema });`,
+    `export const entities = { ${entities} };`,
+    `export const weave = createClient({ url: process.env.WEAVE_URL!, key: process.env.WEAVE_KEY!, entities });`,
     "",
   ].join("\n");
 }
@@ -88,7 +88,7 @@ export interface PullOptions {
 }
 
 /** Puxa os IRs remotos e gera o source de cada entidade. Devolve `nome.ts → conteúdo`. */
-export async function pullSchema(options: PullOptions): Promise<{ files: Record<string, string>; names: string[] }> {
+export async function pullEntities(options: PullOptions): Promise<{ files: Record<string, string>; names: string[] }> {
   const transport: FetchLike = options.fetch ?? ((req) => globalThis.fetch(req));
   const base = options.url.replace(/\/$/, "");
   const res = await transport(

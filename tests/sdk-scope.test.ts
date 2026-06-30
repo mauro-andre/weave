@@ -75,7 +75,7 @@ describe("SDK weave.as — acesso escopado (F4a)", () => {
   });
 
   it("god (sem scope) vê tudo; escopado vê só as linhas permitidas + projeção", async () => {
-    const god = createClient({ ...base(), schema: { sdkpur: purchase } });
+    const god = createClient({ ...base(), entities: { sdkpur: purchase } });
     expect((await god.sdkpur.find()).length).toBe(5);
 
     const store = god.as("sdkstore", { company: 1 });
@@ -86,12 +86,12 @@ describe("SDK weave.as — acesso escopado (F4a)", () => {
   });
 
   it("verbo não permitido (create num scope read-only) → WeaveScopeError 403", async () => {
-    const store = createClient({ ...base(), schema: { sdkpur: purchase } }).as("sdkstore", { company: 1 });
+    const store = createClient({ ...base(), entities: { sdkpur: purchase } }).as("sdkstore", { company: 1 });
     await expect(store.sdkpur.create({ code: "X", cost: 1, company: 1 })).rejects.toMatchObject({ status: 403 });
   });
 
   it("param faltando → erro do scope (não vaza dado)", async () => {
-    const store = createClient({ ...base(), schema: { sdkpur: purchase } }).as("sdkstore", {});
+    const store = createClient({ ...base(), entities: { sdkpur: purchase } }).as("sdkstore", {});
     await expect(store.sdkpur.find()).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -13,11 +13,11 @@ transactions, and the Postgres optimizer for free — you just never see SQL.
 **Two ways to use it.** *Embedded* — your app talks to Postgres directly via
 `weave({ ... })` (most of the docs below). Or as a **client of a Weave server**
 over HTTP, thinking only in objects, never in HTTP or JSON — that's the
-**[SDK](#the-sdk--weave-over-http)** (`@mauroandre/weave-sdk`). The schema-as-code is
-the same either way.
+**[SDK](#the-sdk--weave-over-http)** (`@mauroandre/weave-sdk`). You declare entities
+the same way either way.
 
-The repo is a monorepo: **`@mauroandre/weave-core`** (pure schema + IR + type
-inference, zero runtime deps), **`@mauroandre/weave`** (`core` + Postgres — the
+The repo is a monorepo: **`@mauroandre/weave-core`** (pure entity builders + IR +
+type inference, zero runtime deps), **`@mauroandre/weave`** (`core` + Postgres — the
 embedded library), and **`@mauroandre/weave-sdk`** (`core` + the HTTP client).
 
 ## Why
@@ -249,11 +249,11 @@ app thinks in objects, and HTTP/JSON/SQL stay invisible. That's the SDK.
 npm install @mauroandre/weave-sdk
 ```
 
-### Schema as code — the same builders
+### Entities as code — the same builders
 
-Declare entities with the **same** `defineEntity` builders. The schema is
-*isomorphic*: hand-written code, the GUI designer, and codegen all produce the same
-thing. One file per entity, default-exported:
+Declare entities with the **same** `defineEntity` builders — *isomorphic*:
+hand-written code, the GUI designer, and codegen all produce the same thing. One
+file per entity, default-exported:
 
 ```ts
 // weave/entities/product.ts
@@ -277,7 +277,7 @@ import product  from "./weave/entities/product.js";
 const weave = createClient({
   url: process.env.WEAVE_URL!,
   key: process.env.WEAVE_KEY!,
-  schema: { category, product },
+  entities: { category, product },
 });
 
 const cat = await weave.category.create({ name: "Books" });   // arg is InferInsert — typed
@@ -303,7 +303,7 @@ never write a result type by hand.
 ### Migrations from the terminal
 
 Editing an entity file doesn't touch the database. Migrating is an explicit, gated
-step — `weave push` — that diffs the whole schema at once and applies it with the
+step — `weave push` — that diffs all your entities at once and applies them with the
 same risk buckets the GUI shows (🟢 auto · 🔴 confirm · 🟡 needs value · ⛔ blocked).
 
 ```ts
@@ -321,7 +321,7 @@ weave push                              # discover entities (by folder) → plan
 weave push --confirm product.legacy     # confirm a destructive drop
 weave push --fill product.sku="N/A"     # backfill a new required field
 weave push --rename product.name=title  # a rename: data preserved, not drop+add
-weave pull                              # remote schema → entity files (codegen)
+weave pull                              # pull entities from the server (codegen)
 weave gen                               # generate the typed client barrel
 ```
 
