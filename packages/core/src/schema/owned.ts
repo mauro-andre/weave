@@ -35,7 +35,14 @@ export class Owned<TShape extends OwnedShape, TCard extends OwnedCardinality> {
     readonly shape: TShape,
     readonly cardinality: TCard,
     readonly options: OwnedOptions,
+    /** Stable field id (UUID) — survives rename. Normally emitted by `weave gen`. */
+    readonly id?: string,
   ) {}
+
+  /** Pin a stable field id (survives rename). Normally emitted by `weave gen`. */
+  $id(id: string): Owned<TShape, TCard> {
+    return new Owned(this.shape, this.cardinality, this.options, id);
+  }
 }
 
 /** An owned relationship of any shape/cardinality. */

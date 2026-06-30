@@ -12,7 +12,8 @@ import type { ColumnIR, EntityIR, FieldIR, OwnedIR, ReferenceIR } from "./types.
  * Escopo: formas CONCRETAS (column/owned/reference). `mirror` é resolvido ANTES
  * do `fromIR` no pipeline real, e o builder ainda não carrega marca de mirror,
  * então `toIR` não emite `mirror` (fica pra quando o builder ganhar `mirror()`).
- * Também não emite `id`: ids são cunhados no servidor (o dev escreve id-less).
+ * Emite `id` quando o campo o carrega (via `.$id(...)`, normalmente do `weave
+ * gen`); ausente em campos id-less escritos à mão (o servidor cunha no apply).
  *
  * Saída CANÔNICA/mínima: optionals falsos são omitidos (`array:false`,
  * `notNull:false`, …), pra `toIR(fromIR(ir))` reproduzir o IR mínimo de origem.
@@ -31,6 +32,7 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
   if (node instanceof Column) {
     const c = node.config;
     const ir: ColumnIR = { kind: "column", type: c.pgType.name };
+    if (c.id) ir.id = c.id;
     if (c.isArray) ir.array = true;
     if (c.notNull) ir.notNull = true;
     if (c.hasDefault) ir.default = c.default;
@@ -44,6 +46,7 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
       target: node.target.name,
       cardinality: node.cardinality,
     };
+    if (node.id) ir.id = node.id;
     if (node.isNotNull) ir.notNull = true;
     return ir;
   }
@@ -53,6 +56,7 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
       array: node.cardinality === "many",
       shape: shapeToIR(node.shape),
     };
+    if (node.id) ir.id = node.id;
     if (node.options.table !== undefined) ir.table = node.options.table;
     return ir;
   }

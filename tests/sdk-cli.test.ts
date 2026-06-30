@@ -70,7 +70,7 @@ describe("SDK CLI (F3) — weave push integração", () => {
   });
 
   it("weave push: descobre por pasta, aplica em ordem de dependência, e funciona", async () => {
-    const config = { entities: "./entities", url: "http://localhost", key };
+    const config = { dir: "." }; // entidades em <cwd>/entities (fixturesDir/entities)
     const load = async (p: string) => {
       if (p.endsWith("weave.config.ts")) return { default: config };
       if (p.endsWith("category.ts")) return { default: category };
@@ -81,6 +81,7 @@ describe("SDK CLI (F3) — weave push integração", () => {
     const code = await runCli(["push"], {
       load,
       fetch: (r) => app.hono.fetch(r),
+      env: { WEAVE_URL: "http://localhost", WEAVE_KEY: key },
       cwd: fixturesDir,
       log: (m) => logs.push(m),
     });

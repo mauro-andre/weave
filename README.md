@@ -306,13 +306,15 @@ Editing an entity file doesn't touch the database. Migrating is an explicit, gat
 step — `weave push` — that diffs all your entities at once and applies them with the
 same risk buckets the GUI shows (🟢 auto · 🔴 confirm · 🟡 needs value · ⛔ blocked).
 
+The server is the source of truth. `WEAVE_URL` and `WEAVE_KEY` (a secret) come from
+the environment; the config file holds only structural decisions — where the
+generated folder lives (defaults to `weave/` at the project root):
+
 ```ts
 // weave.config.ts
 import { defineConfig } from "@mauroandre/weave-sdk";
 export default defineConfig({
-  entities: "./weave/entities",
-  url: process.env.WEAVE_URL!,
-  key: process.env.WEAVE_KEY!,
+  dir: "app/weave", // optional — defaults to "weave"
 });
 ```
 
@@ -321,14 +323,33 @@ weave push                              # discover entities (by folder) → plan
 weave push --confirm product.legacy     # confirm a destructive drop
 weave push --fill product.sku="N/A"     # backfill a new required field
 weave push --rename product.name=title  # a rename: data preserved, not drop+add
-weave pull                              # pull entities from the server (codegen)
-weave gen                               # generate the typed client barrel
+weave gen                               # regenerate the whole weave/ folder from the server
 ```
 
 Renaming a field in code is otherwise indistinguishable from drop+add — `--rename`
 tells the server it's a rename (the field's stable id is preserved), so the data
 survives. (This CLI is `@mauroandre/weave-sdk`'s, for the client/server model —
 distinct from the embedded engine's own CLI above.)
+
+### `weave gen` — the server back into code
+
+You can author entities and scopes in the GUI *or* in code, mixed. `weave gen` is a
+one-way mirror: it fetches the server's current state and **overwrites** the `weave/`
+folder — entity files (each field carrying its stable `$id`), scope files, the
+re-export barrels, and a ready-to-use `weave` client. Everything is readable `.ts`,
+meant to be committed.
+
+```
+weave/
+  entities/  products.ts · category.ts · index.ts   # import { products } from "…/weave/entities"
+  scopes/    public.ts · index.ts
+  index.ts   # export const weave = createClient({ url: WEAVE_URL, key: WEAVE_KEY, entities })
+```
+
+Code-first round-trip: write a field id-less → `weave push` (the server mints the id)
+→ `weave gen` (rewrites the file with `.$id(...)`). From then on, renames are safe.
+The generated client reads `WEAVE_URL`/`WEAVE_KEY` at runtime (no secret committed)
+and holds the god-mode key, so it's for server-side use.
 
 ### Scopes — access control as code
 

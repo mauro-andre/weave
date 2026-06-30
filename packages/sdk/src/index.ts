@@ -18,7 +18,8 @@ export { defineConfig } from "./config.js";
 export type { WeaveConfig } from "./config.js";
 export { defineScope, pushScopes } from "./scope.js";
 export type { ScopeDef, ScopeEntityRule, Verb, PushScopesOptions } from "./scope.js";
-export { irToSource, genClientSource, pullEntities } from "./gen.js";
+export { irToSource, scopeToSource, genProject, pullEntities } from "./gen.js";
+export type { IrToSourceOptions, GenOptions, GenProject } from "./gen.js";
 export type { PullOptions } from "./gen.js";
 export {
   WeaveError,

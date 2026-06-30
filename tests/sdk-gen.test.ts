@@ -2,27 +2,35 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { irToSource, genClientSource } from "@mauroandre/weave-sdk";
+import { irToSource, scopeToSource, genProject, pushScopes, defineScope } from "@mauroandre/weave-sdk";
+import type { EntityIR } from "@mauroandre/weave-core";
 import { runCli } from "@mauroandre/weave-sdk/cli";
 
-// F5: codegen. irToSource (IR → defineEntity), genClientSource (barrel), e
-// `weave pull` (IRs remotos → arquivos de entidade) via runCli + write injetado.
+// `weave gen`: estado do servidor (entidades + scopes) → pasta weave/ inteira.
+// irToSource (IR → defineEntity, com/sem $id), scopeToSource (storage por-id →
+// defineScope por-nome), genProject (orquestra: arquivos + barrels + client), e
+// o `runCli(["gen"])` (wiring: env, clean, write).
 
-describe("SDK codegen (F5) — irToSource / genClientSource", () => {
-  it("irToSource: IR → source defineEntity (com imports e builders)", () => {
-    const ir = {
-      irVersion: 1,
-      name: "product",
-      fields: {
-        name: { kind: "column", type: "text", notNull: true },
-        price: { kind: "column", type: "int4" },
-        tags: { kind: "column", type: "text", array: true },
-        category: { kind: "reference", target: "category", cardinality: "one" },
-        items: { kind: "owned", array: true, shape: { qty: { kind: "column", type: "int4", notNull: true } } },
+describe("SDK codegen — irToSource", () => {
+  const ir = {
+    irVersion: 1,
+    name: "product",
+    fields: {
+      name: { kind: "column", id: "fid-name", type: "text", notNull: true },
+      price: { kind: "column", id: "fid-price", type: "int4" },
+      tags: { kind: "column", id: "fid-tags", type: "text", array: true },
+      category: { kind: "reference", id: "fid-cat", target: "category", cardinality: "one" },
+      items: {
+        kind: "owned",
+        id: "fid-items",
+        array: true,
+        shape: { qty: { kind: "column", id: "fid-qty", type: "int4", notNull: true } },
       },
-    } as const;
-    const src = irToSource(ir as never);
+    },
+  } as const;
 
+  it("IR → source defineEntity (sem $id por padrão)", () => {
+    const src = irToSource(ir as never);
     expect(src).toContain('export default defineEntity("product", {');
     expect(src).toContain("name: text().notNull(),");
     expect(src).toContain("price: int4(),");
@@ -31,18 +39,78 @@ describe("SDK codegen (F5) — irToSource / genClientSource", () => {
     expect(src).toContain("items: owned(array({ qty: int4().notNull() })),");
     expect(src).toContain('import category from "./category.js";');
     expect(src).toContain("import { defineEntity, array, int4, owned, reference, text } from");
+    expect(src).not.toContain(".$id(");
   });
 
-  it("genClientSource: barrel com imports + createClient", () => {
-    const src = genClientSource(["category", "product"]);
-    expect(src).toContain('import category from "../entities/category.js";');
-    expect(src).toContain('import product from "../entities/product.js";');
-    expect(src).toContain("export const entities = { category, product };");
-    expect(src).toContain("createClient({ url: process.env.WEAVE_URL!");
+  it("withId: emite .$id(...) em cada campo (inclusive aninhados)", () => {
+    const src = irToSource(ir as never, { withId: true });
+    expect(src).toContain('name: text().notNull().$id("fid-name"),');
+    expect(src).toContain('tags: array(text()).$id("fid-tags"),');
+    expect(src).toContain('category: reference(category).$id("fid-cat"),');
+    expect(src).toContain('owned(array({ qty: int4().notNull().$id("fid-qty") })).$id("fid-items")');
   });
 });
 
-describe("SDK codegen (F5) — weave pull", () => {
+describe("SDK codegen — scopeToSource", () => {
+  const byName = new Map<string, EntityIR>([
+    [
+      "product",
+      {
+        irVersion: 1,
+        name: "product",
+        fields: {
+          title: { kind: "column", id: "f1", type: "text", notNull: true },
+          secret: { kind: "column", id: "f2", type: "text" },
+          category: { kind: "reference", id: "f3", target: "category", cardinality: "one" },
+        },
+      },
+    ],
+    [
+      "category",
+      { irVersion: 1, name: "category", fields: { label: { kind: "column", id: "c1", type: "text" } } },
+    ],
+  ]);
+
+  it("storage por-id → defineScope por-nome (where + projeção)", () => {
+    const scope = {
+      name: "public",
+      entities: {
+        product: {
+          verbs: ["read"],
+          rows: { path: ["f1"], op: "contains", value: "a" },
+          fields: { mode: "exclude" as const, paths: [["f2"]] },
+        },
+      },
+    };
+    const src = scopeToSource(scope, byName);
+    expect(src).toContain('export default defineScope("public", {');
+    expect(src).toContain('verbs: ["read"]');
+    expect(src).toContain('title: {'); // where resolvido por nome
+    expect(src).toContain('ilike: "%a%"'); // contains → ilike %..%
+    expect(src).toContain('exclude: ["secret"]'); // projeção id→nome
+  });
+
+  it("resolve caminho aninhado via reference e param", () => {
+    const scope = {
+      name: "scoped",
+      entities: {
+        product: {
+          verbs: ["read", "update"],
+          rows: { path: ["f3", "c1"], op: "equals", value: { param: "label" } },
+          fields: null,
+        },
+      },
+    };
+    const src = scopeToSource(scope, byName);
+    expect(src).toContain('verbs: ["read", "update"]');
+    expect(src).toContain("category: {");
+    expect(src).toContain("label: {");
+    expect(src).toContain('eq: {'); // valor é { param: "label" }
+    expect(src).toContain('param: "label"');
+  });
+});
+
+describe("SDK codegen — genProject / weave gen", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
   let key = "";
 
@@ -77,6 +145,16 @@ describe("SDK codegen (F5) — weave pull", () => {
     const master = (await findUserByUsername(process.env.MASTER_USERNAME!))!;
     const res = await app.as({ user: master }).action(action_createKey, { body: { name: "gen key" } });
     key = (await res.json()).key as string;
+
+    // empurra um scope-as-code (exercita o round-trip por-id → por-nome no gen)
+    await pushScopes(
+      {
+        staff: defineScope("genstaff", {
+          genprod: { verbs: ["read"], where: { name: { ilike: "%a%" } }, fields: { exclude: ["category"] } },
+        }),
+      },
+      { url: "http://localhost", key, fetch: (r) => app.hono.fetch(r) },
+    );
   });
 
   afterAll(async () => {
@@ -85,25 +163,55 @@ describe("SDK codegen (F5) — weave pull", () => {
     await closeDb();
   });
 
-  it("weave pull: IRs remotos → arquivos de entidade (codegen)", async () => {
-    const config = { entities: "./entities", url: "http://localhost", key };
+  it("genProject: entidades com $id, barrels, scope resolvido e client", async () => {
+    const { files } = await genProject({ url: "http://localhost", key, fetch: (r) => app.hono.fetch(r) });
+
+    // entidades com $id (rename-safe)
+    expect(files["entities/genprod.ts"]).toContain("category: reference(gencat)");
+    expect(files["entities/genprod.ts"]).toContain(".$id(");
+    expect(files["entities/genprod.ts"]).toContain('import gencat from "./gencat.js";');
+    expect(files["entities/gencat.ts"]).toContain("name: text().notNull().$id(");
+
+    // barrel das entidades (re-export nomeado → autocomplete)
+    expect(files["entities/index.ts"]).toContain('export { default as genprod } from "./genprod.js";');
+    expect(files["entities/index.ts"]).toContain('export { default as gencat } from "./gencat.js";');
+
+    // scope resolvido de volta por nome
+    expect(files["scopes/genstaff.ts"]).toContain('export default defineScope("genstaff", {');
+    expect(files["scopes/genstaff.ts"]).toContain("name: {");
+    expect(files["scopes/genstaff.ts"]).toContain('ilike: "%a%"');
+    expect(files["scopes/genstaff.ts"]).toContain('exclude: ["category"]');
+    expect(files["scopes/index.ts"]).toContain('export { default as genstaff } from "./genstaff.js";');
+
+    // client configurado, lê do ambiente
+    expect(files["index.ts"]).toContain("createClient({");
+    expect(files["index.ts"]).toContain("process.env.WEAVE_URL");
+    expect(files["index.ts"]).toContain('import * as entities from "./entities/index.js";');
+  });
+
+  it("runCli gen: limpa as pastas e escreve a árvore na pasta do config", async () => {
+    const config = { dir: "app/weave" };
     const load = async (p: string) => (p.endsWith("weave.config.ts") ? { default: config } : {});
     const written: Record<string, string> = {};
-    const code = await runCli(["pull"], {
+    const cleaned: string[] = [];
+    const code = await runCli(["gen"], {
       load,
       fetch: (r) => app.hono.fetch(r),
+      env: { WEAVE_URL: "http://localhost", WEAVE_KEY: key },
       write: async (file, content) => {
-        written[file.split("/").pop()!] = content;
+        written[file] = content;
+      },
+      clean: async (d) => {
+        cleaned.push(d);
       },
       cwd: "/proj",
       log: () => {},
     });
     expect(code).toBe(0);
-    // (o banco é compartilhado entre arquivos de teste — pull traz todas; checamos as nossas)
-    expect(Object.keys(written)).toContain("gencat.ts");
-    expect(Object.keys(written)).toContain("genprod.ts");
-    expect(written["genprod.ts"]).toContain("category: reference(gencat),");
-    expect(written["genprod.ts"]).toContain('import gencat from "./gencat.js";');
-    expect(written["gencat.ts"]).toContain("name: text().notNull(),");
+    expect(cleaned).toContain("/proj/app/weave/entities");
+    expect(cleaned).toContain("/proj/app/weave/scopes");
+    expect(written["/proj/app/weave/entities/genprod.ts"]).toContain(".$id(");
+    expect(written["/proj/app/weave/index.ts"]).toContain("createClient({");
+    expect(written["/proj/app/weave/scopes/genstaff.ts"]).toContain('defineScope("genstaff"');
   });
 });

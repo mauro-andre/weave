@@ -2,7 +2,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverEntities, type ModuleLoader } from "./discover.js";
 import { pushEntities } from "./push.js";
-import { pullEntities, genClientSource } from "./gen.js";
+import { pullEntities, genProject } from "./gen.js";
+import { DEFAULT_DIR, type WeaveConfig } from "./config.js";
 
 // Barrel node-only (`@mauroandre/weave-sdk/cli`): a descoberta usa `node:fs`, então
 // fica fora do barrel principal (que é portável p/ browser).
@@ -14,11 +15,18 @@ async function defaultWrite(file: string, content: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, content, "utf8");
 }
-import type { WeaveConfig } from "./config.js";
+
+/** Apaga uma pasta recursivamente (idempotente). Injetável pra teste. */
+async function defaultClean(dir: string): Promise<void> {
+  const fs = await import("node:fs/promises");
+  await fs.rm(dir, { recursive: true, force: true });
+}
 import type { FetchLike } from "./client.js";
 
-// CLI `weave`. Hoje: `weave push` — carrega o weave.config.ts, descobre as entidades
-// por pasta (default export), e empurra via pushEntities (plan/apply, ordem de dep).
+// CLI `weave`. Comandos: `gen` (server → pasta weave/: entidades com $id, scopes,
+// barrels e client — overwrite cego), `push` (código → server, plan/apply em ordem
+// de dep), `pull` (legado: só entidades). url/key vêm do ambiente (WEAVE_URL/
+// WEAVE_KEY); a pasta de destino do `weave.config.ts` (`dir`, default "weave").
 // Flags: --config, --confirm, --fill, --rename. Carrega TS via runtime TS-capaz
 // (Node 22.6+ com --experimental-strip-types, ou tsx/jiti).
 
@@ -65,6 +73,10 @@ export interface CliDeps {
   fetch?: FetchLike;
   /** Escreve arquivo (pull/gen). Default: fs. */
   write?: (file: string, content: string) => Promise<void>;
+  /** Apaga pasta (gen, antes de reescrever). Default: fs.rm. */
+  clean?: (dir: string) => Promise<void>;
+  /** Variáveis de ambiente (WEAVE_URL/WEAVE_KEY). Default: process.env. */
+  env?: Record<string, string | undefined>;
   cwd?: string;
   log?: (msg: string) => void;
 }
@@ -78,44 +90,59 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
   const log = deps.log ?? ((m: string) => console.log(m));
   const load: ModuleLoader = deps.load ?? ((p) => import(pathToFileURL(p).href));
   const cwd = deps.cwd ?? process.cwd();
+  const env = deps.env ?? process.env;
 
   if (!["push", "pull", "gen"].includes(args.command)) {
     log(`Unknown command '${args.command}'. Try: weave push | pull | gen`);
     return 1;
   }
 
-  const configPath = path.resolve(cwd, args.config);
-  const config = (await load(configPath)).default as WeaveConfig | undefined;
-  if (!config?.url || !config?.key || !config?.entities) {
-    log("Invalid weave.config.ts — needs { entities, url, key }.");
+  const url = env["WEAVE_URL"];
+  const key = env["WEAVE_KEY"];
+  if (!url || !key) {
+    log("Set WEAVE_URL and WEAVE_KEY in the environment.");
     return 1;
   }
-  const entitiesDir = path.resolve(path.dirname(configPath), config.entities);
-  const net = { url: config.url, key: config.key, ...(deps.fetch ? { fetch: deps.fetch } : {}) };
-  const write = deps.write ?? defaultWrite;
 
-  // pull: puxa os IRs remotos → escreve os arquivos de entidade (codegen).
+  // Config é opcional (só `dir`, default "weave"); ausente/ilegível → defaults.
+  const configPath = path.resolve(cwd, args.config);
+  let config: WeaveConfig = {};
+  try {
+    config = ((await load(configPath)).default ?? {}) as WeaveConfig;
+  } catch {
+    /* sem weave.config.ts — usa defaults */
+  }
+  const dirRel = config.dir ?? DEFAULT_DIR;
+  const dir = path.resolve(cwd, dirRel);
+  const entitiesDir = path.join(dir, "entities");
+  const net = { url, key, ...(deps.fetch ? { fetch: deps.fetch } : {}) };
+  const write = deps.write ?? defaultWrite;
+  const clean = deps.clean ?? defaultClean;
+
+  // gen: server → pasta weave/ inteira (overwrite cego). Limpa entities/ e scopes/,
+  // reescreve tudo (arquivos com $id, scopes resolvidos, barrels, client).
+  if (args.command === "gen") {
+    const { files, entities, scopes } = await genProject(net);
+    await clean(path.join(dir, "entities"));
+    await clean(path.join(dir, "scopes"));
+    for (const [rel, content] of Object.entries(files)) await write(path.join(dir, rel), content);
+    log(`✓ generated ${entities.length} ${entities.length === 1 ? "entity" : "entities"}, ${scopes.length} ${scopes.length === 1 ? "scope" : "scopes"} → ${dirRel}/`);
+    return 0;
+  }
+
+  // pull (legado): puxa os IRs remotos → escreve os arquivos de entidade (sem $id).
   if (args.command === "pull") {
     const { files, names } = await pullEntities(net);
     for (const [file, content] of Object.entries(files)) await write(path.join(entitiesDir, file), content);
-    log(`✓ pulled ${names.length} ${names.length === 1 ? "entity" : "entities"} → ${config.entities}`);
+    log(`✓ pulled ${names.length} ${names.length === 1 ? "entity" : "entities"} → ${dirRel}/entities`);
     return 0;
   }
 
-  // push/gen descobrem as entidades locais.
+  // push descobre as entidades locais.
   const entities = await discoverEntities(entitiesDir, load);
   if (Object.keys(entities).length === 0) {
-    log(`No entities found in ${config.entities}.`);
+    log(`No entities found in ${dirRel}/entities.`);
     return 1;
-  }
-
-  // gen: gera o barrel do client tipado a partir das entidades locais.
-  if (args.command === "gen") {
-    const names = Object.keys(entities);
-    const out = path.resolve(entitiesDir, "../_generated/client.ts");
-    await write(out, genClientSource(names));
-    log(`✓ generated client (${names.length} ${names.length === 1 ? "entity" : "entities"}) → _generated/client.ts`);
-    return 0;
   }
 
   // push.

@@ -29,11 +29,18 @@ export class Reference<
     readonly target: TTarget,
     readonly cardinality: TCard,
     readonly isNotNull: boolean,
+    /** Stable field id (UUID) — survives rename. Normally emitted by `weave gen`. */
+    readonly id?: string,
   ) {}
 
   /** Make the FK `NOT NULL` (only meaningful for N:1). */
   notNull(): Reference<TTarget, TCard, true> {
-    return new Reference<TTarget, TCard, true>(this.target, this.cardinality, true);
+    return new Reference<TTarget, TCard, true>(this.target, this.cardinality, true, this.id);
+  }
+
+  /** Pin a stable field id (survives rename). Normally emitted by `weave gen`. */
+  $id(id: string): Reference<TTarget, TCard, TNotNull> {
+    return new Reference<TTarget, TCard, TNotNull>(this.target, this.cardinality, this.isNotNull, id);
   }
 }
 

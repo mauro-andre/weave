@@ -15,6 +15,8 @@ import type { PgType, Infer } from "../types/pg-type.js";
 
 /** Runtime description of a column, consumed by the DDL layer. */
 export interface ColumnConfig {
+  /** Stable field id (UUID) — survives rename. Normally born from `weave gen`; absent for hand-written, id-less fields. */
+  readonly id?: string;
   /** The underlying catalog type. For arrays, the *element* type. */
   readonly pgType: PgType;
   /** Whether this is `type[]` rather than a scalar `type`. */
@@ -71,6 +73,11 @@ export class Column<
   /** Add a single-column index. */
   index(): Column<TData, TNotNull, THasDefault> {
     return new Column({ ...this.config, index: true });
+  }
+
+  /** Pin a stable field id (survives rename). Normally emitted by `weave gen`. */
+  $id(id: string): Column<TData, TNotNull, THasDefault> {
+    return new Column({ ...this.config, id });
   }
 }
 
