@@ -319,12 +319,18 @@ export default defineConfig({
 ```
 
 ```bash
-weave push                              # discover entities (by folder) → plan → apply
+weave push                              # entities (plan → apply) + scopes, then re-gen locally
 weave push --confirm product.legacy     # confirm a destructive drop
 weave push --fill product.sku="N/A"     # backfill a new required field
 weave push --rename product.name=title  # a rename: data preserved, not drop+add
+weave push --no-gen                     # apply to the server but don't rewrite local files (CI)
 weave gen                               # regenerate the whole weave/ folder from the server
 ```
+
+`weave push` sends everything — entities first (the server mints/keeps their field
+ids), then scopes (resolved against those ids) — and finishes by running `gen` so
+your local files pick up any freshly-minted `$id`. In CI, where you only want to
+apply and not touch the working tree, pass `--no-gen`.
 
 Renaming a field in code is otherwise indistinguishable from drop+add — `--rename`
 tells the server it's a rename (the field's stable id is preserved), so the data

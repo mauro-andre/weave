@@ -1,13 +1,14 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { discoverEntities, type ModuleLoader } from "./discover.js";
+import { discoverEntities, discoverScopes, type ModuleLoader } from "./discover.js";
 import { pushEntities } from "./push.js";
+import { pushScopes } from "./scope.js";
 import { pullEntities, genProject } from "./gen.js";
 import { DEFAULT_DIR, type WeaveConfig } from "./config.js";
 
 // Barrel node-only (`@mauroandre/weave-sdk/cli`): a descoberta usa `node:fs`, então
 // fica fora do barrel principal (que é portável p/ browser).
-export { discoverEntities, type ModuleLoader } from "./discover.js";
+export { discoverEntities, discoverScopes, type ModuleLoader } from "./discover.js";
 
 /** Escreve um arquivo (criando dirs). Injetável pra teste. */
 async function defaultWrite(file: string, content: string): Promise<void> {
@@ -36,6 +37,8 @@ export interface ParsedArgs {
   confirm: Record<string, string[]>;
   fill: Record<string, Record<string, unknown>>;
   renames: Record<string, Record<string, string>>;
+  /** `--no-gen`: após o push, NÃO re-sincroniza os arquivos locais (CI, read-only). */
+  noGen: boolean;
 }
 
 /** "product.legacy" → ["product", "legacy"]; "product.items.qty" → ["product","items.qty"]. */
@@ -46,10 +49,11 @@ function splitEntity(s: string | undefined): [string, string] {
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { command: argv[0] ?? "", config: "weave.config.ts", confirm: {}, fill: {}, renames: {} };
+  const out: ParsedArgs = { command: argv[0] ?? "", config: "weave.config.ts", confirm: {}, fill: {}, renames: {}, noGen: false };
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--config") out.config = argv[++i] ?? out.config;
+    else if (a === "--no-gen") out.noGen = true;
     else if (a === "--confirm") {
       const [e, p] = splitEntity(argv[++i]);
       if (e && p) (out.confirm[e] ??= []).push(p);
@@ -119,14 +123,19 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
   const write = deps.write ?? defaultWrite;
   const clean = deps.clean ?? defaultClean;
 
-  // gen: server → pasta weave/ inteira (overwrite cego). Limpa entities/ e scopes/,
-  // reescreve tudo (arquivos com $id, scopes resolvidos, barrels, client).
-  if (args.command === "gen") {
+  // Regenera a pasta weave/ a partir do server (overwrite cego). Usado pelo `gen`
+  // e ao fim do `push` (re-sincroniza os $id recém-cunhados), salvo `--no-gen`.
+  const regen = async (): Promise<void> => {
     const { files, entities, scopes } = await genProject(net);
     await clean(path.join(dir, "entities"));
     await clean(path.join(dir, "scopes"));
     for (const [rel, content] of Object.entries(files)) await write(path.join(dir, rel), content);
     log(`✓ generated ${entities.length} ${entities.length === 1 ? "entity" : "entities"}, ${scopes.length} ${scopes.length === 1 ? "scope" : "scopes"} → ${dirRel}/`);
+  };
+
+  // gen: server → pasta weave/ inteira (arquivos com $id, scopes resolvidos, barrels, client).
+  if (args.command === "gen") {
+    await regen();
     return 0;
   }
 
@@ -138,14 +147,14 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
     return 0;
   }
 
-  // push descobre as entidades locais.
+  // push: tudo vai — entidades primeiro (cunham/fixam ids), depois scopes (resolvem
+  // nome→id contra o server), e por fim o gen re-sincroniza os arquivos locais.
   const entities = await discoverEntities(entitiesDir, load);
   if (Object.keys(entities).length === 0) {
     log(`No entities found in ${dirRel}/entities.`);
     return 1;
   }
 
-  // push.
   const res = await pushEntities(entities, {
     ...net,
     confirm: args.confirm,
@@ -158,11 +167,22 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
     log(`  ⚠ ${r.name} — needs review:`);
     for (const c of r.plan.changes) log(`      ${riskIcon(c.risk)} ${c.op}  ${c.path}  (${c.risk})`);
   }
+  // Mudanças bloqueadas no gate → para aqui; scopes/gen ficam pra quando aplicar.
   if (res.review.length > 0) {
     log("Run again with --confirm / --fill / --rename to apply the gated changes.");
     return 1;
   }
   log(`✓ pushed ${res.applied.length} ${res.applied.length === 1 ? "entity" : "entities"}.`);
+
+  // Scopes (só depois das entidades aplicadas — o push resolve nome→id no server).
+  const scopes = await discoverScopes(path.join(dir, "scopes"), load);
+  if (Object.keys(scopes).length > 0) {
+    const { pushed } = await pushScopes(scopes, net);
+    log(`✓ pushed ${pushed.length} ${pushed.length === 1 ? "scope" : "scopes"}.`);
+  }
+
+  // Re-sincroniza os arquivos locais (ids recém-cunhados), salvo --no-gen.
+  if (!args.noGen) await regen();
   return 0;
 }
 
