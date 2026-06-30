@@ -5,8 +5,15 @@
   "type": "module",
   "license": "MIT",
   "author": "Mauro André",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mauro-andre/weave.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/mauro-andre/weave#readme",
+  "bugs": "https://github.com/mauro-andre/weave/issues",
   "bin": {
-    "weave": "./dist/cli.js"
+    "weave": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
