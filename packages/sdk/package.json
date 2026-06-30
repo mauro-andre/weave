@@ -1,11 +1,18 @@
 {
   "name": "@mauroandre/weave-sdk",
   "version": "0.0.0",
-  "description": "Weave SDK — typed object client over the Weave HTTP API. The glue: schema-as-code in, objects out, HTTP/JSON invisible.",
+  "description": "Weave SDK — typed object client over the Weave HTTP API. The glue: entities-as-code in, objects out, HTTP/JSON invisible.",
   "type": "module",
+  "license": "MIT",
+  "author": "Mauro André",
   "bin": {
     "weave": "./dist/cli.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -16,6 +23,20 @@
       "import": "./src/cli.ts"
     }
   },
+  "scripts": {
+    "build": "tsup"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "weave",
+    "postgres",
+    "orm",
+    "typed-client",
+    "sdk",
+    "typescript"
+  ],
   "dependencies": {
     "@mauroandre/weave-core": "*"
   }

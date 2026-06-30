@@ -1,0 +1,88 @@
+name: release
+
+# Dispara ao publicar uma Release no GitHub. O nome da tag vira a versão tanto do
+# pacote npm (@mauroandre/weave-sdk) quanto da imagem Docker (GHCR). Ex.: tag 0.0.1.
+on:
+  release:
+    types: [published]
+
+jobs:
+  # ── SDK no npm ────────────────────────────────────────────────────────────────
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance (repo público)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Build SDK (core embutido)
+        run: npm run build -w @mauroandre/weave-sdk
+
+      - name: Prepara o manifest pra publicação
+        working-directory: packages/sdk
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            p.version = process.env.TAG.replace(/^v/, "");
+            // o core foi embutido no bundle — não é dependência publicada
+            if (p.dependencies) {
+              delete p.dependencies["@mauroandre/weave-core"];
+              if (Object.keys(p.dependencies).length === 0) delete p.dependencies;
+            }
+            // publicado: exports apontam pro dist (em dev apontam pro src)
+            p.exports = {
+              ".":     { types: "./dist/index.d.ts", import: "./dist/index.js" },
+              "./cli": { types: "./dist/cli.d.ts",   import: "./dist/cli.js" },
+            };
+            fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
+          '
+
+      - name: Publica
+        working-directory: packages/sdk
+        run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Imagem da app no GHCR ─────────────────────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve versão + nome da imagem (lowercase)
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
