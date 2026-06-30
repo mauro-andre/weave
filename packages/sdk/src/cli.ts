@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { createJiti } from "jiti";
 import { discoverEntities, discoverScopes, type ModuleLoader } from "./discover.js";
 import { pushEntities } from "./push.js";
 import { pushScopes } from "./scope.js";
@@ -22,6 +24,25 @@ async function defaultWrite(file: string, content: string): Promise<void> {
 async function defaultClean(dir: string): Promise<void> {
   const fs = await import("node:fs/promises");
   await fs.rm(dir, { recursive: true, force: true });
+}
+
+// Loader padrão: jiti carrega os `.ts` do dev (weave.config.ts + entidades) em
+// runtime — resolve type-stripping e o `import "./x.js"` → `x.ts` que o Node puro
+// não faz. Criado uma vez, sob demanda. Injetável (os testes passam o próprio load).
+let jiti: ReturnType<typeof createJiti> | null = null;
+const defaultLoad: ModuleLoader = (p) => {
+  jiti ??= createJiti(import.meta.url);
+  return jiti.import(p) as Promise<{ default?: unknown }>;
+};
+
+/** Carrega o `.env` do projeto pro process.env (built-in do Node). Silencioso se não houver. */
+function loadEnv(cwd: string): Record<string, string | undefined> {
+  try {
+    process.loadEnvFile(path.resolve(cwd, ".env"));
+  } catch {
+    /* sem .env — segue com o ambiente atual */
+  }
+  return process.env;
 }
 import type { FetchLike } from "./client.js";
 
@@ -93,9 +114,9 @@ const riskIcon = (r: string): string =>
 export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number> {
   const args = parseArgs(argv);
   const log = deps.log ?? ((m: string) => console.log(m));
-  const load: ModuleLoader = deps.load ?? ((p) => import(pathToFileURL(p).href));
   const cwd = deps.cwd ?? process.cwd();
-  const env = deps.env ?? process.env;
+  const load: ModuleLoader = deps.load ?? defaultLoad;
+  const env = deps.env ?? loadEnv(cwd);
 
   if (!["push", "pull", "gen"].includes(args.command)) {
     log(`Unknown command '${args.command}'. Try: weave push | pull | gen`);
@@ -191,7 +212,14 @@ export async function main(): Promise<void> {
   process.exit(await runCli(process.argv.slice(2)));
 }
 
-// Executado direto (bin) → roda o main.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main();
+// Executado direto (bin) → roda o main. `realpathSync` resolve o symlink do bin
+// (node_modules/.bin/weave → dist/cli.js); sem isso, rodar via o symlink não bate
+// com `import.meta.url` (caminho real) e o main nunca rodava.
+if (process.argv[1]) {
+  try {
+    const invoked = pathToFileURL(realpathSync(process.argv[1])).href;
+    if (invoked === import.meta.url) void main();
+  } catch {
+    /* não foi possível resolver o caminho — não é uma invocação direta */
+  }
 }

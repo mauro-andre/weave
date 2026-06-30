@@ -1,0 +1,36 @@
+# Sobe o Weave completo pra desenvolvimento: Postgres 17 + o servidor Weave.
+# O Weave fica em http://localhost:3100 (a 3000 fica livre pro `npm run dev` do app).
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: weave
+      POSTGRES_PASSWORD: weave
+      POSTGRES_DB: weave
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  weave:
+    image: ghcr.io/mauro-andre/weave:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://weave:weave@postgres:5432/weave
+      MASTER_USERNAME: master
+      MASTER_PASSWORD: master
+      SESSION_SECRET: dev-only-secret-change-me
+    ports:
+      - "3100:3000" # host 3100 → container 3000 (deixa a 3000 pro app)
+
+volumes:
+  pgdata:
