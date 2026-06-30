@@ -50,7 +50,9 @@ jobs:
 
       - name: Publica
         working-directory: packages/sdk
-        run: npm publish --provenance
+        # `--provenance` removido: o OIDC do GitHub vinha sem SourceRepositoryRef
+        # (E422 na verificação do sigstore). Reativar numa próxima quando resolver.
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
