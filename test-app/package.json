@@ -6,7 +6,8 @@
     "dev": "npx velojs dev",
     "build": "npx velojs build",
     "start": "npx velojs start",
-    "push": "npx weave push"
+    "push": "npx weave push",
+    "gen": "npx weave gen"
   },
   "dependencies": {
     "@mauroandre/velojs": "^0.0.36",

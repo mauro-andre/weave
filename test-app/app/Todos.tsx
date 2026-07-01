@@ -40,7 +40,7 @@ export const loader = async ({}: LoaderArgs): Promise<LoaderData> => {
 export const action_addTodo = async ({ body }: ActionArgs<{ title: string; listId: string | null }>) => {
   const { weave } = await import("./weave.js");
   try {
-    await weave.todo.create({ title: body.title, listId: body.listId ?? null });
+    await weave.todo.create({ title: body.title, listId: body.listId ?? undefined });
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
