@@ -57,6 +57,8 @@ export interface ParsedArgs {
   command: string;
   config: string;
   confirm: Record<string, string[]>;
+  /** `--confirm all`: aceita TODAS as remoções (risco confirm) de uma vez. */
+  confirmAll: boolean;
   fill: Record<string, Record<string, unknown>>;
   renames: Record<string, Record<string, string>>;
   /** `--no-gen`: após o push, NÃO re-sincroniza os arquivos locais (CI, read-only). */
@@ -71,14 +73,18 @@ function splitEntity(s: string | undefined): [string, string] {
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const out: ParsedArgs = { command: argv[0] ?? "", config: "weave.config.ts", confirm: {}, fill: {}, renames: {}, noGen: false };
+  const out: ParsedArgs = { command: argv[0] ?? "", config: "weave.config.ts", confirm: {}, confirmAll: false, fill: {}, renames: {}, noGen: false };
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--config") out.config = argv[++i] ?? out.config;
     else if (a === "--no-gen") out.noGen = true;
     else if (a === "--confirm") {
-      const [e, p] = splitEntity(argv[++i]);
-      if (e && p) (out.confirm[e] ??= []).push(p);
+      const val = argv[++i];
+      if (val === "all") out.confirmAll = true; // aceita todas as remoções
+      else {
+        const [e, p] = splitEntity(val);
+        if (e && p) (out.confirm[e] ??= []).push(p);
+      }
     } else if (a === "--fill") {
       const [ep, v = ""] = (argv[++i] ?? "").split(/=(.*)/s);
       const [e, p] = splitEntity(ep);
@@ -177,21 +183,68 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
     return 1;
   }
 
-  const res = await pushEntities(entities, {
+  let res = await pushEntities(entities, {
     ...net,
     confirm: args.confirm,
     fill: args.fill,
     renames: args.renames,
   });
 
+  // `--confirm all`: coleta TODAS as remoções (risco confirm) do plano e re-empurra
+  // já confirmadas. Não força ⛔ blocked nem preenche 🟡 needsValue (esse quer valor).
+  if (args.confirmAll && res.review.some((r) => r.plan.changes.some((c) => c.risk === "confirm"))) {
+    const confirm: Record<string, string[]> = { ...args.confirm };
+    for (const r of res.review) {
+      for (const c of r.plan.changes) {
+        if (c.risk === "confirm") (confirm[r.name] ??= []).push(c.path);
+      }
+    }
+    res = await pushEntities(entities, { ...net, confirm, fill: args.fill, renames: args.renames });
+  }
+
   for (const n of res.applied) log(`  🟢 ${n}  applied`);
+
+  // Mostra CADA mudança gated com o caminho `entity.field` e a FLAG EXATA a usar.
+  const cmds: string[] = [];
+  let hasBlocked = false;
+  let hasRemove = false;
   for (const r of res.review) {
     log(`  ⚠ ${r.name} — needs review:`);
-    for (const c of r.plan.changes) log(`      ${riskIcon(c.risk)} ${c.op}  ${c.path}  (${c.risk})`);
+    for (const c of r.plan.changes) {
+      const target = `${r.name}.${c.path}`;
+      const flag =
+        c.risk === "confirm" ? `--confirm ${target}` : c.risk === "needsValue" ? `--fill ${target}=<value>` : "";
+      if (flag) cmds.push(flag);
+      if (c.op === "removeField") hasRemove = true;
+      if (c.risk === "blocked") hasBlocked = true;
+      const hint =
+        c.risk === "confirm"
+          ? `deletes its data — allow with  ${flag}`
+          : c.risk === "needsValue"
+            ? `needs a value — provide with  ${flag}`
+            : c.risk === "blocked"
+              ? "not supported by push — revert it, or fix the data in the browser"
+              : "";
+      log(`      ${riskIcon(c.risk)} ${c.op}  ${target}${hint ? `  — ${hint}` : ""}`);
+    }
   }
-  // Mudanças bloqueadas no gate → para aqui; scopes/gen ficam pra quando aplicar.
   if (res.review.length > 0) {
-    log("Run again with --confirm / --fill / --rename to apply the gated changes.");
+    if (cmds.length) {
+      log("");
+      log("Re-run with the flag(s) above to apply — the target is always `entity.field`, e.g.:");
+      log(`  weave push ${cmds.join(" ")}`);
+      if (cmds.filter((f) => f.startsWith("--confirm")).length > 1) {
+        log("  (or  weave push --confirm all  to accept every drop at once)");
+      }
+    }
+    if (hasRemove) {
+      log("");
+      log("Renamed, not removed? Use  --rename entity.oldField=newField  to keep the data.");
+    }
+    if (hasBlocked) {
+      log("");
+      log("⛔ Blocked changes can't be forced — they hold the whole entity. Revert them or fix the data first.");
+    }
     return 1;
   }
   log(`✓ pushed ${res.applied.length} ${res.applied.length === 1 ? "entity" : "entities"}.`);

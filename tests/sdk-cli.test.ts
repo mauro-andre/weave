@@ -27,6 +27,15 @@ describe("SDK CLI (F3) — parseArgs + weave push", () => {
     expect(a.confirm).toEqual({ product: ["legacy"] });
     expect(a.fill).toEqual({ product: { sku: "N/A" } });
     expect(a.renames).toEqual({ product: { name: "title" } });
+    expect(a.confirmAll).toBe(false);
+  });
+
+  it("parseArgs: --confirm all liga confirmAll (e ainda aceita granular junto)", () => {
+    expect(parseArgs(["push", "--confirm", "all"]).confirmAll).toBe(true);
+    const a = parseArgs(["push", "--confirm", "all", "--confirm", "todo.legacy"]);
+    expect(a.confirmAll).toBe(true);
+    expect(a.confirm).toEqual({ todo: ["legacy"] });
+    expect(parseArgs(["push"]).confirmAll).toBe(false);
   });
 
   it("discoverEntities: lê a pasta e chaveia pelo nome da entidade (default export)", async () => {
