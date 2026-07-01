@@ -26,6 +26,7 @@ export { projection, type Projection, type AnyProjection } from "./projection.js
 export {
   defineEntity,
   type Entity,
+  type EntityOptions,
   type ShapeRecord,
   type SystemColumns,
   type InferEntity,

@@ -39,11 +39,31 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
     const expand = parseJson<ExpandSpec>(query.expand);
     const orderBy = parseJson<WNode>(query.orderBy);
+    const latestPer = parseJson<string[]>(query.latestPer);
     const userWhere = parseJson<WNode>(query.where);
     const where = access.god ? userWhere : andWhere(access.rows, userWhere);
-    const res = await listObjects(entity, page, perPage, where, orderBy, expand);
+    const res = await listObjects(entity, page, perPage, where, orderBy, expand, latestPer);
     if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
     return c.json(res);
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
+// POST /api/:entity/aggregate — groupBy + acumuladores + orderBy. O `where` do body
+// é AND-ado com o filtro de linhas do scope (a agregação respeita o escopo). Projeção
+// não se aplica (o resultado são linhas agregadas, não objetos da entidade).
+export async function apiAggregate({ c, params }: EndpointHandlerArgs): Promise<Response> {
+  try {
+    const entity = params.entity ?? "";
+    const access = await resolveAccess(c, entity, "read");
+    const { aggregateObjects } = await import("../engine/control-plane/data.js");
+    const body = (await c.req.json()) as { where?: WNode } & Record<string, unknown>;
+    const where = access.god ? (body.where ?? {}) : (andWhere(access.rows, (body.where ?? {}) as WNode) as WNode);
+    // Wire uniforme: sempre { rows, facets } (facets {} quando não há). O SDK é quem
+    // dá o açúcar auto-tipado (devolve rows[] pelado quando o input não pediu facets).
+    const result = await aggregateObjects(entity, { ...body, where });
+    return c.json(result);
   } catch (e) {
     return fail(c, e);
   }
@@ -63,14 +83,25 @@ export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Prom
   }
 }
 
+// POST /api/:entity — cria UM objeto (body objeto) ou MUITOS (body array → ingest
+// em lote, uma transação). A resposta espelha a entrada: objeto → objeto; array → array.
 export async function apiCreate({ c, params }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "create");
+    const body = (await c.req.json()) as Record<string, unknown> | Record<string, unknown>[];
+    const project = (o: Record<string, unknown>) => (access.god ? o : prune(o, access.projection));
+
+    if (Array.isArray(body)) {
+      const { createManyObjects } = await import("../engine/control-plane/data.js");
+      if (body.length > BULK_CAP) throw new ScopeError(`Bulk create exceeds cap of ${BULK_CAP}.`, 400);
+      const rows = await createManyObjects(entity, body);
+      return c.json(rows.map(project), 201);
+    }
+
     const { saveObject } = await import("../engine/control-plane/data.js");
-    const body = (await c.req.json()) as Record<string, unknown>;
     const obj = (await saveObject(entity, body)) as Record<string, unknown>;
-    return c.json(access.god ? obj : prune(obj, access.projection), 201);
+    return c.json(project(obj), 201);
   } catch (e) {
     return fail(c, e);
   }

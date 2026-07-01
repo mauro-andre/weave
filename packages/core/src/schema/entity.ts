@@ -33,10 +33,48 @@ export interface SystemColumns {
 /** Flatten an intersection into a single object literal for readable hovers. */
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
-/** A declared entity: a table name plus its shape. */
+/**
+ * Constraints/índices no nível da ENTIDADE (multi-coluna). Cada grupo é uma lista
+ * de nomes de campo: coluna → sua coluna; reference N:1 → a coluna FK `<campo>_id`.
+ * (Owned e reference N:N não entram — não são colunas da tabela raiz.)
+ */
+export interface EntityOptions {
+  /** Grupos de UNIQUE composto (alvo de `ON CONFLICT` / chave de rollup). */
+  readonly unique?: string[][];
+  /** Grupos de índice composto (não-único). */
+  readonly index?: string[][];
+}
+
+/** A declared entity: a table name plus its shape (+ constraints de entidade). */
 export interface Entity<TName extends string, TShape extends ShapeRecord> {
   readonly name: TName;
   readonly columns: TShape;
+  readonly options?: EntityOptions;
+}
+
+// Valida os grupos de `unique`/`index` contra o shape (duck-typing pelos
+// discriminadores — sem importar as classes em runtime). Cada membro precisa ser
+// uma coluna OU uma reference N:1; owned / N:N / campo inexistente → erro.
+function validateEntityOptions(columns: ShapeRecord, options: EntityOptions): void {
+  const groups = [...(options.unique ?? []), ...(options.index ?? [])];
+  for (const group of groups) {
+    if (!Array.isArray(group) || group.length === 0) {
+      throw new Error("weave: a composite unique/index group must be a non-empty array of field names.");
+    }
+    const seen = new Set<string>();
+    for (const field of group) {
+      if (seen.has(field)) throw new Error(`weave: duplicate field '${field}' in a composite group.`);
+      seen.add(field);
+      const f = (columns as Record<string, unknown>)[field] as { kind?: string; cardinality?: string } | undefined;
+      if (f === undefined) throw new Error(`weave: composite group references unknown field '${field}'.`);
+      if (f.kind === "owned" || f.kind === "owned_array") {
+        throw new Error(`weave: a composite group can't include the owned field '${field}'.`);
+      }
+      if (f.kind === "reference" && f.cardinality !== "one") {
+        throw new Error(`weave: a composite group can't include the many-reference '${field}'.`);
+      }
+    }
+  }
 }
 
 // ── Field discriminators (by phantom / kind tag) ─────────────────────────────
@@ -272,6 +310,8 @@ export type InferSelect<E, S> = E extends Entity<string, infer TShape>
 export function defineEntity<TName extends string, TShape extends ShapeRecord>(
   name: TName,
   columns: TShape,
+  options?: EntityOptions,
 ): Entity<TName, TShape> {
-  return { name, columns };
+  if (options) validateEntityOptions(columns, options);
+  return options ? { name, columns, options } : { name, columns };
 }

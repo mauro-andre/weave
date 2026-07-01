@@ -1,4 +1,4 @@
-import { weave, compileCount } from "../index.js";
+import { weave, compileCount, compileAggregate } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
@@ -31,6 +31,7 @@ export async function listObjects(
   where?: WhereArg | null,
   orderBy?: OrderArg | null,
   expand?: ExpandSpec | null,
+  latestPer?: string[] | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
@@ -49,7 +50,10 @@ export async function listObjects(
   const find = (client as unknown as { find(e: unknown, o: unknown): Promise<Record<string, unknown>[]> }).find.bind(
     client,
   );
-  const count = compileCount as unknown as (e: unknown, w: unknown) => { text: string; params: unknown[] };
+  const count = compileCount as unknown as (e: unknown, w: unknown, lp?: string[]) => {
+    text: string;
+    params: unknown[];
+  };
   try {
     const p = Math.max(1, Math.floor(page));
     const pp = Math.max(1, Math.floor(perPage));
@@ -58,14 +62,16 @@ export async function listObjects(
     const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
     const entity = entities[name];
     const w = where ?? {};
+    const lp = latestPer && latestPer.length ? latestPer : undefined;
 
-    const countQ = count(entity, w);
+    const countQ = count(entity, w, lp);
     const countRows = (await sql.unsafe(countQ.text, countQ.params)) as { n: number }[];
     const docsQuantity = countRows[0]?.n ?? 0;
 
     const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
     const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
     if (Object.keys(expandMap).length) opts.expand = expandMap;
+    if (lp) opts.latestPer = lp;
     const docs = await find(entity, opts);
 
     return jsonSafe({
@@ -76,6 +82,48 @@ export async function listObjects(
       pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)),
       currentPage: p,
     });
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Roda um `aggregate` (groupBy + acumuladores + orderBy) e devolve as linhas
+ * agrupadas. `input` é o AggregateInput frouxo (JSON do SDK/API), já com o `where`
+ * do scope AND-ado pelo handler. O `jsonSafe` normaliza o bigint do `count`.
+ */
+export interface AggregateResult {
+  rows: Record<string, unknown>[];
+  /** Um array de linhas por faceta (breakdown). `{}` quando não há facets. */
+  facets: Record<string, Record<string, unknown>[]>;
+}
+
+export async function aggregateObjects(name: string, input: Record<string, unknown>): Promise<AggregateResult> {
+  const irs = await listEntities();
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
+  const byName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const entities = fromIR(resolved);
+  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("weave: DATABASE_URL is not set.");
+  const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
+  const agg = compileAggregate as unknown as (e: unknown, i: unknown) => { text: string; params: unknown[] };
+  // Uma query = uma agregação. compileAggregate ignora `facets` (só o main lê); cada
+  // faceta roda como outro aggregate herdando o `where` do pai (limit → perPage).
+  const runOne = async (inp: Record<string, unknown>): Promise<Record<string, unknown>[]> => {
+    const q = agg(entities[name], inp);
+    return jsonSafe(await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
+  };
+  try {
+    const rows = await runOne(input);
+    const facets: Record<string, Record<string, unknown>[]> = {};
+    const spec = (input.facets ?? {}) as Record<string, Record<string, unknown>>;
+    for (const [fname, f] of Object.entries(spec)) {
+      const { limit, ...rest } = f;
+      facets[fname] = await runOne({ ...rest, where: input.where, perPage: limit });
+    }
+    return { rows, facets };
   } finally {
     await client.close();
   }
@@ -117,6 +165,35 @@ export async function saveObject(name: string, object: Record<string, unknown>):
   try {
     const loose = client as unknown as { save(e: unknown, i: unknown): Promise<unknown> };
     return jsonSafe(await loose.save(entities[name], object));
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Cria muitos objetos numa transação (ingest em lote). Normaliza refs de cada
+ * input igual ao `saveObject` e delega ao `createMany` do engine; devolve as
+ * linhas criadas na ordem de entrada.
+ */
+export async function createManyObjects(
+  name: string,
+  inputs: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const irs = await listEntities();
+  const root = irs.find((e) => e.name === name);
+  if (!root) throw new Error(`Unknown entity: ${name}`);
+  const byName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const entities = fromIR(resolved);
+  const shape = resolved.find((e) => e.name === name)!.fields;
+  for (const input of inputs) normalizeRefs(shape, input);
+
+  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("weave: DATABASE_URL is not set.");
+  const client = weave({ url, entities });
+  try {
+    const loose = client as unknown as { createMany(e: unknown, i: unknown[]): Promise<unknown[]> };
+    return jsonSafe(await loose.createMany(entities[name], inputs)) as Record<string, unknown>[];
   } finally {
     await client.close();
   }

@@ -69,10 +69,19 @@ assim), não específico de telemetria — **desenhado agora, implementado quand
 relacional migrar** (Decisão 4). Barato desenhar, caro retrofitar.
 
 **Expressões sobre agregados (v1, núcleo geral):** aliases do `select` combinam-se
-aritmeticamente e valem em `orderBy`/`having` — ex.: `errorRate: count({ where: { status:
-{ gte: 400 } } }) / count()` (a taxa **deriva do `status` cru**, não de um campo `errors`),
-depois `orderBy: { errorRate: "desc" }` ("as rotas que mais falham, proporcionalmente").
-Filtrar/ordenar por taxa é **server-side**, antes da paginação; só exibir é app (Decisão 5).
+aritmeticamente via **builder** (`div`/`mul`/`add`/`sub` — JS não sobrecarrega `/`) e valem
+em `orderBy`/`having`:
+```ts
+select: {
+  errors: count({ where: { status: { gte: 400 } } }),   // deriva do `status` cru
+  total:  count(),
+  errorRate: div("errors", "total"),                     // referencia aliases por nome
+},
+orderBy: { errorRate: "desc" },   // "as rotas que mais falham, proporcionalmente"
+```
+O compilador **inlina a expressão do alias** por baixo (o Postgres não referencia alias de
+SELECT no mesmo SELECT). Filtrar/ordenar por taxa é **server-side**, antes da paginação; só
+exibir é app (Decisão 5 · Decisão 8).
 
 `{ where }` geral resolve o app-vs-stack numa passada:
 ```ts
@@ -241,6 +250,23 @@ Sem a extensão, o Weave segue 100% menos esse campo.
    ao campo `hll()`, **não requisito global** — core roda em Postgres puro; escape =
    uniques recent-only + dropar HLL. **Window functions user-facing = não-meta v1**
    (parked), distinta do cumsum-interno-pro-percentile (needed-now).
+7. **Forma de retorno do `facets`: wire uniforme + SDK auto-tipado.** O HTTP devolve
+   **sempre** `{ rows, facets }` (`facets: {}` quando não há) — contrato estável pra
+   qualquer consumidor REST. O **SDK** dá o açúcar: o tipo de retorno se auto-ajusta ao
+   input (igual o `expand`) — sem `facets` no input → `AggregateRow[]` pelado; com →
+   `{ rows, facets }`. Trava a forma cedo (antes dos call-sites ossificarem no `rows[]`)
+   e settla a peça mais geral (multi-breakdown) antes das expressões. Cada faceta roda
+   como **outro `aggregate` herdando o `where` do pai** (o `limit` da faceta → `perPage`);
+   o compilador não muda — a orquestração é no control-plane.
+8. **Expressões sobre agregados (Decisão 5) usam um BUILDER, não o `/` literal.** JS não
+   sobrecarrega `/`, então `sum("errors") / count()` do exemplo nunca compilaria — a API é
+   `div(...)` · `mul(...)` · `add(...)` · `sub(...)`, referenciando **aliases do select por
+   nome** (`div("errors", "total")`, lê melhor que re-inlinar acumuladores). O Postgres não
+   referencia alias de SELECT no mesmo SELECT, então o compilador **inlina a expressão do
+   alias** por baixo (açúcar resolvido em compile-time, não alias-de-SQL real). Operando
+   também pode ser **número** (bindado) ou **acumulador inline** (`div(count(...), count())`).
+   Vale em `orderBy` (alias de saída) e `having` (inlinado) server-side. `div` protege com
+   `nullif(b,0)` + cast `::numeric`. **Implementado.**
 
 ## Notas
 
@@ -249,3 +275,59 @@ Sem a extensão, o Weave segue 100% menos esse campo.
   do Weave, só a forma dos `{ where }` do consumidor.
 - **Fora de escopo / futuro:** `t-digest` como alternativa ao `histogram` (percentil sem
   fronteiras fixas); continuous aggregates (rollup mantido pelo próprio Postgres).
+
+## Checklist de implementação (status: 2026-07-01)
+
+Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisão.
+
+### Tier recente — leitura (`aggregate()`) — §1
+- [x] `count` · `sum` · `avg` · `min` · `max`
+- [x] `distinct(field)` — `count(distinct …)` exato
+- [x] `percentile(field, p)` — escalar/exato (`percentile_cont` WITHIN GROUP)
+- [x] `histogram(field, [bounds])` — barras (N+1 baldes, overflow +∞)
+- [x] `{ where }` por acumulador → `FILTER (WHERE …)`
+- [x] `groupBy` array **e** mapa (`alias → campo | expr`)
+- [x] `timeBucket(field, interval)` — epoch/UTC
+- [x] `having` — sobre aliases de acumulador **e** de expressão
+- [x] `orderBy` — por alias de saída (inclusive computado)
+- [x] `page` / `perPage` — top-N paginado
+- [x] `facets` — breakdowns numa passada (wire `{rows,facets}` + SDK auto-tipado — Decisão 7)
+- [x] Expressões sobre agregados — `div/mul/add/sub` (Decisão 5/8)
+- [ ] 🎨 Caminho atravessado (relacional) em `groupBy`/acumuladores (`"stack.user.name"`, `sum("apps.ram")`) — forma desenhada, impl. quando o domínio relacional migrar (Decisão 4)
+
+### Tier recente — leitura (`findMany`) — §2
+- [x] `findMany(where?, { latestPer, orderBy })` — `DISTINCT ON` (métricas vivas)
+
+### Tier recente — escrita — §3
+- [x] `createMany(inputs[])` — ingest em lote (uma transação)
+
+### Schema — §5 (peça geral, valor imediato fora da telemetria)
+- [x] Único composto — `defineEntity(name, cols, { unique: [[...]] })`
+- [x] Índice composto — `{ index: [[...]] }` (mesmo maquinário)
+- [x] Membro reference N:1 → coluna `<campo>_id`; validação (owned/N:N/inexistente → erro)
+- [x] Migração: add unique composto = **blocked** se duplicata; drop/index = auto
+- [ ] Retenção por partição (`partitionBy: timeBucket(...)`, `retention`, drop de partição) — load-bearing no tier cru
+
+### Tier histórico — escrita — §3 (adiável, sem consumidor)
+- [ ] `accumulate(key, { … })` — upsert atômico `ON CONFLICT … DO UPDATE … RETURNING *`
+- [ ] Op `inc(n)`
+- [ ] Op `setOnInsert(v)`
+- [ ] Op `addToHistogram(v)` (depende do tipo `histogram`)
+- [ ] Op `addToHll(v)` (depende do tipo `hll`)
+
+### Tier histórico — tipos de campo (sketches mergeáveis) — §4
+- [ ] **Tipo** `histogram([bounds])` como campo mergeável (merge = soma elemento-a-elemento) — hoje só existe como acumulador de leitura
+- [ ] `percentile` **sobre campo histograma** — interpolação em SQL via cumsum-window (§7, paridade entre tiers)
+- [ ] **Tipo** `hll()` — HyperLogLog em `bytea` (precisa `postgresql-hll`, opt-in/gated — Decisão 6)
+- [ ] `approxDistinct(field)` — polimórfico (escalar estima / campo `hll` une)
+
+### Push-down & infra — §7
+- [x] Push-down de `SELECT/GROUP BY/HAVING/ORDER BY/LIMIT` pro Postgres (o app só revive linha)
+- [ ] Interpolação de histograma em SQL (cumsum-window) — necessária pro percentile sobre campo histograma
+- [ ] `postgresql-hll` opt-in/gated ao campo `hll()`
+
+### Não-metas v1 (conscientes)
+- [ ] ⛔ Window functions user-facing (running-total/rank/moving-avg) — **parked** por decisão
+- [ ] ⛔ Campo derivado (equivalente ao `.transform()` do Zod) — **fora de escopo**, é do consumidor
+
+**Resumo:** todo o **read do tier-recente + ingest** (§1, §2, §3-recente) e o **único/índice composto** (§5) estão ✅ — é o suficiente pro MVP do Analytics recente do PodCubo. Falta o **tier histórico** (`accumulate` + sketches + partição) e a **agregação relacional** (design-agora/impl-depois).

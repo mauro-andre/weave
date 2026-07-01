@@ -7,6 +7,8 @@ import {
   emitEntity,
   emitIndexes,
   int4,
+  owned,
+  reference,
   text,
   timestamptz,
 } from "../../app/engine/index.js";
@@ -72,5 +74,33 @@ describe("emitEntity", () => {
     const out = emitEntity(t);
     expect(out).toContain("CREATE TABLE users (");
     expect(out.trimEnd().endsWith("CREATE INDEX users_username_idx ON users (username);")).toBe(true);
+  });
+});
+
+describe("composite unique / index (entity-level)", () => {
+  it("emits CREATE [UNIQUE] INDEX with resolved columns (reference → <field>_id)", () => {
+    const stack = defineEntity("stacks", { name: text().notNull() });
+    const reg = defineEntity(
+      "regs",
+      {
+        slugName: text().notNull(),
+        stack: reference(stack),
+        host: text().notNull(),
+      },
+      { unique: [["slugName", "stack"]], index: [["host", "slugName"]] },
+    );
+    const out = emitEntity(reg);
+    // reference `stack` resolve pra coluna FK `stack_id`; nomes determinísticos.
+    expect(out).toContain("CREATE UNIQUE INDEX regs_slug_name_stack_id_key ON regs (slug_name, stack_id);");
+    expect(out).toContain("CREATE INDEX regs_host_slug_name_idx ON regs (host, slug_name);");
+  });
+
+  it("defineEntity rejects an unknown / duplicate / empty / owned group member", () => {
+    expect(() => defineEntity("x", { a: text() }, { unique: [["nope"]] })).toThrow(/unknown field/);
+    expect(() => defineEntity("x", { a: text() }, { unique: [["a", "a"]] })).toThrow(/duplicate/);
+    expect(() => defineEntity("x", { a: text() }, { unique: [[]] })).toThrow(/non-empty/);
+    expect(() =>
+      defineEntity("x", { a: text(), kids: owned({ n: text() }) }, { index: [["a", "kids"]] }),
+    ).toThrow(/owned/);
   });
 });

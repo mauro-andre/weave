@@ -15,6 +15,7 @@ import { byName } from "@mauroandre/weave-core";
 import {
   renderColumnDef,
   renderCreateTable,
+  renderComposites,
   renderIndexStmt,
   renderIndexes,
   type ColumnSpec,
@@ -115,7 +116,8 @@ export function diffSchema(desired: TableSpec[], actual: ActualSchema): ChangeSe
 export function emitChanges(cs: ChangeSet): { statements: string[]; warnings: string[] } {
   const statements: string[] = [];
   for (const spec of cs.createTables) {
-    statements.push(renderCreateTable(spec), ...renderIndexes(spec));
+    // Entidade NOVA: os compostos entram no CREATE (tabela vazia, sem portão de risco).
+    statements.push(renderCreateTable(spec), ...renderIndexes(spec), ...renderComposites(spec));
   }
   for (const { table, column } of cs.addColumns) {
     statements.push(`ALTER TABLE ${table} ADD COLUMN ${renderColumnDef(column)};`);

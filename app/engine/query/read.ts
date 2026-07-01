@@ -17,7 +17,7 @@
  * Phase 3.
  */
 
-import { type WhereInput, type OrderByInput, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 
 export interface FindOptions<E> {
@@ -27,6 +27,12 @@ export interface FindOptions<E> {
   expand?: ExpandMap;
   /** Prune the result to selected fields; see `SelectInput`. Subsumes `expand`. */
   select?: SelectMap;
+  /**
+   * Greatest-n-per-group: uma linha por combinação destes campos (`DISTINCT ON`).
+   * Qual linha sobrevive vem do `orderBy` (ex.: `ts` desc → a mais recente). O
+   * compilador prefixa estes campos no `ORDER BY` (exigência do `DISTINCT ON`).
+   */
+  latestPer?: string[];
   limit?: number;
   offset?: number;
 }
@@ -358,9 +364,17 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
     params,
   );
 
-  const lines = [`SELECT ${obj} AS data`, `FROM ${table}`];
+  // latestPer → DISTINCT ON (cols): as colunas do grupo VALIDADAS (aggCol = barreira
+  // anti-injection) e prefixadas no ORDER BY (o Postgres exige que liderem a ordenação).
+  const lp = options.latestPer;
+  const distinctExprs = lp && lp.length ? lp.map((k) => aggCol(table, entity.columns, k)) : null;
+  const distinctOn = distinctExprs ? `DISTINCT ON (${distinctExprs.join(", ")}) ` : "";
+  const userOrder = compileOrderBy(table, singularize(table), entity.columns, options.orderBy);
+  const orderBody = distinctExprs ? `${distinctExprs.join(", ")}, ${userOrder}` : userOrder;
+
+  const lines = [`SELECT ${distinctOn}${obj} AS data`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
-  lines.push(`ORDER BY ${compileOrderBy(table, singularize(table), entity.columns, options.orderBy)}`);
+  lines.push(`ORDER BY ${orderBody}`);
   if (options.limit != null) lines.push(`LIMIT ${bind(params, options.limit)}`);
   if (options.offset != null) lines.push(`OFFSET ${bind(params, options.offset)}`);
 
@@ -429,10 +443,12 @@ function orderScalar(
   throw new Error(`weave: cannot order by '${key}'.`);
 }
 
-/** Compile a `count` into parameterized SQL. */
+/** Compile a `count` into parameterized SQL. Com `latestPer`, conta GRUPOS distintos
+ *  (`count(DISTINCT (cols))`) — pra paginar sobre um resultado greatest-n-per-group. */
 export function compileCount<E extends Entity<string, ShapeRecord>>(
   entity: E,
   where?: WhereInput<E>,
+  latestPer?: string[],
 ): CompiledQuery {
   const table = entity.name;
   const params: unknown[] = [];
@@ -443,7 +459,254 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
     (where ?? {}) as Record<string, unknown>,
     params,
   );
-  let text = `SELECT count(*)::int AS n FROM ${table}`;
+  const cnt =
+    latestPer && latestPer.length
+      ? `count(DISTINCT (${latestPer.map((k) => aggCol(table, entity.columns, k)).join(", ")}))::int`
+      : "count(*)::int";
+  let text = `SELECT ${cnt} AS n FROM ${table}`;
   if (whereSql) text += ` WHERE ${whereSql}`;
   return { text, params };
+}
+
+// ── Aggregation (Phase: OLAP) ───────────────────────────────────────────────────
+// Compila `AggregateInput` num `SELECT … GROUP BY … ORDER BY`. Reusa `compileWhere`.
+// IDENTIFICADORES (campos, aliases) são VALIDADOS contra o shape / regex — nunca vêm
+// param-bindados (não dá), então a validação é a barreira contra injection.
+
+const IDENT_RE = /^[A-Za-z0-9_]+$/;
+
+function safeAlias(alias: string): string {
+  if (!IDENT_RE.test(alias)) throw new Error(`weave: invalid aggregate alias '${alias}'.`);
+  return alias;
+}
+
+/** Coluna de um campo (managed ou escalar), validada contra o shape (barreira anti-injection). */
+function aggCol(table: string, shape: ShapeRecord | OwnedShape, key: string): string {
+  if (key === "id") return `${table}.id`;
+  if (key === "createdAt") return `${table}.created_at`;
+  if (key === "updatedAt") return `${table}.updated_at`;
+  if (!((shape as Record<string, unknown>)[key] instanceof Column)) {
+    throw new Error(`weave: unknown field '${key}' in aggregate.`);
+  }
+  return `${table}.${camelToSnake(key)}`;
+}
+
+/** "5min" → 300s. Uniforme (epoch-floor) pra qualquer intervalo. */
+function intervalSeconds(interval: string): number {
+  const m = /^(\d+)(s|min|h|d)$/.exec(interval.trim());
+  if (!m) throw new Error(`weave: invalid timeBucket interval '${interval}' (use 30s, 5min, 1h, 1d).`);
+  const unit = { s: 1, min: 60, h: 3600, d: 86400 }[m[2] as "s" | "min" | "h" | "d"];
+  return Number(m[1]) * unit;
+}
+
+function groupSql(table: string, shape: ShapeRecord | OwnedShape, g: string | GroupExpr): string {
+  if (typeof g === "string") return aggCol(table, shape, g);
+  const { field, interval } = g.timeBucket;
+  const secs = intervalSeconds(interval);
+  // epoch-floor: alinhado por UTC, uniforme pra qualquer intervalo (Decisão: epoch/UTC).
+  return `to_timestamp(floor(extract(epoch from ${aggCol(table, shape, field)}) / ${secs}) * ${secs})`;
+}
+
+// Um acumulador → expressão SQL. `{ where }` (opcional) vira `… FILTER (WHERE …)`.
+// `params` recebe os binds na ORDEM em que a expressão aparece no SELECT (o chamador
+// respeita a ordem SELECT→WHERE→HAVING pra os $N baterem com `.unsafe`).
+function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator, params: unknown[]): string {
+  const wRaw = (acc as { where?: Record<string, unknown> }).where;
+
+  // histogram monta N+1 `count(*) FILTER` num array[] — trata o `{ where }` INLINE
+  // (AND-ado em cada balde), já que não dá pra pôr FILTER sobre o array constructor.
+  if (acc.agg === "histogram") {
+    return histogramSql(table, shape, acc, params, wRaw);
+  }
+
+  let base: string;
+  switch (acc.agg) {
+    case "count":
+      base = "count(*)";
+      break;
+    case "sum":
+    case "avg":
+    case "min":
+    case "max":
+      base = `${acc.agg}(${aggCol(table, shape, acc.field)})`;
+      break;
+    case "distinct":
+      base = `count(distinct ${aggCol(table, shape, acc.field)})`;
+      break;
+    case "percentile": {
+      const p = acc.p;
+      if (typeof p !== "number" || !Number.isFinite(p) || p <= 0 || p >= 1) {
+        throw new Error(`weave: percentile p must be a fraction between 0 and 1 (got ${JSON.stringify(p)}).`);
+      }
+      base = `percentile_cont(${bind(params, p)}) WITHIN GROUP (ORDER BY ${aggCol(table, shape, acc.field)})`;
+      break;
+    }
+    default:
+      throw new Error(`weave: unknown accumulator '${(acc as { agg?: string }).agg}'.`);
+  }
+  if (wRaw && Object.keys(wRaw).length) {
+    const f = compileWhere(table, singularize(table), shape, wRaw, params);
+    if (f) base += ` FILTER (WHERE ${f})`;
+  }
+  return base;
+}
+
+// N fronteiras (estritamente crescentes) → N+1 baldes: `< b0`, `[b0,b1)`, …, `>= b_{N-1}`
+// (overflow). Cada balde é um `count(*) FILTER`; o array[] os junta num valor só. As
+// fronteiras são BINDADAS (validadas numéricas); um `{ where }` opcional é AND-ado em todos.
+function histogramSql(
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  acc: { field: string; bounds: number[] },
+  params: unknown[],
+  where?: Record<string, unknown>,
+): string {
+  const bounds = acc.bounds;
+  if (!Array.isArray(bounds) || bounds.length === 0) {
+    throw new Error("weave: histogram needs at least one boundary.");
+  }
+  for (let i = 0; i < bounds.length; i++) {
+    const b = bounds[i];
+    if (typeof b !== "number" || !Number.isFinite(b)) {
+      throw new Error("weave: histogram boundaries must be finite numbers.");
+    }
+    if (i > 0 && b <= (bounds[i - 1] as number)) {
+      throw new Error("weave: histogram boundaries must be strictly ascending.");
+    }
+  }
+  const col = aggCol(table, shape, acc.field);
+  const ph = bounds.map((b) => bind(params, b)); // fronteira → $N (bindada uma vez, reusada)
+  const w = where && Object.keys(where).length ? compileWhere(table, singularize(table), shape, where, params) : "";
+  const andW = w ? ` AND (${w})` : "";
+  const bucket = (cond: string) => `count(*) FILTER (WHERE ${cond}${andW})`;
+
+  const buckets = [bucket(`${col} < ${ph[0]}`)];
+  for (let i = 1; i < ph.length; i++) buckets.push(bucket(`${col} >= ${ph[i - 1]} AND ${col} < ${ph[i]}`));
+  buckets.push(bucket(`${col} >= ${ph[ph.length - 1]}`)); // balde de overflow (+∞)
+  return `array[${buckets.join(", ")}]`;
+}
+
+/** Compila um `aggregate` em SQL parametrizado. Devolve linhas agrupadas (alias → valor). */
+// Um nó do `select` é Expr (aritmético) quando tem `op`; senão é Accumulator (`agg`).
+function isExpr(node: unknown): node is Expr {
+  return typeof node === "object" && node !== null && "op" in node;
+}
+
+// Resolve um operando de expressão em SQL. String = nome de um alias já resolvido
+// (inlina a expressão dele — o Postgres não referencia alias de SELECT no mesmo SELECT).
+// Número = bindado. Acumulador inline = accSql. Expr aninhada = recursão.
+function operandSql(
+  operand: ExprOperand,
+  aliasExpr: Record<string, string>,
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  params: unknown[],
+): string {
+  if (typeof operand === "number") {
+    if (!Number.isFinite(operand)) throw new Error("weave: expression numbers must be finite.");
+    return bind(params, operand);
+  }
+  if (typeof operand === "string") {
+    const e = aliasExpr[operand];
+    if (!e) throw new Error(`weave: expression references unknown select alias '${operand}'.`);
+    return e;
+  }
+  if (isExpr(operand)) return exprSql(operand, aliasExpr, table, shape, params);
+  return accSql(table, shape, operand, params); // acumulador inline
+}
+
+// Expressão aritmética → SQL. `div` protege contra divisão-por-zero (nullif) e casta
+// pra numeric (senão int/int trunca). Parênteses generosos preservam a precedência.
+function exprSql(
+  node: Expr,
+  aliasExpr: Record<string, string>,
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  params: unknown[],
+): string {
+  const l = operandSql(node.left, aliasExpr, table, shape, params);
+  const r = operandSql(node.right, aliasExpr, table, shape, params);
+  switch (node.op) {
+    case "div":
+      return `((${l})::numeric / nullif((${r}), 0))`;
+    case "mul":
+      return `((${l}) * (${r}))`;
+    case "add":
+      return `((${l}) + (${r}))`;
+    case "sub":
+      return `((${l}) - (${r}))`;
+    default:
+      throw new Error(`weave: unknown expression op '${(node as { op?: string }).op}'.`);
+  }
+}
+
+export function compileAggregate<E extends Entity<string, ShapeRecord>>(
+  entity: E,
+  input: AggregateInput<E>,
+): CompiledQuery {
+  const table = entity.name;
+  const shape = entity.columns;
+  const params: unknown[] = [];
+
+  // Chaves de grupo: array de campos (alias homônimo) ou mapa alias → campo|expr.
+  const groups: { alias: string; expr: string }[] = [];
+  const gb = input.groupBy;
+  if (Array.isArray(gb)) {
+    for (const f of gb) groups.push({ alias: safeAlias(f), expr: groupSql(table, shape, f) });
+  } else if (gb) {
+    for (const [alias, g] of Object.entries(gb)) groups.push({ alias: safeAlias(alias), expr: groupSql(table, shape, g) });
+  }
+
+  const cols: string[] = groups.map((g) => `${g.expr} AS "${g.alias}"`);
+  // alias → expressão SQL. Reusado NO HAVING (o Postgres não aceita alias de saída no
+  // HAVING, então re-emitimos a expressão idêntica: mesmos $N — bind uma vez, ref N) e
+  // pelas EXPRESSÕES (que inlinam aliases de acumuladores). Duas passadas: acumuladores
+  // primeiro (populam o mapa), expressões depois (podem referenciar qualquer alias já visto).
+  const aliasExpr: Record<string, string> = {};
+  const deferred: [string, Expr][] = [];
+  for (const [alias, node] of Object.entries(input.select ?? {})) {
+    const a = safeAlias(alias);
+    if (isExpr(node)) {
+      deferred.push([a, node]); // passada 2
+      continue;
+    }
+    const expr = accSql(table, shape, node as Accumulator, params);
+    aliasExpr[a] = expr;
+    cols.push(`${expr} AS "${a}"`);
+  }
+  for (const [a, node] of deferred) {
+    const expr = exprSql(node, aliasExpr, table, shape, params);
+    aliasExpr[a] = expr;
+    cols.push(`${expr} AS "${a}"`);
+  }
+  if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
+
+  const whereSql = compileWhere(table, singularize(table), shape, (input.where ?? {}) as Record<string, unknown>, params);
+
+  // HAVING: mesmo shorthand escalar do `where`, mas o "campo" é a expressão do alias
+  // (acumulador OU expressão, reusada de aliasExpr). `{ requests: { gte: 100 } }`
+  // → `HAVING count(*) >= $N`; `{ errorRate: { gt: 0.1 } }` → inlina a div.
+  const havingConds: string[] = [];
+  for (const [alias, cond] of Object.entries((input.having ?? {}) as Record<string, unknown>)) {
+    const expr = aliasExpr[safeAlias(alias)];
+    if (!expr) throw new Error(`weave: having references unknown select alias '${alias}'.`);
+    havingConds.push(compileFieldFilter(expr, cond, params));
+  }
+
+  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}`];
+  if (whereSql) lines.push(`WHERE ${whereSql}`);
+  if (groups.length) lines.push(`GROUP BY ${groups.map((g) => g.expr).join(", ")}`);
+  if (havingConds.length) lines.push(`HAVING ${havingConds.join(" AND ")}`);
+  const ob = input.orderBy ? Object.entries(input.orderBy) : [];
+  if (ob.length) {
+    // ORDER BY por ALIAS de saída (grupo ou acumulador) — permitido pelo Postgres.
+    lines.push(`ORDER BY ${ob.map(([a, d]) => `"${safeAlias(a)}" ${d === "desc" ? "DESC" : "ASC"}`).join(", ")}`);
+  }
+  // page/perPage → LIMIT/OFFSET (top-N paginado; pressupõe orderBy pra ser determinístico).
+  if (input.perPage != null || input.page != null) {
+    const pp = Math.max(1, Math.floor(Number(input.perPage) || 20));
+    const pg = Math.max(1, Math.floor(Number(input.page) || 1));
+    lines.push(`LIMIT ${pp} OFFSET ${(pg - 1) * pp}`);
+  }
+  return { text: lines.join("\n"), params };
 }

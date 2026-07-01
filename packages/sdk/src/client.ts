@@ -7,6 +7,8 @@ import type {
   ExpandInput,
   WhereInput,
   OrderByInput,
+  AggregateInput,
+  AggregateOutput,
 } from "@mauroandre/weave-core";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
@@ -38,6 +40,12 @@ export interface ClientOptions<S> {
 export interface ReadOpts<E extends Entity<string, ShapeRecord>, X> {
   orderBy?: OrderByInput<E>;
   expand?: X & ExpandInput<E>;
+  /**
+   * Greatest-n-per-group: uma linha por combinação destes campos (`DISTINCT ON`).
+   * O `orderBy` decide qual sobrevive (ex.: `{ ts: "desc" }` → a mais recente).
+   * É o widget de métricas vivas ("o doc mais recente por worker/container").
+   */
+  latestPer?: (keyof E["columns"] & string)[];
 }
 
 export interface PageOpts<E extends Entity<string, ShapeRecord>, X> extends ReadOpts<E, X> {
@@ -60,6 +68,8 @@ export interface PageResult<T> {
  */
 export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   create(input: InferInsert<E>): Promise<InferEntity<E>>;
+  /** Cria em lote (ingest — uma transação). Devolve as linhas na ordem de entrada. */
+  createMany(inputs: InferInsert<E>[]): Promise<InferEntity<E>[]>;
 
   findOne<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X> | null>;
   findMany<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X>[]>;
@@ -74,6 +84,13 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
 
   deleteOne(where: WhereInput<E>, opts?: { orderBy?: OrderByInput<E> }): Promise<InferEntity<E> | null>;
   deleteMany(where: WhereInput<E>): Promise<{ count: number }>;
+
+  /**
+   * Agrega (groupBy + acumuladores + having + orderBy). Sem `facets` no input,
+   * devolve `AggregateRow[]`; COM `facets`, devolve `{ rows, facets }` — o tipo de
+   * retorno se auto-ajusta ao input (igual o `expand`).
+   */
+  aggregate<const I extends AggregateInput<E>>(input: I): Promise<AggregateOutput<I>>;
 }
 
 /** O client completo: uma propriedade por entidade do entities + `as` (scope). */
@@ -92,7 +109,7 @@ interface ListResponse {
 }
 
 // Formas frouxas usadas SÓ na implementação (a interface dá os tipos).
-type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
+type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number; latestPer?: unknown };
 
 /**
  * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
@@ -150,6 +167,7 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     where: JSON.stringify(where ?? {}),
     expand: JSON.stringify(o.expand ?? {}),
     orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
+    latestPer: o.latestPer !== undefined ? JSON.stringify(o.latestPer) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,
     perPage: o.perPage !== undefined ? String(o.perPage) : undefined,
   });
@@ -172,6 +190,11 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     client[key] = {
       async create(input: unknown) {
         return revive(await request("POST", path, { body: input }));
+      },
+      async createMany(inputs: unknown[]) {
+        if (!Array.isArray(inputs) || inputs.length === 0) return [];
+        const rows = (await request("POST", path, { body: inputs })) as unknown[];
+        return rows.map(revive);
       },
       async findOne(where: unknown = {}, o: AnyOpts = {}) {
         const d = (await list(where, { ...o, perPage: 1 })).docs?.[0];
@@ -206,6 +229,17 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
       async deleteMany(where: unknown) {
         const r = (await request("DELETE", path, { query: mutQuery(where, {}, "many") })) as { count: number };
         return { count: r.count };
+      },
+      async aggregate(input: unknown) {
+        const r = (await request("POST", `${path}/aggregate`, { body: input })) as {
+          rows?: unknown[];
+          facets?: Record<string, unknown[]>;
+        };
+        const rows = (r.rows ?? []) as Record<string, unknown>[];
+        // auto-tipado: input com facets → { rows, facets }; sem → rows[] pelado.
+        return (
+          input && (input as { facets?: unknown }).facets ? { rows, facets: r.facets ?? {} } : rows
+        ) as never;
       },
     };
   }

@@ -1,6 +1,7 @@
 export {
   compileFind,
   compileCount,
+  compileAggregate,
   type FindOptions,
   type CompiledQuery,
 } from "./read.js";

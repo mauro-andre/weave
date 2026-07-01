@@ -6,7 +6,7 @@
 import type postgres from "postgres";
 import { weave } from "../index.js";
 import { emitChanges } from "../ddl/diff.js";
-import { camelToSnake, ownedChildTable, indexName, singularize, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
+import { camelToSnake, ownedChildTable, indexName, compositeIndexName, singularize, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;
@@ -35,6 +35,10 @@ async function probeChange(sql: Sql, next: EntityIR, c: FieldChange): Promise<Fi
 
   if (c.op === "addUnique") {
     return (await hasDuplicates(sql, table, col)) ? c : { ...c, risk: "auto" };
+  }
+  if (c.op === "addCompositeUnique") {
+    const cols = resolveCompositeColumns(next, c.columns ?? []);
+    return (await hasDuplicatesComposite(sql, table, cols)) ? c : { ...c, risk: "auto" };
   }
   if (c.op === "makeRequired") {
     if ((await count(sql, table, `${col} IS NULL`)) === 0) return { ...c, risk: "auto" };
@@ -119,6 +123,22 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
     case "dropIndex":
       await tx.unsafe(`DROP INDEX IF EXISTS ${indexName(table, col)}`);
       return;
+    case "addCompositeUnique":
+    case "addCompositeIndex": {
+      const uq = c.op === "addCompositeUnique";
+      const cols = resolveCompositeColumns(next, c.columns ?? []);
+      const name = compositeIndexName(table, cols, uq);
+      await tx.unsafe(`CREATE ${uq ? "UNIQUE " : ""}INDEX ${name} ON ${table} (${cols.join(", ")})`);
+      return;
+    }
+    case "dropCompositeUnique":
+    case "dropCompositeIndex": {
+      const uq = c.op === "dropCompositeUnique";
+      // O grupo removido vive no IR ANTERIOR — resolve as colunas por lá.
+      const cols = resolveCompositeColumns(prev, c.columns ?? []);
+      await tx.unsafe(`DROP INDEX IF EXISTS ${compositeIndexName(table, cols, uq)}`);
+      return;
+    }
     case "changeDefault": {
       const node = next.fields[c.path] as ColumnIR | undefined;
       if (!node || node.default === undefined) {
@@ -147,6 +167,26 @@ async function count(sql: Sql, table: string, where?: string): Promise<number> {
 async function hasDuplicates(sql: Sql, table: string, col: string): Promise<boolean> {
   const rows = (await sql.unsafe(
     `SELECT 1 FROM ${table} WHERE ${col} IS NOT NULL GROUP BY ${col} HAVING count(*) > 1 LIMIT 1`,
+  )) as unknown as unknown[];
+  return rows.length > 0;
+}
+
+// Resolve um grupo (nomes lógicos) nas colunas: coluna → snake_case; reference N:1 →
+// `<campo>_id`. (Owned/N:N já foram barrados no `defineEntity`.)
+function resolveCompositeColumns(ir: EntityIR, group: string[]): string[] {
+  return group.map((field) => {
+    const node = ir.fields[field];
+    if (!node) throw new Error(`weave: composite group field '${field}' not found on '${ir.name}'.`);
+    return node.kind === "reference" ? `${camelToSnake(field)}_id` : camelToSnake(field);
+  });
+}
+
+// Duplicatas que violariam um UNIQUE composto. Linhas com QUALQUER coluna NULL não
+// conflitam (semântica do Postgres: NULL é distinto), então só contamos as completas.
+async function hasDuplicatesComposite(sql: Sql, table: string, cols: string[]): Promise<boolean> {
+  const notNull = cols.map((c) => `${c} IS NOT NULL`).join(" AND ");
+  const rows = (await sql.unsafe(
+    `SELECT 1 FROM ${table} WHERE ${notNull} GROUP BY ${cols.join(", ")} HAVING count(*) > 1 LIMIT 1`,
   )) as unknown as unknown[];
   return rows.length > 0;
 }

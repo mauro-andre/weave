@@ -6,7 +6,14 @@ import type { EntityIR, FieldIR } from "./types.js";
 // usam `slug` (snake_case, minúsculo). CAMPO usa `camelize` (camelCase canônico) — o
 // nome lógico do dev; a COLUNA no Postgres deriva dele via `camelToSnake` (snake_case).
 export function normalizeEntityIR(ir: EntityIR): EntityIR {
-  return { ...ir, name: slug(ir.name), fields: normFields(ir.fields) };
+  const out: EntityIR = { ...ir, name: slug(ir.name), fields: normFields(ir.fields) };
+  // Grupos compostos referenciam campos → camelize cada membro (alinha com os
+  // nomes de campo canônicos). Omitidos quando vazios.
+  if (ir.unique?.length) out.unique = ir.unique.map((g) => g.map(camelize));
+  else delete out.unique;
+  if (ir.index?.length) out.index = ir.index.map((g) => g.map(camelize));
+  else delete out.index;
+  return out;
 }
 
 function normFields(fields: Record<string, FieldIR>): Record<string, FieldIR> {

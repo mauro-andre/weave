@@ -48,4 +48,8 @@ export interface EntityIR {
   irVersion: number;
   name: string;
   fields: Record<string, FieldIR>;
+  /** Grupos de UNIQUE composto (nomes lógicos de campo). Ver `EntityOptions`. */
+  unique?: string[][];
+  /** Grupos de índice composto (não-único). */
+  index?: string[][];
 }

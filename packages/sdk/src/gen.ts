@@ -80,8 +80,16 @@ export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): strin
   const lines = [`import { ${builders.join(", ")} } from "@mauroandre/weave-sdk";`];
   for (const t of [...ctx.imports].sort()) lines.push(`import ${t} from "./${t}.js";`);
   if (ctx.mirror) lines.push(`// ⚠ This entity uses a mirror — write/edit the shape by hand (the builder has no mirror()).`);
-  lines.push("", `export default defineEntity(${JSON.stringify(ir.name)}, {`, body, "});", "");
+  lines.push("", `export default defineEntity(${JSON.stringify(ir.name)}, {`, body, `}${optsSource(ir)});`, "");
   return lines.join("\n");
+}
+
+/** O 3º arg de `defineEntity` (unique/index compostos), ou "" quando não houver. */
+function optsSource(ir: EntityIR): string {
+  const parts: string[] = [];
+  if (ir.unique?.length) parts.push(`unique: ${JSON.stringify(ir.unique)}`);
+  if (ir.index?.length) parts.push(`index: ${JSON.stringify(ir.index)}`);
+  return parts.length ? `, { ${parts.join(", ")} }` : "";
 }
 
 // ── Scope: storage por-id → defineScope por-nome ───────────────────────────────

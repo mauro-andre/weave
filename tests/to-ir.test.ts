@@ -101,3 +101,59 @@ describe("toIR — a partir do builder real (defineEntity)", () => {
     expect(ir.fields["updatedAt"]).toBeUndefined();
   });
 });
+
+describe("composite unique / index — to/from IR + normalize + diff", () => {
+  it("toIR carrega os grupos; fromIR reconstrói options; round-trip estável", async () => {
+    const stack = defineEntity("stack", { name: text().notNull() });
+    const reg = defineEntity(
+      "reg",
+      { slugName: text().notNull(), stack: reference(stack) },
+      { unique: [["slugName", "stack"]], index: [["slugName"]] },
+    );
+    const ir = toIR(reg);
+    expect(ir.unique).toEqual([["slugName", "stack"]]);
+    expect(ir.index).toEqual([["slugName"]]);
+
+    const back = fromIR([toIR(stack), ir]);
+    expect((back.reg as { options?: unknown }).options).toEqual({
+      unique: [["slugName", "stack"]],
+      index: [["slugName"]],
+    });
+    // round-trip: toIR(fromIR(ir)) reproduz os grupos.
+    expect(toIR(back.reg!).unique).toEqual([["slugName", "stack"]]);
+  });
+
+  it("normalizeEntityIR cameliza os membros dos grupos (alinha com os campos)", async () => {
+    const { normalizeEntityIR } = await import("@mauroandre/weave-core");
+    const ir: EntityIR = {
+      irVersion: 1,
+      name: "reg",
+      fields: { slug_name: { kind: "column", type: "text", notNull: true } },
+      unique: [["slug_name"]],
+    };
+    const norm = normalizeEntityIR(ir);
+    expect(Object.keys(norm.fields)).toEqual(["slugName"]); // campo camelizado
+    expect(norm.unique).toEqual([["slugName"]]); // grupo acompanha
+  });
+
+  it("diffEntityIR: add unique composto = blocked; drop = auto; reorder = drop+add", async () => {
+    const { diffEntityIR } = await import("@mauroandre/weave-core");
+    const base: EntityIR = {
+      irVersion: 1,
+      name: "reg",
+      fields: { a: { kind: "column", type: "text", id: "1" }, b: { kind: "column", type: "text", id: "2" } },
+    };
+    const withUq: EntityIR = { ...base, unique: [["a", "b"]] };
+
+    const added = diffEntityIR(base, withUq).changes;
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({ op: "addCompositeUnique", risk: "blocked", columns: ["a", "b"] });
+
+    const dropped = diffEntityIR(withUq, base).changes;
+    expect(dropped[0]).toMatchObject({ op: "dropCompositeUnique", risk: "auto" });
+
+    // reorder das colunas = grupo diferente → drop do antigo + add do novo.
+    const reordered = diffEntityIR(withUq, { ...base, unique: [["b", "a"]] }).changes;
+    expect(reordered.map((c) => c.op).sort()).toEqual(["addCompositeUnique", "dropCompositeUnique"]);
+  });
+});

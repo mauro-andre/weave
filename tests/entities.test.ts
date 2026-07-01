@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2 CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -553,5 +553,100 @@ describe("entidades — criar e materializar", () => {
       body: { ir: { irVersion: 1, name: "bad", fields: { x: { kind: "column", type: "naoexiste" } } } },
     });
     expect((await res.json()).error).toBeTruthy();
+  });
+
+  describe("único/índice composto (aplicação)", () => {
+    const saveIR = (ir: object, extra: object = {}) =>
+      app.as({ user: master }).action(action_saveEntity, { body: { ir, ...extra } });
+    const sqlH = async () => (await import("../app/engine/control-plane/db.js")).db();
+    const idOf = async (ent: string, field: string) => {
+      const { getEntity } = await import("../app/engine/control-plane/entities.js");
+      return (await getEntity(ent))!.fields[field]?.id;
+    };
+    const indexExists = async (name: string) => {
+      const sql = await sqlH();
+      const rows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname='public' AND indexname=${name}`;
+      return (rows[0]?.n ?? 0) > 0;
+    };
+
+    it("entidade nova com unique composto materializa o índice e barra a duplicata", async () => {
+      const res = await saveIR({
+        irVersion: 1,
+        name: "cuq",
+        fields: {
+          host: { kind: "column", type: "text", notNull: true },
+          route: { kind: "column", type: "text", notNull: true },
+        },
+        unique: [["host", "route"]],
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("cuq_host_route_key")).toBe(true);
+
+      const sql = await sqlH();
+      await sql`INSERT INTO cuq (host, route) VALUES ('a', '/x')`;
+      await sql`INSERT INTO cuq (host, route) VALUES ('a', '/y')`; // combinação diferente: ok
+      await expect(sql`INSERT INTO cuq (host, route) VALUES ('a', '/x')`).rejects.toThrow(); // viola o unique
+    });
+
+    it("unique composto com reference resolve pra <campo>_id e é enforçado", async () => {
+      await saveIR({ irVersion: 1, name: "custack", fields: { name: { kind: "column", type: "text", notNull: true } } });
+      const res = await saveIR({
+        irVersion: 1,
+        name: "cureg",
+        fields: {
+          slugName: { kind: "column", type: "text", notNull: true },
+          stack: { kind: "reference", target: "custack", cardinality: "one" },
+        },
+        unique: [["slugName", "stack"]],
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("cureg_slug_name_stack_id_key")).toBe(true);
+
+      const sql = await sqlH();
+      const [s1] = await sql<{ id: string }[]>`INSERT INTO custack (name) VALUES ('s1') RETURNING id`;
+      const [s2] = await sql<{ id: string }[]>`INSERT INTO custack (name) VALUES ('s2') RETURNING id`;
+      await sql`INSERT INTO cureg (slug_name, stack_id) VALUES ('web', ${s1!.id})`;
+      await sql`INSERT INTO cureg (slug_name, stack_id) VALUES ('web', ${s2!.id})`; // mesmo slug, stack diferente: ok
+      await expect(
+        sql`INSERT INTO cureg (slug_name, stack_id) VALUES ('web', ${s1!.id})`,
+      ).rejects.toThrow(); // mesma combinação: barrada
+    });
+
+    it("adicionar unique composto: com duplicata trava (needsReview), sem duplicata aplica", async () => {
+      await saveIR({
+        irVersion: 1,
+        name: "cuq",
+        fields: {
+          host: { kind: "column", type: "text", notNull: true },
+          route: { kind: "column", type: "text", notNull: true },
+        },
+      });
+      // (cuq foi recriada sem unique; herda os ids atuais dos campos)
+      const idH = await idOf("cuq", "host");
+      const idR = await idOf("cuq", "route");
+      const sql = await sqlH();
+      await sql`INSERT INTO cuq (host, route) VALUES ('dup', '/z')`;
+      await sql`INSERT INTO cuq (host, route) VALUES ('dup', '/z')`; // duplicata plantada
+
+      const withUnique = {
+        irVersion: 1,
+        name: "cuq",
+        fields: {
+          host: { kind: "column", id: idH, type: "text", notNull: true },
+          route: { kind: "column", id: idR, type: "text", notNull: true },
+        },
+        unique: [["host", "route"]],
+      };
+      const blocked = await saveIR(withUnique);
+      const bj = await blocked.json();
+      expect(bj.status).toBe("needsReview");
+      expect(bj.plan.changes.some((c: { op: string }) => c.op === "addCompositeUnique")).toBe(true);
+
+      await sql`DELETE FROM cuq WHERE ctid IN (SELECT ctid FROM cuq WHERE host='dup' LIMIT 1)`; // resolve a duplicata
+      const ok = await saveIR(withUnique);
+      expect((await ok.json()).status).toBe("applied");
+      expect(await indexExists("cuq_host_route_key")).toBe(true);
+    });
   });
 });
