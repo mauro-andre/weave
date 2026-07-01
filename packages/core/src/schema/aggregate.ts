@@ -47,10 +47,24 @@ export type GroupExpr = { readonly timeBucket: { readonly field: string; readonl
 export const timeBucket = (field: string, interval: string): GroupExpr => ({ timeBucket: { field, interval } });
 
 /**
+ * Uma faceta: sub-agregação independente que RODA SOB O MESMO `where` do pai. É o
+ * `aggregate` sem `where`/`facets` (herda o do pai) e com `limit` (top-N por faceta —
+ * pressupõe `orderBy`). Alimenta o caso dashboard: vários breakdowns numa passada.
+ */
+export interface FacetInput<E extends Entity<string, ShapeRecord>> {
+  groupBy?: string[] | Record<string, string | GroupExpr>;
+  select: Record<string, Accumulator>;
+  having?: Record<string, unknown>;
+  orderBy?: Record<string, SortDir>;
+  limit?: number;
+}
+
+/**
  * Entrada do `aggregate`. `groupBy`: array de campos (chaves homônimas) OU mapa
  * `alias → campo | expr`. `select`: `alias → acumulador`. `having`: filtro sobre os
  * ALIASES do select (agregados) → `HAVING`. `orderBy`: por alias do select OU chave
- * de grupo. `page`/`perPage`: top-N paginado (pressupõe `orderBy`). `where` é o mesmo
+ * de grupo. `page`/`perPage`: top-N paginado (pressupõe `orderBy`). `facets`: mapa de
+ * sub-agregações independentes (breakdowns) sob o mesmo `where`. `where` é o mesmo
  * `WhereInput` do find (filtra ANTES de agrupar).
  */
 export interface AggregateInput<E extends Entity<string, ShapeRecord>> {
@@ -61,6 +75,7 @@ export interface AggregateInput<E extends Entity<string, ShapeRecord>> {
   orderBy?: Record<string, SortDir>;
   page?: number;
   perPage?: number;
+  facets?: Record<string, FacetInput<E>>;
 }
 
 /**
@@ -69,3 +84,12 @@ export interface AggregateInput<E extends Entity<string, ShapeRecord>> {
  * fast-follow — o esqueleto devolve valores frouxos.
  */
 export type AggregateRow = Record<string, unknown>;
+
+/**
+ * Saída do `aggregate`, auto-ajustada ao input (igual o `expand`): sem `facets` no
+ * input → `AggregateRow[]` puro; COM `facets` → `{ rows, facets: { <nome>: linhas } }`.
+ * Assim o call-site que não pede breakdown não paga o embrulho.
+ */
+export type AggregateOutput<I> = I extends { facets: infer F }
+  ? { rows: AggregateRow[]; facets: { [K in keyof F]: AggregateRow[] } }
+  : AggregateRow[];

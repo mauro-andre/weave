@@ -72,6 +72,8 @@ export {
   type InferRead,
   type InferInsert,
   type AggregateInput,
+  type FacetInput,
+  type AggregateOutput,
   type Accumulator,
   type AggOpts,
   type GroupExpr,

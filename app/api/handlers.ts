@@ -60,8 +60,10 @@ export async function apiAggregate({ c, params }: EndpointHandlerArgs): Promise<
     const { aggregateObjects } = await import("../engine/control-plane/data.js");
     const body = (await c.req.json()) as { where?: WNode } & Record<string, unknown>;
     const where = access.god ? (body.where ?? {}) : (andWhere(access.rows, (body.where ?? {}) as WNode) as WNode);
-    const rows = await aggregateObjects(entity, { ...body, where });
-    return c.json({ rows });
+    // Wire uniforme: sempre { rows, facets } (facets {} quando não há). O SDK é quem
+    // dá o açúcar auto-tipado (devolve rows[] pelado quando o input não pediu facets).
+    const result = await aggregateObjects(entity, { ...body, where });
+    return c.json(result);
   } catch (e) {
     return fail(c, e);
   }

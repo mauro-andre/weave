@@ -92,7 +92,13 @@ export async function listObjects(
  * agrupadas. `input` é o AggregateInput frouxo (JSON do SDK/API), já com o `where`
  * do scope AND-ado pelo handler. O `jsonSafe` normaliza o bigint do `count`.
  */
-export async function aggregateObjects(name: string, input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+export interface AggregateResult {
+  rows: Record<string, unknown>[];
+  /** Um array de linhas por faceta (breakdown). `{}` quando não há facets. */
+  facets: Record<string, Record<string, unknown>[]>;
+}
+
+export async function aggregateObjects(name: string, input: Record<string, unknown>): Promise<AggregateResult> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
   const byName = new Map(irs.map((e) => [e.name, e] as const));
@@ -103,10 +109,21 @@ export async function aggregateObjects(name: string, input: Record<string, unkno
   const client = weave({ url, entities });
   const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
   const agg = compileAggregate as unknown as (e: unknown, i: unknown) => { text: string; params: unknown[] };
+  // Uma query = uma agregação. compileAggregate ignora `facets` (só o main lê); cada
+  // faceta roda como outro aggregate herdando o `where` do pai (limit → perPage).
+  const runOne = async (inp: Record<string, unknown>): Promise<Record<string, unknown>[]> => {
+    const q = agg(entities[name], inp);
+    return jsonSafe(await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
+  };
   try {
-    const q = agg(entities[name], input);
-    const rows = (await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
-    return jsonSafe(rows);
+    const rows = await runOne(input);
+    const facets: Record<string, Record<string, unknown>[]> = {};
+    const spec = (input.facets ?? {}) as Record<string, Record<string, unknown>>;
+    for (const [fname, f] of Object.entries(spec)) {
+      const { limit, ...rest } = f;
+      facets[fname] = await runOne({ ...rest, where: input.where, perPage: limit });
+    }
+    return { rows, facets };
   } finally {
     await client.close();
   }

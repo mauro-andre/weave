@@ -17,6 +17,8 @@ export {
 // ── Linguagem de agregação tipada (idioma de objeto) — engine/GUI/SDK ──
 export {
   type AggregateInput,
+  type FacetInput,
+  type AggregateOutput,
   type Accumulator,
   type AggOpts,
   type GroupExpr,

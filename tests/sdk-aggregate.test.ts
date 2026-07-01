@@ -178,6 +178,51 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
     expect(Number(rows[0]!.n)).toBe(3);
   });
 
+  it("facets: números de manchete + breakdowns independentes numa passada", async () => {
+    const res = await weave().aggreq.aggregate({
+      select: { total: count() },
+      facets: {
+        porHost: { groupBy: ["host"], select: { n: count() }, orderBy: { n: "desc" } },
+        porStatus: { groupBy: ["status"], select: { n: count() }, orderBy: { status: "asc" } },
+      },
+    });
+    // COM facets → { rows, facets } (auto-tipado).
+    expect(Number(res.rows[0]!.total)).toBe(4);
+    expect(res.facets.porHost.map((r) => [r.host, Number(r.n)])).toEqual([
+      ["a", 3],
+      ["b", 1],
+    ]);
+    expect(res.facets.porStatus.map((r) => [Number(r.status), Number(r.n)])).toEqual([
+      [200, 3],
+      [500, 1],
+    ]);
+  });
+
+  it("facets: limit → top-N por faceta (pressupõe orderBy)", async () => {
+    const res = await weave().aggreq.aggregate({
+      select: { total: count() },
+      facets: { topHost: { groupBy: ["host"], select: { n: count() }, orderBy: { n: "desc" }, limit: 1 } },
+    });
+    expect(res.facets.topHost).toHaveLength(1);
+    expect(res.facets.topHost[0]!.host).toBe("a"); // o mais movimentado
+  });
+
+  it("facets herdam o where do pai (status=200 → host b some do breakdown)", async () => {
+    const res = await weave().aggreq.aggregate({
+      where: { status: 200 },
+      select: { total: count() },
+      facets: { porHost: { groupBy: ["host"], select: { n: count() }, orderBy: { n: "desc" } } },
+    });
+    expect(Number(res.rows[0]!.total)).toBe(3);
+    expect(res.facets.porHost.map((r) => r.host)).toEqual(["a"]); // b (status 500) filtrado
+  });
+
+  it("sem facets → AggregateRow[] pelado (auto-tipado, backward-compat)", async () => {
+    const rows = await weave().aggreq.aggregate({ select: { total: count() } });
+    expect(Array.isArray(rows)).toBe(true);
+    expect(Number(rows[0]!.total)).toBe(4);
+  });
+
   it("histogram: barras de latência [<100, [100,200), >=200] sobre [50,100,200,300]", async () => {
     const rows = await weave().aggreq.aggregate({
       select: { bars: histogram("durationMs", [100, 200]) },

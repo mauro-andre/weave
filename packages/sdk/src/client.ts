@@ -8,7 +8,7 @@ import type {
   WhereInput,
   OrderByInput,
   AggregateInput,
-  AggregateRow,
+  AggregateOutput,
 } from "@mauroandre/weave-core";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
@@ -85,8 +85,12 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   deleteOne(where: WhereInput<E>, opts?: { orderBy?: OrderByInput<E> }): Promise<InferEntity<E> | null>;
   deleteMany(where: WhereInput<E>): Promise<{ count: number }>;
 
-  /** Agrega (groupBy + acumuladores + orderBy). Devolve as linhas agrupadas. */
-  aggregate(input: AggregateInput<E>): Promise<AggregateRow[]>;
+  /**
+   * Agrega (groupBy + acumuladores + having + orderBy). Sem `facets` no input,
+   * devolve `AggregateRow[]`; COM `facets`, devolve `{ rows, facets }` — o tipo de
+   * retorno se auto-ajusta ao input (igual o `expand`).
+   */
+  aggregate<const I extends AggregateInput<E>>(input: I): Promise<AggregateOutput<I>>;
 }
 
 /** O client completo: uma propriedade por entidade do entities + `as` (scope). */
@@ -227,8 +231,15 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
         return { count: r.count };
       },
       async aggregate(input: unknown) {
-        const r = (await request("POST", `${path}/aggregate`, { body: input })) as { rows?: unknown[] };
-        return (r.rows ?? []) as Record<string, unknown>[];
+        const r = (await request("POST", `${path}/aggregate`, { body: input })) as {
+          rows?: unknown[];
+          facets?: Record<string, unknown[]>;
+        };
+        const rows = (r.rows ?? []) as Record<string, unknown>[];
+        // auto-tipado: input com facets → { rows, facets }; sem → rows[] pelado.
+        return (
+          input && (input as { facets?: unknown }).facets ? { rows, facets: r.facets ?? {} } : rows
+        ) as never;
       },
     };
   }

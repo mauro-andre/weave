@@ -69,10 +69,19 @@ assim), não específico de telemetria — **desenhado agora, implementado quand
 relacional migrar** (Decisão 4). Barato desenhar, caro retrofitar.
 
 **Expressões sobre agregados (v1, núcleo geral):** aliases do `select` combinam-se
-aritmeticamente e valem em `orderBy`/`having` — ex.: `errorRate: count({ where: { status:
-{ gte: 400 } } }) / count()` (a taxa **deriva do `status` cru**, não de um campo `errors`),
-depois `orderBy: { errorRate: "desc" }` ("as rotas que mais falham, proporcionalmente").
-Filtrar/ordenar por taxa é **server-side**, antes da paginação; só exibir é app (Decisão 5).
+aritmeticamente via **builder** (`div`/`mul`/`add`/`sub` — JS não sobrecarrega `/`) e valem
+em `orderBy`/`having`:
+```ts
+select: {
+  errors: count({ where: { status: { gte: 400 } } }),   // deriva do `status` cru
+  total:  count(),
+  errorRate: div("errors", "total"),                     // referencia aliases por nome
+},
+orderBy: { errorRate: "desc" },   // "as rotas que mais falham, proporcionalmente"
+```
+O compilador **inlina a expressão do alias** por baixo (o Postgres não referencia alias de
+SELECT no mesmo SELECT). Filtrar/ordenar por taxa é **server-side**, antes da paginação; só
+exibir é app (Decisão 5 · Decisão 8).
 
 `{ where }` geral resolve o app-vs-stack numa passada:
 ```ts
@@ -241,6 +250,21 @@ Sem a extensão, o Weave segue 100% menos esse campo.
    ao campo `hll()`, **não requisito global** — core roda em Postgres puro; escape =
    uniques recent-only + dropar HLL. **Window functions user-facing = não-meta v1**
    (parked), distinta do cumsum-interno-pro-percentile (needed-now).
+7. **Forma de retorno do `facets`: wire uniforme + SDK auto-tipado.** O HTTP devolve
+   **sempre** `{ rows, facets }` (`facets: {}` quando não há) — contrato estável pra
+   qualquer consumidor REST. O **SDK** dá o açúcar: o tipo de retorno se auto-ajusta ao
+   input (igual o `expand`) — sem `facets` no input → `AggregateRow[]` pelado; com →
+   `{ rows, facets }`. Trava a forma cedo (antes dos call-sites ossificarem no `rows[]`)
+   e settla a peça mais geral (multi-breakdown) antes das expressões. Cada faceta roda
+   como **outro `aggregate` herdando o `where` do pai** (o `limit` da faceta → `perPage`);
+   o compilador não muda — a orquestração é no control-plane.
+8. **Expressões sobre agregados (Decisão 5) usam um BUILDER, não o `/` literal.** JS não
+   sobrecarrega `/`, então `sum("errors") / count()` do exemplo nunca compilaria — a API é
+   `div(...)` · `mul(...)` · `add(...)` · `sub(...)`, referenciando **aliases do select por
+   nome** (`div("errors", "total")`, lê melhor que re-inlinar acumuladores). O Postgres não
+   referencia alias de SELECT no mesmo SELECT, então o compilador **inlina a expressão do
+   alias** por baixo (açúcar resolvido em compile-time, não alias-de-SQL real). Vale em
+   `orderBy`/`having` server-side. *(Próximo tijolo — ainda não implementado.)*
 
 ## Notas
 
