@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { compileAggregate, count, sum, timeBucket, defineEntity, text, int4, timestamptz } from "../../app/engine/index.js";
+import {
+  compileAggregate,
+  count,
+  sum,
+  distinct,
+  percentile,
+  timeBucket,
+  defineEntity,
+  text,
+  int4,
+  timestamptz,
+} from "../../app/engine/index.js";
 
 // Esqueleto do compilador de agregação (count/sum + groupBy + orderBy). SQL puro,
 // sem DB. Inclui os guards de identificador (barreira anti-injection).
@@ -8,6 +19,7 @@ const req = defineEntity("appreq", {
   host: text().notNull(),
   route: text().notNull(),
   durationMs: int4(),
+  status: int4(),
   ts: timestamptz(),
 });
 
@@ -45,6 +57,74 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     const { text: sql } = sqlOf({ select: { total: count() } });
     expect(sql).toContain(`count(*) AS "total"`);
     expect(sql).not.toContain("GROUP BY");
+  });
+
+  it("distinct → count(distinct col)", () => {
+    const { text: sql } = sqlOf({ groupBy: ["route"], select: { hosts: distinct("host") } });
+    expect(sql).toContain(`count(distinct appreq.host) AS "hosts"`);
+  });
+
+  it("percentile → percentile_cont WITHIN GROUP, p bindado", () => {
+    const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { p95: percentile("durationMs", 0.95) } });
+    expect(sql).toMatch(/percentile_cont\(\$1\) WITHIN GROUP \(ORDER BY appreq\.duration_ms\) AS "p95"/);
+    expect(params[0]).toBe(0.95);
+  });
+
+  it("guard: percentile p fora de (0,1) → erro", () => {
+    expect(() => sqlOf({ select: { p: percentile("durationMs", 95) } })).toThrow(/fraction between 0 and 1/);
+  });
+
+  it("acumulador com { where } → FILTER (WHERE …), params na ordem do SELECT", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: {
+        total: count(),
+        errors: count({ where: { status: { gte: 500 } } }),
+      },
+    });
+    expect(sql).toContain(`count(*) AS "total"`);
+    expect(sql).toMatch(/count\(\*\) FILTER \(WHERE appreq\.status >= \$1\) AS "errors"/);
+    expect(params[0]).toBe(500);
+  });
+
+  it("having → HAVING sobre a expressão do acumulador (não o alias)", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: { n: count() },
+      having: { n: { gte: 100 } },
+      orderBy: { n: "desc" },
+    });
+    expect(sql).toContain(`HAVING count(*) >= $1`);
+    expect(sql).toContain(`ORDER BY "n" DESC`);
+    expect(params[0]).toBe(100);
+  });
+
+  it("having shorthand (valor cru → =)", () => {
+    const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { n: count() }, having: { n: 1 } });
+    expect(sql).toContain(`HAVING count(*) = $1`);
+    expect(params[0]).toBe(1);
+  });
+
+  it("guard: having sobre alias inexistente → erro", () => {
+    expect(() => sqlOf({ groupBy: ["route"], select: { n: count() }, having: { nope: 1 } })).toThrow(
+      /unknown select alias/,
+    );
+  });
+
+  it("página → LIMIT/OFFSET (top-N)", () => {
+    const { text: sql } = sqlOf({ groupBy: ["route"], select: { n: count() }, orderBy: { n: "desc" }, page: 2, perPage: 10 });
+    expect(sql).toContain("LIMIT 10 OFFSET 10");
+  });
+
+  it("ordem dos params: FILTER (SELECT) antes de WHERE antes de HAVING", () => {
+    const { params } = sqlOf({
+      where: { host: "h" },
+      groupBy: ["route"],
+      select: { errors: count({ where: { status: { gte: 500 } } }) },
+      having: { errors: { gte: 3 } },
+    });
+    // FILTER 500 (no SELECT) → host "h" (WHERE) → having 3 (HAVING).
+    expect(params).toEqual([500, "h", 3]);
   });
 
   it("guard: campo desconhecido no acumulador → erro", () => {

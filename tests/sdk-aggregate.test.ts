@@ -11,6 +11,8 @@ import {
   count,
   sum,
   avg,
+  distinct,
+  percentile,
   timeBucket,
 } from "@mauroandre/weave-sdk";
 
@@ -129,5 +131,50 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
       select: { n: count() },
     });
     expect(Number(rows[0]!.n)).toBe(3);
+  });
+
+  it("distinct: hosts únicos no conjunto (a, b → 2)", async () => {
+    const rows = await weave().aggreq.aggregate({ select: { hosts: distinct("host") } });
+    expect(Number(rows[0]!.hosts)).toBe(2);
+  });
+
+  it("percentile exato: p50 de [50,100,200,300] → 150 (mediana interpolada)", async () => {
+    const rows = await weave().aggreq.aggregate({ select: { med: percentile("durationMs", 0.5) } });
+    expect(Number(rows[0]!.med)).toBeCloseTo(150, 5);
+  });
+
+  it("acumulador com { where } → FILTER: total vs errors numa passada", async () => {
+    const rows = await weave().aggreq.aggregate({
+      select: {
+        total: count(),
+        errors: count({ where: { status: { gte: 500 } } }),
+      },
+    });
+    expect(Number(rows[0]!.total)).toBe(4);
+    expect(Number(rows[0]!.errors)).toBe(1); // só o req do host "b" (status 500)
+  });
+
+  it("having: só grupos com count >= 2 (host a; b fica de fora)", async () => {
+    const rows = await weave().aggreq.aggregate({
+      groupBy: ["host"],
+      select: { n: count() },
+      having: { n: { gte: 2 } },
+      orderBy: { host: "asc" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.host).toBe("a");
+    expect(Number(rows[0]!.n)).toBe(3);
+  });
+
+  it("top-N paginado: host mais movimentado (orderBy desc + perPage 1)", async () => {
+    const rows = await weave().aggreq.aggregate({
+      groupBy: ["host"],
+      select: { n: count() },
+      orderBy: { n: "desc" },
+      page: 1,
+      perPage: 1,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.host).toBe("a"); // 3 > 1
   });
 });

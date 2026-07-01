@@ -63,6 +63,8 @@ export {
   avg,
   min,
   max,
+  distinct,
+  percentile,
   timeBucket,
   type Entity,
   type InferEntity,
@@ -70,6 +72,7 @@ export {
   type InferInsert,
   type AggregateInput,
   type Accumulator,
+  type AggOpts,
   type GroupExpr,
   type AggregateRow,
 } from "@mauroandre/weave-core";

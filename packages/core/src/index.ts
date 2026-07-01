@@ -18,6 +18,7 @@ export {
 export {
   type AggregateInput,
   type Accumulator,
+  type AggOpts,
   type GroupExpr,
   type AggregateRow,
   count,
@@ -25,6 +26,8 @@ export {
   avg,
   min,
   max,
+  distinct,
+  percentile,
   timeBucket,
 } from "./schema/aggregate.js";
 

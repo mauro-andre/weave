@@ -453,7 +453,6 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
 // IDENTIFICADORES (campos, aliases) são VALIDADOS contra o shape / regex — nunca vêm
 // param-bindados (não dá), então a validação é a barreira contra injection.
 
-const AGGS = new Set(["count", "sum", "avg", "min", "max"]);
 const IDENT_RE = /^[A-Za-z0-9_]+$/;
 
 function safeAlias(alias: string): string {
@@ -488,10 +487,41 @@ function groupSql(table: string, shape: ShapeRecord | OwnedShape, g: string | Gr
   return `to_timestamp(floor(extract(epoch from ${aggCol(table, shape, field)}) / ${secs}) * ${secs})`;
 }
 
-function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator): string {
-  if (acc.agg === "count") return "count(*)";
-  if (!AGGS.has(acc.agg)) throw new Error(`weave: unknown accumulator '${acc.agg}'.`);
-  return `${acc.agg}(${aggCol(table, shape, acc.field)})`;
+// Um acumulador → expressão SQL. `{ where }` (opcional) vira `… FILTER (WHERE …)`.
+// `params` recebe os binds na ORDEM em que a expressão aparece no SELECT (o chamador
+// respeita a ordem SELECT→WHERE→HAVING pra os $N baterem com `.unsafe`).
+function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator, params: unknown[]): string {
+  let base: string;
+  switch (acc.agg) {
+    case "count":
+      base = "count(*)";
+      break;
+    case "sum":
+    case "avg":
+    case "min":
+    case "max":
+      base = `${acc.agg}(${aggCol(table, shape, acc.field)})`;
+      break;
+    case "distinct":
+      base = `count(distinct ${aggCol(table, shape, acc.field)})`;
+      break;
+    case "percentile": {
+      const p = acc.p;
+      if (typeof p !== "number" || !Number.isFinite(p) || p <= 0 || p >= 1) {
+        throw new Error(`weave: percentile p must be a fraction between 0 and 1 (got ${JSON.stringify(p)}).`);
+      }
+      base = `percentile_cont(${bind(params, p)}) WITHIN GROUP (ORDER BY ${aggCol(table, shape, acc.field)})`;
+      break;
+    }
+    default:
+      throw new Error(`weave: unknown accumulator '${(acc as { agg?: string }).agg}'.`);
+  }
+  const w = (acc as { where?: Record<string, unknown> }).where;
+  if (w && Object.keys(w).length) {
+    const f = compileWhere(table, singularize(table), shape, w, params);
+    if (f) base += ` FILTER (WHERE ${f})`;
+  }
+  return base;
 }
 
 /** Compila um `aggregate` em SQL parametrizado. Devolve linhas agrupadas (alias → valor). */
@@ -513,20 +543,43 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
   }
 
   const cols: string[] = groups.map((g) => `${g.expr} AS "${g.alias}"`);
+  // alias → expressão SQL do acumulador. Reusada NO HAVING: o Postgres não aceita alias
+  // de saída no HAVING, então re-emitimos a expressão idêntica (mesmos $N — bind uma vez,
+  // referência N vezes; o valor é vinculado uma só vez pelo driver).
+  const accExpr: Record<string, string> = {};
   for (const [alias, acc] of Object.entries(input.select ?? {})) {
-    cols.push(`${accSql(table, shape, acc as Accumulator)} AS "${safeAlias(alias)}"`);
+    const a = safeAlias(alias);
+    const expr = accSql(table, shape, acc as Accumulator, params);
+    accExpr[a] = expr;
+    cols.push(`${expr} AS "${a}"`);
   }
   if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
 
   const whereSql = compileWhere(table, singularize(table), shape, (input.where ?? {}) as Record<string, unknown>, params);
 
+  // HAVING: mesmo shorthand escalar do `where`, mas o "campo" é a expressão do agregado
+  // (reusada de accExpr). `{ requests: { gte: 100 } }` → `HAVING count(*) >= $N`.
+  const havingConds: string[] = [];
+  for (const [alias, cond] of Object.entries((input.having ?? {}) as Record<string, unknown>)) {
+    const expr = accExpr[safeAlias(alias)];
+    if (!expr) throw new Error(`weave: having references unknown select alias '${alias}'.`);
+    havingConds.push(compileFieldFilter(expr, cond, params));
+  }
+
   const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
   if (groups.length) lines.push(`GROUP BY ${groups.map((g) => g.expr).join(", ")}`);
+  if (havingConds.length) lines.push(`HAVING ${havingConds.join(" AND ")}`);
   const ob = input.orderBy ? Object.entries(input.orderBy) : [];
   if (ob.length) {
     // ORDER BY por ALIAS de saída (grupo ou acumulador) — permitido pelo Postgres.
     lines.push(`ORDER BY ${ob.map(([a, d]) => `"${safeAlias(a)}" ${d === "desc" ? "DESC" : "ASC"}`).join(", ")}`);
+  }
+  // page/perPage → LIMIT/OFFSET (top-N paginado; pressupõe orderBy pra ser determinístico).
+  if (input.perPage != null || input.page != null) {
+    const pp = Math.max(1, Math.floor(Number(input.perPage) || 20));
+    const pg = Math.max(1, Math.floor(Number(input.page) || 1));
+    lines.push(`LIMIT ${pp} OFFSET ${(pg - 1) * pp}`);
   }
   return { text: lines.join("\n"), params };
 }
