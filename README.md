@@ -286,17 +286,17 @@ const p   = await weave.product.create({ name: "Clean Code", price: 80, category
 p.price;       // number  (inferred)
 p.createdAt;   // Date    (revived from JSON)
 
-const found = await weave.product.find({
-  where:   { price: { gte: 50 }, category: { name: { ilike: "%book%" } } },
-  orderBy: { price: "desc" },
-  expand:  { category: true },
-});
+const found = await weave.product.findMany(
+  { price: { gte: 50 }, category: { name: { ilike: "%book%" } } },
+  { orderBy: { price: "desc" }, expand: { category: true } },
+);
 found[0].category.name;   // typed & present — only because you expanded it
 ```
 
-CRUD per entity: `create` / `get` / `find` / `findOne` / `paginate` / `update` /
-`delete`. `where` / `orderBy` / `expand` are the **same `WhereInput` language** as
-the embedded `db.find` — one query language from the GUI click to the SDK call to
+Verbs per entity: `create` / `findOne` / `findMany` / `paginate` / `updateOne` /
+`updateMany` / `deleteOne` / `deleteMany` — target rows with a bare `where`
+(`{ id: "x" }` ≡ `{ id: { eq: "x" } }`). `where` / `orderBy` / `expand` are the **same
+`WhereInput` language** as the embedded `db.find` — one query language from the GUI click to the SDK call to
 the SQL. The return type **self-types by your `expand`** (`InferRead<E, X>`), so you
 never write a result type by hand.
 

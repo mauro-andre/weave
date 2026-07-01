@@ -57,10 +57,10 @@ const weave = createClient({
 const cat = await weave.category.create({ name: "Books" });
 const p = await weave.product.create({ name: "Clean Code", price: 80, categoryId: cat.id });
 
-const found = await weave.product.find({
-  where: { price: { gte: 50 } },
-  expand: { category: true },
-});
+const found = await weave.product.findMany(
+  { price: { gte: 50 } },
+  { expand: { category: true } },
+);
 
 found[0].price;         // number — inferred
 found[0].category.name; // string — typed, because you expanded it

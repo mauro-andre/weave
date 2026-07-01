@@ -11,14 +11,16 @@ const NPM = "https://www.npmjs.com/package/@mauroandre/weave-sdk";
 
 const QUERY = `const weave = createClient({ url, key, entities });
 
-const orders = await weave.order.find({
-  where: {
-    status: { eq: "paid" },
+const orders = await weave.order.findMany(
+  {
+    status: "paid",                                       // { eq: "paid" }, shorthand
     items: { some: { product: { name: { ilike: "%pro%" } } } },
   },
-  orderBy: { customer: { name: "asc" } },
-  expand: { customer: true, items: { product: true } },
-});
+  {
+    orderBy: { customer: { name: "asc" } },
+    expand:  { customer: true, items: { product: true } },
+  },
+);
 
 orders[0].customer.name;          // string  — typed, you expanded it
 orders[0].items[0].product.price; // number  — nested, revived, inferred`;

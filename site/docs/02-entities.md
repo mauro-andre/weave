@@ -32,6 +32,20 @@ Common types: `text` · `int4` · `int8` · `float8` · `numeric` · `bool` ·
 `timestamptz` · `uuid` · `jsonb`. Every entity gets `id`, `createdAt` and
 `updatedAt` for free.
 
+### Naming — camelCase in, snake_case in the database
+
+Write field names in **camelCase**, the way you would in TypeScript. Weave stores the
+column in **snake_case** — the Postgres convention — automatically:
+
+```ts
+firstName   →  column first_name
+phoneNumber →  column phone_number
+```
+
+You always read and query with the camelCase name (`{ firstName: "Ada" }`); the
+snake_case column stays under the hood. Whatever style you type in the GUI (`First
+Name`, `first_name`) converges on the same camelCase field.
+
 ## Owned objects — composition
 
 An **owned** object lives inside its parent (its own child table, cascade-deleted

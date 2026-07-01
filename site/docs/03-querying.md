@@ -1,29 +1,44 @@
 # Querying
 
-Every entity on the client exposes the same methods:
+Every entity exposes the same object verbs. You target rows with a bare **where** —
+and `{ id: "123" }` is just shorthand for `{ id: { eq: "123" } }`.
 
 ```ts
-weave.product.create(data);
-weave.product.get(id);
-weave.product.find({ where, orderBy, expand });
-weave.product.findOne({ where, expand });
-weave.product.paginate({ where, page, perPage });
-weave.product.update(id, data);
-weave.product.delete(id);
+weave.product.create(input)                // insert
+
+weave.product.findOne(where, opts?)        // first match  → object | null
+weave.product.findMany(where?, opts?)      // all matches  → object[]
+weave.product.paginate(where?, opts?)      // { docs, docsQuantity, ... }
+
+weave.product.updateOne(where, patch)      // first match, updated  → object | null
+weave.product.updateMany(where, patch)     // bulk  → { count }
+
+weave.product.deleteOne(where)             // first match, deleted  → object | null
+weave.product.deleteMany(where)            // bulk  → { count }
 ```
 
-## where — one object language
+The rule is uniform: **`One`** targets the first match (`orderBy` disambiguates) and
+returns the object; **`Many`** operates in bulk and returns `{ count }`. To act by id,
+just filter on it — `findOne({ id })`, `updateOne({ id }, patch)`, `deleteOne({ id })`.
 
-Filters are plain objects. The same `WhereInput` works in the GUI, in the SDK, and
-in stored access rules.
+`opts` is `{ orderBy?, expand? }` (plus `page` / `perPage` for `paginate`).
+
+## where — one object language, with a shorthand
+
+A bare value means `eq`, and `null` means `IS NULL`:
 
 ```ts
-await weave.product.find({
-  where: {
-    price: { gte: 50, lt: 200 },
-    name: { ilike: "%pro%" },
-    active: { eq: true },
-  },
+{ status: "paid" }    // ≡ { status: { eq: "paid" } }
+{ deletedAt: null }   // ≡ { deletedAt: { isNull: true } }
+```
+
+The same `WhereInput` works in the GUI, in the SDK, and in stored access rules:
+
+```ts
+await weave.product.findMany({
+  price: { gte: 50, lt: 200 },
+  name: { ilike: "%pro%" },
+  active: true,
 });
 ```
 
@@ -33,45 +48,54 @@ Scalar operators: `eq` · `ne` · `gt` · `gte` · `lt` · `lte` · `in` · `not
 ### Boolean composition
 
 ```ts
-where: {
-  or: [{ status: { eq: "paid" } }, { total: { gte: 1000 } }],
-  not: { archived: { eq: true } },
+{
+  or: [{ status: "paid" }, { total: { gte: 1000 } }],
+  not: { archived: true },
 }
 ```
 
 ### Through references and owned lists
 
-Traverse a reference by nesting; filter a list with a quantifier:
-
 ```ts
-where: {
-  category: { name: { eq: "Books" } },          // N:1 traversal
-  items: { some: { qty: { gte: 3 } } },          // any item matches
-  tags:  { every: { active: { eq: true } } },    // all match · none · isEmpty
+{
+  category: { name: "Books" },          // N:1 traversal
+  items: { some: { qty: { gte: 3 } } }, // any item matches
+  tags:  { every: { active: true } },   // all match · none · isEmpty
 }
 ```
 
-## orderBy
+## orderBy & expand — the opts
 
 ```ts
-orderBy: { price: "desc" }
-orderBy: { customer: { name: "asc" } }   // sort by a nested field
+await weave.product.findMany(
+  { price: { gte: 50 } },
+  { orderBy: { price: "desc" }, expand: { category: true } },
+);
 ```
 
-## expand — read the graph
-
-By default a query returns the entity's own columns. Ask for related data with
-`expand`, and **the return type follows your request**:
+`expand` reads the graph, and **the return type follows it**:
 
 ```ts
-const orders = await weave.order.find({
-  expand: { customer: true, items: { product: true } },
-});
+const orders = await weave.order.findMany(
+  {},
+  { expand: { customer: true, items: { product: true } } },
+);
 
 orders[0].customer.name;          // present & typed — you expanded it
 orders[0].items[0].product.price; // nested, revived (Dates too), inferred
 ```
 
-No hand-written result types: `find` infers its shape from the `expand` you pass.
+No hand-written result types — the shape follows the `expand` you pass.
+
+## Bulk updates and deletes
+
+```ts
+await weave.todo.updateMany({ done: false }, { archived: true }); // → { count }
+await weave.todo.deleteMany({ archived: true });                  // → { count }
+```
+
+A `where` is **required** — an empty one is rejected, so you can never mass-mutate by
+accident. And under a scope, bulk ops are automatically constrained to that scope's
+rows.
 
 Next: lock it down with **[scopes](/docs/scopes)**.

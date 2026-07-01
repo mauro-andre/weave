@@ -27,20 +27,21 @@ const weave = createClient({
 const cat = await weave.category.create({ name: "Books" });
 const p = await weave.product.create({ name: "Clean Code", price: 80, categoryId: cat.id });
 
-const found = await weave.product.find({
-  where:   { price: { gte: 50 }, category: { name: { ilike: "%book%" } } },
-  orderBy: { price: "desc" },
-  expand:  { category: true },
-});
+const found = await weave.product.findMany(
+  { price: { gte: 50 }, category: { name: { ilike: "%book%" } } },
+  { orderBy: { price: "desc" }, expand: { category: true } },
+);
 
 found[0].price;          // number  — inferred
 found[0].createdAt;      // Date    — revived from JSON
 found[0].category.name;  // string  — typed & present, only because you expanded it
 ```
 
-CRUD per entity: `create` · `get` · `find` · `findOne` · `paginate` · `update` ·
-`delete`. The return type **self-types by your `expand`**, so you never write a
-result type by hand.
+The verbs per entity: `create` · `findOne` · `findMany` · `paginate` ·
+`updateOne` · `updateMany` · `deleteOne` · `deleteMany`. You target rows with a bare
+**where** (`{ id: "123" }` is shorthand for `{ id: { eq: "123" } }`); `One` hits the
+first match, `Many` operates in bulk and returns `{ count }`. The read return type
+**self-types by your `expand`**, so you never write a result type by hand.
 
 ## One query language
 
@@ -48,13 +49,13 @@ result type by hand.
 click, the SDK call, and the stored access rule all speak it. A taste:
 
 ```ts
-await weave.order.find({
-  where: {
-    or: [{ status: { eq: "paid" } }, { total: { gte: 1000 } }],
+await weave.order.findMany(
+  {
+    or: [{ status: "paid" }, { total: { gte: 1000 } }],
     items: { some: { product: { name: { ilike: "%pro%" } } } }, // any item matches
   },
-  orderBy: { customer: { name: "asc" } },                        // nested sort
-});
+  { orderBy: { customer: { name: "asc" } } },                    // nested sort
+);
 ```
 
 ## Entities as code
@@ -116,7 +117,7 @@ Act under a scope at request time:
 
 ```ts
 const tenant = weave.as("storefront", { tenantId: ctx.tenant });
-await tenant.product.find(); // server enforces the scope's rows + fields
+await tenant.product.findMany(); // server enforces the scope's rows + fields
 ```
 
 ## License
