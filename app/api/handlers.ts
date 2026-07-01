@@ -39,9 +39,10 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
     const expand = parseJson<ExpandSpec>(query.expand);
     const orderBy = parseJson<WNode>(query.orderBy);
+    const latestPer = parseJson<string[]>(query.latestPer);
     const userWhere = parseJson<WNode>(query.where);
     const where = access.god ? userWhere : andWhere(access.rows, userWhere);
-    const res = await listObjects(entity, page, perPage, where, orderBy, expand);
+    const res = await listObjects(entity, page, perPage, where, orderBy, expand, latestPer);
     if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
     return c.json(res);
   } catch (e) {

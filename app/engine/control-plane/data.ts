@@ -31,6 +31,7 @@ export async function listObjects(
   where?: WhereArg | null,
   orderBy?: OrderArg | null,
   expand?: ExpandSpec | null,
+  latestPer?: string[] | null,
 ): Promise<ObjectPage> {
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
@@ -49,7 +50,10 @@ export async function listObjects(
   const find = (client as unknown as { find(e: unknown, o: unknown): Promise<Record<string, unknown>[]> }).find.bind(
     client,
   );
-  const count = compileCount as unknown as (e: unknown, w: unknown) => { text: string; params: unknown[] };
+  const count = compileCount as unknown as (e: unknown, w: unknown, lp?: string[]) => {
+    text: string;
+    params: unknown[];
+  };
   try {
     const p = Math.max(1, Math.floor(page));
     const pp = Math.max(1, Math.floor(perPage));
@@ -58,14 +62,16 @@ export async function listObjects(
     const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
     const entity = entities[name];
     const w = where ?? {};
+    const lp = latestPer && latestPer.length ? latestPer : undefined;
 
-    const countQ = count(entity, w);
+    const countQ = count(entity, w, lp);
     const countRows = (await sql.unsafe(countQ.text, countQ.params)) as { n: number }[];
     const docsQuantity = countRows[0]?.n ?? 0;
 
     const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
     const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
     if (Object.keys(expandMap).length) opts.expand = expandMap;
+    if (lp) opts.latestPer = lp;
     const docs = await find(entity, opts);
 
     return jsonSafe({

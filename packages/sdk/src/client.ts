@@ -40,6 +40,12 @@ export interface ClientOptions<S> {
 export interface ReadOpts<E extends Entity<string, ShapeRecord>, X> {
   orderBy?: OrderByInput<E>;
   expand?: X & ExpandInput<E>;
+  /**
+   * Greatest-n-per-group: uma linha por combinação destes campos (`DISTINCT ON`).
+   * O `orderBy` decide qual sobrevive (ex.: `{ ts: "desc" }` → a mais recente).
+   * É o widget de métricas vivas ("o doc mais recente por worker/container").
+   */
+  latestPer?: (keyof E["columns"] & string)[];
 }
 
 export interface PageOpts<E extends Entity<string, ShapeRecord>, X> extends ReadOpts<E, X> {
@@ -99,7 +105,7 @@ interface ListResponse {
 }
 
 // Formas frouxas usadas SÓ na implementação (a interface dá os tipos).
-type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
+type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number; latestPer?: unknown };
 
 /**
  * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
@@ -157,6 +163,7 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     where: JSON.stringify(where ?? {}),
     expand: JSON.stringify(o.expand ?? {}),
     orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
+    latestPer: o.latestPer !== undefined ? JSON.stringify(o.latestPer) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,
     perPage: o.perPage !== undefined ? String(o.perPage) : undefined,
   });

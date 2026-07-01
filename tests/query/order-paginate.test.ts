@@ -36,4 +36,32 @@ describe("compileCount", () => {
     expect(sql).toBe("SELECT count(*)::int AS n FROM users WHERE users.age >= $1");
     expect(params).toEqual([18]);
   });
+
+  it("latestPer conta GRUPOS distintos", () => {
+    const { text: sql } = compileCount(user, undefined, ["name"]);
+    expect(sql).toBe("SELECT count(DISTINCT (users.name))::int AS n FROM users");
+  });
+});
+
+describe("compileFind latestPer (DISTINCT ON — greatest-n-per-group)", () => {
+  it("DISTINCT ON (cols) e prefixa as colunas do grupo no ORDER BY", () => {
+    const sql = compileFind(user, { latestPer: ["name"], orderBy: { age: "desc" } }).text;
+    expect(sql).toContain("SELECT DISTINCT ON (users.name)");
+    // as colunas do grupo LIDERAM o ORDER BY (exigência do Postgres), depois o do user.
+    expect(sql).toContain("ORDER BY users.name, users.age DESC");
+  });
+
+  it("multi-coluna: DISTINCT ON (a, b) e ambas lideram o ORDER BY", () => {
+    const sql = compileFind(user, { latestPer: ["name", "age"], orderBy: { age: "desc" } }).text;
+    expect(sql).toContain("SELECT DISTINCT ON (users.name, users.age)");
+    expect(sql).toContain("ORDER BY users.name, users.age, users.age DESC");
+  });
+
+  it("sem latestPer: nada de DISTINCT ON (inalterado)", () => {
+    expect(compileFind(user, { orderBy: { age: "desc" } }).text).not.toContain("DISTINCT ON");
+  });
+
+  it("guard: latestPer com campo desconhecido → erro (anti-injection)", () => {
+    expect(() => compileFind(user, { latestPer: ['name"; DROP TABLE x; --'] })).toThrow(/unknown field/);
+  });
 });

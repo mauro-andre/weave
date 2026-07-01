@@ -177,6 +177,16 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
     expect(Number(rows[0]!.n)).toBe(3);
   });
 
+  it("latestPer: o req MAIS RECENTE por host (DISTINCT ON — métricas vivas)", async () => {
+    const rows = await weave().aggreq.findMany({}, { latestPer: ["host"], orderBy: { ts: "desc" } });
+    expect(rows).toHaveLength(2); // uma linha por host
+    const a = rows.find((r) => r.host === "a")!;
+    const b = rows.find((r) => r.host === "b")!;
+    expect(a.durationMs).toBe(50); // o req em +400s (o mais recente do host a)
+    expect(a.ts.getTime()).toBe(at(400).getTime()); // revivido: ts é Date
+    expect(b.durationMs).toBe(300); // host b só tem um req
+  });
+
   it("top-N paginado: host mais movimentado (orderBy desc + perPage 1)", async () => {
     const rows = await weave().aggreq.aggregate({
       groupBy: ["host"],

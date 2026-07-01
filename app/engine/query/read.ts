@@ -27,6 +27,12 @@ export interface FindOptions<E> {
   expand?: ExpandMap;
   /** Prune the result to selected fields; see `SelectInput`. Subsumes `expand`. */
   select?: SelectMap;
+  /**
+   * Greatest-n-per-group: uma linha por combinação destes campos (`DISTINCT ON`).
+   * Qual linha sobrevive vem do `orderBy` (ex.: `ts` desc → a mais recente). O
+   * compilador prefixa estes campos no `ORDER BY` (exigência do `DISTINCT ON`).
+   */
+  latestPer?: string[];
   limit?: number;
   offset?: number;
 }
@@ -358,9 +364,17 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
     params,
   );
 
-  const lines = [`SELECT ${obj} AS data`, `FROM ${table}`];
+  // latestPer → DISTINCT ON (cols): as colunas do grupo VALIDADAS (aggCol = barreira
+  // anti-injection) e prefixadas no ORDER BY (o Postgres exige que liderem a ordenação).
+  const lp = options.latestPer;
+  const distinctExprs = lp && lp.length ? lp.map((k) => aggCol(table, entity.columns, k)) : null;
+  const distinctOn = distinctExprs ? `DISTINCT ON (${distinctExprs.join(", ")}) ` : "";
+  const userOrder = compileOrderBy(table, singularize(table), entity.columns, options.orderBy);
+  const orderBody = distinctExprs ? `${distinctExprs.join(", ")}, ${userOrder}` : userOrder;
+
+  const lines = [`SELECT ${distinctOn}${obj} AS data`, `FROM ${table}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
-  lines.push(`ORDER BY ${compileOrderBy(table, singularize(table), entity.columns, options.orderBy)}`);
+  lines.push(`ORDER BY ${orderBody}`);
   if (options.limit != null) lines.push(`LIMIT ${bind(params, options.limit)}`);
   if (options.offset != null) lines.push(`OFFSET ${bind(params, options.offset)}`);
 
@@ -429,10 +443,12 @@ function orderScalar(
   throw new Error(`weave: cannot order by '${key}'.`);
 }
 
-/** Compile a `count` into parameterized SQL. */
+/** Compile a `count` into parameterized SQL. Com `latestPer`, conta GRUPOS distintos
+ *  (`count(DISTINCT (cols))`) — pra paginar sobre um resultado greatest-n-per-group. */
 export function compileCount<E extends Entity<string, ShapeRecord>>(
   entity: E,
   where?: WhereInput<E>,
+  latestPer?: string[],
 ): CompiledQuery {
   const table = entity.name;
   const params: unknown[] = [];
@@ -443,7 +459,11 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
     (where ?? {}) as Record<string, unknown>,
     params,
   );
-  let text = `SELECT count(*)::int AS n FROM ${table}`;
+  const cnt =
+    latestPer && latestPer.length
+      ? `count(DISTINCT (${latestPer.map((k) => aggCol(table, entity.columns, k)).join(", ")}))::int`
+      : "count(*)::int";
+  let text = `SELECT ${cnt} AS n FROM ${table}`;
   if (whereSql) text += ` WHERE ${whereSql}`;
   return { text, params };
 }
