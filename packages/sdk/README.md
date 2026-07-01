@@ -37,11 +37,11 @@ found[0].createdAt;      // Date    — revived from JSON
 found[0].category.name;  // string  — typed & present, only because you expanded it
 ```
 
-The verbs per entity: `create` · `findOne` · `findMany` · `paginate` ·
-`updateOne` · `updateMany` · `deleteOne` · `deleteMany`. You target rows with a bare
-**where** (`{ id: "123" }` is shorthand for `{ id: { eq: "123" } }`); `One` hits the
-first match, `Many` operates in bulk and returns `{ count }`. The read return type
-**self-types by your `expand`**, so you never write a result type by hand.
+The verbs per entity: `create` · `createMany` · `findOne` · `findMany` · `paginate` ·
+`updateOne` · `updateMany` · `deleteOne` · `deleteMany` · `aggregate`. You target rows
+with a bare **where** (`{ id: "123" }` is shorthand for `{ id: { eq: "123" } }`); `One`
+hits the first match, `Many` operates in bulk and returns `{ count }`. The read return
+type **self-types by your `expand`**, so you never write a result type by hand.
 
 ## One query language
 
@@ -58,6 +58,30 @@ await weave.order.findMany(
 );
 ```
 
+## Aggregation
+
+Roll rows into numbers — counts, sums, percentiles, breakdowns — in one call, pushed
+down to Postgres. Accumulators (`count`/`sum`/`avg`/`min`/`max`/`distinct`/`percentile`/
+`histogram`) go in `select`; `groupBy`, `having`, `orderBy` and `page` behave like SQL
+without the SQL:
+
+```ts
+import { count, percentile, timeBucket } from "@mauroandre/weave-sdk";
+
+const series = await weave.appRequest.aggregate({
+  where: { host: "api", ts: { gte: since } },
+  groupBy: { ts: timeBucket("ts", "5min") },
+  select: { requests: count(), p95: percentile("durationMs", 0.95) },
+  orderBy: { ts: "asc" },
+});
+```
+
+Every accumulator takes an optional `{ where }` (→ a filtered aggregate), expressions
+(`div`/`mul`/`add`/`sub`) let you sort/filter by a derived rate server-side, and
+`facets` runs many breakdowns of the same set in one pass. Batch ingest is
+`createMany([...])` (one transaction); `findMany(where, { latestPer, orderBy })` gives
+you the latest row per group. Full tour: **[weavepg.dev/docs/aggregation](https://weavepg.dev/docs/aggregation)**.
+
 ## Entities as code
 
 Declare entities with the same builders the server uses — one file, one entity:
@@ -72,6 +96,17 @@ export default defineEntity("product", {
   price: int4(),
   category: reference(category),
 });
+```
+
+A third argument declares **composite** unique constraints and indexes — each group is
+a list of field names (a `reference` maps to its foreign key):
+
+```ts
+export default defineEntity(
+  "registryEntry",
+  { slugName: text().notNull(), stack: reference(stack), host: text() },
+  { unique: [["slugName", "stack"]], index: [["host", "slugName"]] },
+);
 ```
 
 ## The CLI — code ↔ server

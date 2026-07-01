@@ -4,7 +4,8 @@ Every entity exposes the same object verbs. You target rows with a bare **where*
 and `{ id: "123" }` is just shorthand for `{ id: { eq: "123" } }`.
 
 ```ts
-weave.product.create(input)                // insert
+weave.product.create(input)                // insert one
+weave.product.createMany(inputs)           // insert many in one transaction
 
 weave.product.findOne(where, opts?)        // first match  → object | null
 weave.product.findMany(where?, opts?)      // all matches  → object[]
@@ -98,4 +99,5 @@ A `where` is **required** — an empty one is rejected, so you can never mass-mu
 accident. And under a scope, bulk ops are automatically constrained to that scope's
 rows.
 
-Next: lock it down with **[scopes](/docs/scopes)**.
+Next: roll rows up — counts, percentiles, breakdowns — with
+**[aggregation](/docs/aggregation)**, or lock it down with **[scopes](/docs/scopes)**.

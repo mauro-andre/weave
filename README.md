@@ -267,6 +267,17 @@ export default defineEntity("product", {
 });
 ```
 
+A third argument declares **composite** unique constraints and indexes (each group is
+a list of field names; a `reference` maps to its foreign key) — the natural/rollup key
+a single-column `.unique()` can't express:
+
+```ts
+defineEntity("registryEntry",
+  { slugName: text().notNull(), stack: reference(stack) },
+  { unique: [["slugName", "stack"]] },
+);
+```
+
 ### A typed client
 
 ```ts
@@ -293,12 +304,38 @@ const found = await weave.product.findMany(
 found[0].category.name;   // typed & present — only because you expanded it
 ```
 
-Verbs per entity: `create` / `findOne` / `findMany` / `paginate` / `updateOne` /
-`updateMany` / `deleteOne` / `deleteMany` — target rows with a bare `where`
-(`{ id: "x" }` ≡ `{ id: { eq: "x" } }`). `where` / `orderBy` / `expand` are the **same
-`WhereInput` language** as the embedded `db.find` — one query language from the GUI click to the SDK call to
-the SQL. The return type **self-types by your `expand`** (`InferRead<E, X>`), so you
-never write a result type by hand.
+Verbs per entity: `create` / `createMany` / `findOne` / `findMany` / `paginate` /
+`updateOne` / `updateMany` / `deleteOne` / `deleteMany` / `aggregate` — target rows
+with a bare `where` (`{ id: "x" }` ≡ `{ id: { eq: "x" } }`). `where` / `orderBy` /
+`expand` are the **same `WhereInput` language** as the embedded `db.find` — one query
+language from the GUI click to the SDK call to the SQL. The return type **self-types by
+your `expand`** (`InferRead<E, X>`), so you never write a result type by hand.
+
+### Aggregation
+
+`aggregate` rolls rows into numbers — pushed down to Postgres, returned as objects.
+Accumulators (`count`/`sum`/`avg`/`min`/`max`/`distinct`/`percentile`/`histogram`) go in
+`select`, alongside `groupBy` (fields or `timeBucket`), `having`, `orderBy`, top-N and
+`facets` (many breakdowns in one pass). Expressions (`div`/`mul`/`add`/`sub`) let you
+sort/filter by a derived rate server-side:
+
+```ts
+import { count, div, timeBucket } from "@mauroandre/weave-sdk";
+
+const perRoute = await weave.appRequest.aggregate({
+  groupBy: ["route"],
+  select: {
+    errors:    count({ where: { status: { gte: 500 } } }),  // { where } → a filtered count
+    total:     count(),
+    errorRate: div("errors", "total"),
+  },
+  orderBy: { errorRate: "desc" },   // the routes that fail most, proportionally
+});
+```
+
+Batch ingest is `createMany([...])` (one transaction); `findMany(where, { latestPer,
+orderBy })` returns the latest row per group (`DISTINCT ON`). Full tour:
+**[weavepg.dev/docs/aggregation](https://weavepg.dev/docs/aggregation)**.
 
 ### Migrations from the terminal
 

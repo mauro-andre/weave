@@ -83,6 +83,34 @@ export default defineEntity("product", {
 The difference in one line: **owned** is part of you and cascades; a **reference**
 is someone else you point at.
 
+## Composite unique & index
+
+`text().unique()` covers a single column. For a **multi-column** constraint — the kind
+a rollup key or a natural key needs — pass a third argument to `defineEntity`:
+
+```ts
+import { defineEntity, text, reference } from "@mauroandre/weave-sdk";
+import stack from "./stack.js";
+
+export default defineEntity(
+  "registryEntry",
+  {
+    slugName: text().notNull(),
+    stack: reference(stack),
+    host: text().notNull(),
+  },
+  {
+    unique: [["slugName", "stack"]],   // the pair is unique together
+    index:  [["host", "slugName"]],    // a composite (non-unique) index
+  },
+);
+```
+
+Each group lists **field names**: a column maps to its column; a to-one `reference`
+maps to its foreign key (`stack` → `stack_id`). Adding a `unique` group to an entity
+that already has duplicate rows is a **blocked** change — resolve the duplicates first
+(the same review gate as any migration).
+
 ## Scalar arrays
 
 Wrap a column in `array()` for a `text[]` / `int4[]` column:

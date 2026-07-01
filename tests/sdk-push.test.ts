@@ -20,8 +20,8 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct')`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack')`;
         await sql`DELETE FROM weave_api_keys`;
       },
       getSessionCookie: async ({ user }) => {
@@ -55,6 +55,36 @@ describe("SDK entities push (F3)", () => {
     const cat = await weave.pushcat.create({ name: "Books" });
     const p = await weave.pushprod.create({ name: "Clean Code", categoryId: cat.id });
     expect(p.categoryId).toBe(cat.id);
+  });
+
+  it("único composto via pushEntities: cria o índice no servidor (reference → _id) e enforça pelo SDK", async () => {
+    const stack = defineEntity("pushstack", { name: text().notNull() });
+    const reg = defineEntity(
+      "pushreg",
+      { slugName: text().notNull(), stack: reference(stack) },
+      { unique: [["slugName", "stack"]] },
+    );
+
+    // O caminho REAL do SDK: pushEntities serializa (toIR, com os grupos) → /admin/entities.
+    const res = await pushEntities({ reg, stack }, opts()); // ordem invertida de propósito
+    expect(res.review).toEqual([]);
+    expect(res.applied).toEqual(["pushstack", "pushreg"]); // dep-order: stack primeiro
+
+    // O índice único composto nasceu no servidor, com a reference resolvida pra `stack_id`.
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const idx = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM pg_indexes
+      WHERE schemaname = 'public' AND indexname = 'pushreg_slug_name_stack_id_key'`;
+    expect(idx[0]!.n).toBe(1);
+
+    // Funcional pelo SDK: mesma combinação (slug + stack) barra; stack diferente passa.
+    const weave = createClient({ ...opts(), entities: { pushstack: stack, pushreg: reg } });
+    const s1 = await weave.pushstack.create({ name: "s1" });
+    const s2 = await weave.pushstack.create({ name: "s2" });
+    await weave.pushreg.create({ slugName: "web", stackId: s1.id });
+    await weave.pushreg.create({ slugName: "web", stackId: s2.id }); // mesmo slug, stack diferente: ok
+    await expect(weave.pushreg.create({ slugName: "web", stackId: s1.id })).rejects.toThrow(); // repetida: barra
   });
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {
