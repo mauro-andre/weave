@@ -11,7 +11,7 @@
     },
     "dependencies": {
         "@mauroandre/velojs": "^0.0.36",
-        "@mauroandre/weave-sdk": "^0.0.3",
+        "@mauroandre/weave-sdk": "^0.0.4",
         "@preact/signals": "^2.9.2",
         "dotenv": "^17.4.2"
     },
