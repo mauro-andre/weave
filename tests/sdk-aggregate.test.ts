@@ -35,6 +35,7 @@ const iso = (offsetSec: number) => at(offsetSec).toISOString();
 describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
   let key = "";
+  let created: Awaited<ReturnType<ReturnType<typeof weave>["aggreq"]["createMany"]>>;
 
   const weave = () => createClient({ url: "http://localhost", key, entities, fetch: (req) => app.hono.fetch(req) });
 
@@ -71,18 +72,28 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
     const res = await app.as({ user: master }).action(action_createKey, { body: { name: "agg test key" } });
     key = (await res.json()).key as string;
 
-    // 3 reqs no bucket 0 (a,a,b) + 1 no bucket seguinte (a, em +400s).
-    const w = weave();
-    await w.aggreq.create({ host: "a", ts: at(10), durationMs: 100, status: 200 });
-    await w.aggreq.create({ host: "a", ts: at(50), durationMs: 200, status: 200 });
-    await w.aggreq.create({ host: "b", ts: at(20), durationMs: 300, status: 500 });
-    await w.aggreq.create({ host: "a", ts: at(400), durationMs: 50, status: 200 });
+    // Ingest em LOTE (createMany, uma transação): 3 reqs no bucket 0 (a,a,b) + 1 no
+    // bucket seguinte (a, em +400s). É como o produtor batelado alimenta a telemetria.
+    created = await weave().aggreq.createMany([
+      { host: "a", ts: at(10), durationMs: 100, status: 200 },
+      { host: "a", ts: at(50), durationMs: 200, status: 200 },
+      { host: "b", ts: at(20), durationMs: 300, status: 500 },
+      { host: "a", ts: at(400), durationMs: 50, status: 200 },
+    ]);
   });
 
   afterAll(async () => {
     await app.close();
     const { closeDb } = await import("../app/engine/control-plane/db.js");
     await closeDb();
+  });
+
+  it("createMany: devolve as linhas na ordem de entrada, revividas", () => {
+    expect(created).toHaveLength(4);
+    expect(created.map((r) => r.host)).toEqual(["a", "a", "b", "a"]);
+    expect(created[0]!.id).toBeTruthy();
+    expect(created[0]!.createdAt).toBeInstanceOf(Date); // reviveShape aplicou
+    expect(created[2]!.durationMs).toBe(300);
   });
 
   it("série temporal: timeBucket('ts','5min') + count(), ordenada", async () => {

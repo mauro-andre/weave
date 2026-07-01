@@ -92,6 +92,22 @@ describe("SDK client (F1) — CRUD tipado via app.hono.fetch", () => {
     expect(one?.price).toBe(80);
   });
 
+  it("createMany: lote com reference (normaliza refs por item) + array vazio", async () => {
+    const w = weave();
+    const cat = await w.sdkcat.create({ name: "Lote" });
+    const rows = await w.sdkprod.createMany([
+      { name: "P1", price: 10, categoryId: cat.id },
+      { name: "P2", price: 20, categoryId: cat.id },
+      { name: "P3", price: 30, categoryId: cat.id },
+    ]);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.name)).toEqual(["P1", "P2", "P3"]); // ordem de entrada
+    expect(rows.every((r) => r.categoryId === cat.id)).toBe(true);
+    expect(rows[0]!.id).toBeTruthy();
+
+    expect(await w.sdkprod.createMany([])).toEqual([]); // no-op não bate na rede
+  });
+
   it("expand no 2º arg (opts): o retorno se auto-tipa", async () => {
     const w = weave();
     const cat = await w.sdkcat.create({ name: "Comics" });

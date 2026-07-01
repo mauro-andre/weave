@@ -335,6 +335,32 @@ export class Weave {
     return saved!;
   }
 
+  /**
+   * Insert many objects in ONE transaction (batch ingest). Shreds each input
+   * (reusa toda a semântica do `save`: owned/refs/uuid), depois relê os ids e
+   * devolve na ORDEM de entrada. Correto pra qualquer forma de entidade; um
+   * fast-path de INSERT multi-linha (entidades planas) é otimização futura.
+   */
+  async createMany<TName extends string, TShape extends ShapeRecord>(
+    entity: Entity<TName, TShape>,
+    inputs: InferInsert<Entity<TName, TShape>>[],
+  ): Promise<InferEntity<Entity<TName, TShape>>[]> {
+    if (inputs.length === 0) return [];
+    const ids = await this.transaction(async (tx) => {
+      const out: string[] = [];
+      for (const input of inputs) {
+        out.push(await shred(tx as unknown as Executor, entity, input as Record<string, unknown>));
+      }
+      return out;
+    });
+    const found = (await this.find(entity, {
+      where: { id: { in: ids } } as WhereInput<Entity<TName, TShape>>,
+    })) as InferEntity<Entity<TName, TShape>>[];
+    // `id IN (…)` não preserva ordem — reindexa pra devolver na ordem de entrada.
+    const byId = new Map(found.map((r) => [(r as { id: string }).id, r]));
+    return ids.map((id) => byId.get(id)!);
+  }
+
   /** Close the underlying connection (only if this instance created it). */
   async close(): Promise<void> {
     if (this.ownsClient) await this.sql.end();

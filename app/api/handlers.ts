@@ -80,14 +80,25 @@ export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Prom
   }
 }
 
+// POST /api/:entity — cria UM objeto (body objeto) ou MUITOS (body array → ingest
+// em lote, uma transação). A resposta espelha a entrada: objeto → objeto; array → array.
 export async function apiCreate({ c, params }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "create");
+    const body = (await c.req.json()) as Record<string, unknown> | Record<string, unknown>[];
+    const project = (o: Record<string, unknown>) => (access.god ? o : prune(o, access.projection));
+
+    if (Array.isArray(body)) {
+      const { createManyObjects } = await import("../engine/control-plane/data.js");
+      if (body.length > BULK_CAP) throw new ScopeError(`Bulk create exceeds cap of ${BULK_CAP}.`, 400);
+      const rows = await createManyObjects(entity, body);
+      return c.json(rows.map(project), 201);
+    }
+
     const { saveObject } = await import("../engine/control-plane/data.js");
-    const body = (await c.req.json()) as Record<string, unknown>;
     const obj = (await saveObject(entity, body)) as Record<string, unknown>;
-    return c.json(access.god ? obj : prune(obj, access.projection), 201);
+    return c.json(project(obj), 201);
   } catch (e) {
     return fail(c, e);
   }

@@ -147,6 +147,35 @@ export async function saveObject(name: string, object: Record<string, unknown>):
   }
 }
 
+/**
+ * Cria muitos objetos numa transação (ingest em lote). Normaliza refs de cada
+ * input igual ao `saveObject` e delega ao `createMany` do engine; devolve as
+ * linhas criadas na ordem de entrada.
+ */
+export async function createManyObjects(
+  name: string,
+  inputs: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const irs = await listEntities();
+  const root = irs.find((e) => e.name === name);
+  if (!root) throw new Error(`Unknown entity: ${name}`);
+  const byName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const entities = fromIR(resolved);
+  const shape = resolved.find((e) => e.name === name)!.fields;
+  for (const input of inputs) normalizeRefs(shape, input);
+
+  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("weave: DATABASE_URL is not set.");
+  const client = weave({ url, entities });
+  try {
+    const loose = client as unknown as { createMany(e: unknown, i: unknown[]): Promise<unknown[]> };
+    return jsonSafe(await loose.createMany(entities[name], inputs)) as Record<string, unknown>[];
+  } finally {
+    await client.close();
+  }
+}
+
 /** Converte references expandidas (objeto/array do read) de volta pra id-form, recursivo. */
 function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unknown> | null): void {
   if (!obj) return;

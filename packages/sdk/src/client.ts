@@ -62,6 +62,8 @@ export interface PageResult<T> {
  */
 export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   create(input: InferInsert<E>): Promise<InferEntity<E>>;
+  /** Cria em lote (ingest — uma transação). Devolve as linhas na ordem de entrada. */
+  createMany(inputs: InferInsert<E>[]): Promise<InferEntity<E>[]>;
 
   findOne<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X> | null>;
   findMany<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X>[]>;
@@ -177,6 +179,11 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     client[key] = {
       async create(input: unknown) {
         return revive(await request("POST", path, { body: input }));
+      },
+      async createMany(inputs: unknown[]) {
+        if (!Array.isArray(inputs) || inputs.length === 0) return [];
+        const rows = (await request("POST", path, { body: inputs })) as unknown[];
+        return rows.map(revive);
       },
       async findOne(where: unknown = {}, o: AnyOpts = {}) {
         const d = (await list(where, { ...o, perPage: 1 })).docs?.[0];
