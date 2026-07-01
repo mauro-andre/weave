@@ -69,7 +69,8 @@ assim), não específico de telemetria — **desenhado agora, implementado quand
 relacional migrar** (Decisão 4). Barato desenhar, caro retrofitar.
 
 **Expressões sobre agregados (v1, núcleo geral):** aliases do `select` combinam-se
-aritmeticamente e valem em `orderBy`/`having` — ex.: `errorRate: sum("errors") / count()`,
+aritmeticamente e valem em `orderBy`/`having` — ex.: `errorRate: count({ where: { status:
+{ gte: 400 } } }) / count()` (a taxa **deriva do `status` cru**, não de um campo `errors`),
 depois `orderBy: { errorRate: "desc" }` ("as rotas que mais falham, proporcionalmente").
 Filtrar/ordenar por taxa é **server-side**, antes da paginação; só exibir é app (Decisão 5).
 
@@ -177,6 +178,12 @@ weave.appRequest.aggregate({
 Se isso ler como objeto e compilar limpo, todo o resto (percentile, histogram, facets,
 having) pendura nesse esqueleto.
 
+**Forma vs ordem:** a *forma* do `groupBy`/acumulador já nasce aceitando **caminho
+atravessado** (Decisão 4) e **expressões sobre agregados** (Decisão 5) desde o v1 — mesmo
+que o primeiro tijolo exercite só campo plano. Desenhar a forma completa agora evita
+retrofit; a *implementação* de cada capacidade segue a ordem acima (relacional entra
+quando o domínio relacional migrar; expressões no v1).
+
 ## §7. Push-down & não-metas
 
 **Push-down total.** `SELECT`/`GROUP BY`/`HAVING`/`ORDER BY`/`LIMIT` vão **sempre** pro
@@ -226,8 +233,9 @@ Sem a extensão, o Weave segue 100% menos esse campo.
    `sum("apps.ram")`). Implementa quando o domínio relacional migrar; desenhar agora é
    barato, retrofitar é caro.
 5. **Expressões sobre agregados = v1** (não parked), núcleo geral. Aritmética entre aliases
-   do `select`, usável em `orderBy`/`having` (ex.: ordenar por `errors/count`). Filtrar
-   /ordenar por taxa é server-side (antes da paginação); só exibir é app.
+   do `select`, usável em `orderBy`/`having` (ex.: ordenar por `count({ where: { status:
+   { gte: 400 } } }) / count()` — taxa de erro derivada do `status`). Filtrar/ordenar por
+   taxa é server-side (antes da paginação); só exibir é app.
 6. **Push-down total** (§7). Interpolação de histograma **em SQL** como requisito de
    paridade entre tiers (via cumsum-window interno). `postgresql-hll` é **opt-in/gated**
    ao campo `hll()`, **não requisito global** — core roda em Postgres puro; escape =
