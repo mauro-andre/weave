@@ -11,6 +11,7 @@ const USERS = num("SEED_USERS", 200);
 const PRODUCTS = num("SEED_PRODUCTS", 500);
 const ORDERS = num("SEED_ORDERS", 600);
 const CATEGORY_NAMES = ["Electronics", "Books", "Home", "Toys", "Garden", "Sports", "Beauty", "Grocery"];
+const WAREHOUSES = ["SP", "RJ", "MG", "RS", "PR"];
 
 const pad = (n: number) => String(n).padStart(5, "0");
 
@@ -86,6 +87,34 @@ it(
         },
       },
     });
+    // Estoque por (produto, depósito): UNIQUE composto (um registro por combinação) +
+    // INDEX composto não-único (varredura "estoque baixo por depósito"). Membro reference.
+    await define({
+      irVersion: 1,
+      name: "inventory",
+      fields: {
+        warehouse: { kind: "column", type: "text", notNull: true },
+        product: { kind: "reference", target: "products", cardinality: "one" },
+        quantity: { kind: "column", type: "int4", notNull: true },
+      },
+      unique: [["product", "warehouse"]],
+      index: [["warehouse", "quantity"]],
+    });
+    // Avaliação por (produto, usuário): UNIQUE composto (uma por usuário por produto) +
+    // INDEX composto não-único ("melhores avaliados por produto"). Dois membros reference.
+    await define({
+      irVersion: 1,
+      name: "review",
+      fields: {
+        product: { kind: "reference", target: "products", cardinality: "one" },
+        user: { kind: "reference", target: "users", cardinality: "one" },
+        rating: { kind: "column", type: "int4", notNull: true },
+        title: { kind: "column", type: "text" },
+        body: { kind: "column", type: "text" },
+      },
+      unique: [["product", "user"]],
+      index: [["product", "rating"]],
+    });
 
     // ── Dados ─────────────────────────────────────────────────────────────────
     const categoryIds: string[] = [];
@@ -145,7 +174,38 @@ it(
       if ((i + 1) % 100 === 0) console.log(`orders: ${i + 1}/${ORDERS}`);
     }
 
-    console.log(`✓ seeded: ${categoryIds.length} categories, ${userIds.length} users, ${products.length} products, ${ORDERS} orders`);
+    // Estoque: 1–3 depósitos DISTINTOS por produto (arrayElements garante distintos →
+    // respeita o unique [product, warehouse]).
+    let invCount = 0;
+    for (const p of products) {
+      const whs = faker.helpers.arrayElements(WAREHOUSES, faker.number.int({ min: 1, max: 3 }));
+      for (const wh of whs) {
+        await create("inventory", { warehouse: wh, product: { id: p.id }, quantity: faker.number.int({ min: 0, max: 500 }) });
+        invCount++;
+      }
+      if (invCount % 200 === 0) console.log(`inventory: ${invCount}`);
+    }
+
+    // Avaliações: 0–5 usuários DISTINTOS por produto (respeita o unique [product, user]).
+    let revCount = 0;
+    for (const p of products) {
+      const reviewers = faker.helpers.arrayElements(userIds, faker.number.int({ min: 0, max: 5 }));
+      for (const uid of reviewers) {
+        await create("review", {
+          product: { id: p.id },
+          user: { id: uid },
+          rating: faker.number.int({ min: 1, max: 5 }),
+          title: faker.commerce.productAdjective(),
+          body: faker.lorem.sentence(),
+        });
+        revCount++;
+      }
+      if (revCount % 200 === 0) console.log(`reviews: ${revCount}`);
+    }
+
+    console.log(
+      `✓ seeded: ${categoryIds.length} categories, ${userIds.length} users, ${products.length} products, ${ORDERS} orders, ${invCount} inventory, ${revCount} reviews`,
+    );
 
     const { closeDb } = await import("../app/engine/control-plane/db.js");
     await closeDb();

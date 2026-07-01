@@ -68,9 +68,12 @@ describe("entidades — criar e materializar", () => {
     expect(tables.map((t) => t.table_name)).toEqual(["product__variants", "products"]);
   });
 
-  it("a tela de nova entidade renderiza (SSR)", async () => {
+  it("a tela de nova entidade renderiza com a seção Index (SSR)", async () => {
     const res = await app.as({ user: master }).get("/entities/new");
     expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Index"); // a seção de composto renderiza
+    expect(html).toContain("add index");
   });
 
   it("a tela de edição carrega uma entidade existente (SSR)", async () => {
@@ -647,6 +650,17 @@ describe("entidades — criar e materializar", () => {
       const ok = await saveIR(withUnique);
       expect((await ok.json()).status).toBe("applied");
       expect(await indexExists("cuq_host_route_key")).toBe(true);
+    });
+
+    it("o designer renderiza o composto de uma entidade existente (SSR)", async () => {
+      // `cuq` acabou de ficar com unique [host, route] — a seção Index deve mostrá-lo.
+      const res = await app.as({ user: master }).get("/entities/cuq");
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("add index"); // a seção renderiza
+      // os campos do grupo aparecem como chips removíveis (`nome ✕`).
+      expect(html).toContain("host ✕");
+      expect(html).toContain("route ✕");
     });
   });
 });

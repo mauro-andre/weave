@@ -26,9 +26,18 @@ interface Field {
   mirror: string; // owned: "" = inline; senão o nome da entidade espelhada
 }
 
+// Índice/único COMPOSTO (nível da entidade). Referencia campos por `id` (rename-proof,
+// igual ao resto da plataforma); o `toIR` resolve id→nome atual na hora de serializar.
+interface Composite {
+  id: string;
+  kind: "unique" | "index";
+  fieldIds: string[];
+}
+
 interface EntityModel {
   name: string;
   fields: Field[];
+  composites: Composite[];
 }
 
 interface LoaderData {
@@ -52,6 +61,16 @@ const newField = (): Field => ({
   mirror: "",
 });
 
+const newComposite = (): Composite => ({ id: crypto.randomUUID(), kind: "unique", fieldIds: [] });
+
+// Campos elegíveis pra um composto: coluna escalar (ou lista) ou reference N:1 — nunca
+// owned nem N:N (espelha a validação do `defineEntity`). Precisa ter nome.
+function eligibleFields(fields: Field[]): Field[] {
+  return fields.filter(
+    (f) => f.name.trim() !== "" && (f.family === "scalar" || f.family === "scalarList" || f.family === "refOne"),
+  );
+}
+
 // Tipos cujo default é numérico; `bool` vira booleano; o resto fica string.
 const NUMERIC_TYPES = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
 function coerceDefault(raw: string, type: string): unknown {
@@ -70,8 +89,21 @@ export const loader = async ({ params }: LoaderArgs): Promise<LoaderData> => {
 };
 
 // ── IR ↔ modelo ───────────────────────────────────────────────────────────────
-function toIR(m: EntityModel): EntityIR {
-  return { irVersion: 1, name: m.name, fields: shapeOf(m.fields) };
+export function toIR(m: EntityModel): EntityIR {
+  const ir: EntityIR = { irVersion: 1, name: m.name, fields: shapeOf(m.fields) };
+  // Grupos: id→nome do campo atual, só elegíveis, sem grupo vazio. Omitidos quando não há.
+  const eligible = new Set(eligibleFields(m.fields).map((f) => f.id));
+  const nameOf = new Map(m.fields.map((f) => [f.id, f.name] as const));
+  const groups = (kind: "unique" | "index"): string[][] =>
+    m.composites
+      .filter((c) => c.kind === kind)
+      .map((c) => c.fieldIds.filter((id) => eligible.has(id)).map((id) => nameOf.get(id)!))
+      .filter((g) => g.length > 0);
+  const uniq = groups("unique");
+  const idx = groups("index");
+  if (uniq.length) ir.unique = uniq;
+  if (idx.length) ir.index = idx;
+  return ir;
 }
 
 function shapeOf(fields: Field[]): Record<string, FieldIR> {
@@ -119,8 +151,16 @@ function col(f: Field, array: boolean): ColumnIR {
   return c;
 }
 
-function irToModel(ir: EntityIR): EntityModel {
-  return { name: ir.name, fields: fieldsFromIR(ir.fields) };
+export function irToModel(ir: EntityIR): EntityModel {
+  const fields = fieldsFromIR(ir.fields);
+  const idOf = new Map(fields.map((f) => [f.name, f.id] as const));
+  const from = (groups: string[][] | undefined, kind: "unique" | "index"): Composite[] =>
+    (groups ?? []).map((g) => ({
+      id: crypto.randomUUID(),
+      kind,
+      fieldIds: g.map((n) => idOf.get(n)).filter((x): x is string => !!x),
+    }));
+  return { name: ir.name, fields, composites: [...from(ir.unique, "unique"), ...from(ir.index, "index")] };
 }
 
 function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
@@ -443,6 +483,122 @@ function FieldList({
   );
 }
 
+// Uma linha da seção "Index": unique|index + os campos do grupo (chips removíveis) +
+// um dropdown pra somar campo. Só campos elegíveis entram/aparecem.
+function IndexRow({
+  composite,
+  fields,
+  onChange,
+  onRemove,
+}: {
+  composite: Composite;
+  fields: Field[];
+  onChange: () => void;
+  onRemove: () => void;
+}) {
+  const eligible = eligibleFields(fields);
+  const byId = new Map(eligible.map((f) => [f.id, f] as const));
+  const selected = composite.fieldIds.map((id) => byId.get(id)).filter((f): f is Field => !!f);
+  const available = eligible.filter((f) => !composite.fieldIds.includes(f.id));
+
+  return (
+    <div class={`${css.field} ${css.accentScalar}`}>
+      <div class={css.fieldRow}>
+        <select
+          class={css.select}
+          value={composite.kind}
+          onChange={(e) => {
+            composite.kind = (e.currentTarget as HTMLSelectElement).value as "unique" | "index";
+            onChange();
+          }}
+        >
+          <option value="unique">unique</option>
+          <option value="index">index</option>
+        </select>
+
+        <div class={css.flags}>
+          {selected.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              class={`${css.chip} ${css.chipOn}`}
+              title="remove field"
+              onClick={() => {
+                composite.fieldIds = composite.fieldIds.filter((id) => id !== f.id);
+                onChange();
+              }}
+            >
+              {f.name} ✕
+            </button>
+          ))}
+          {available.length ? (
+            <select
+              class={css.select}
+              value=""
+              onChange={(e) => {
+                const id = (e.currentTarget as HTMLSelectElement).value;
+                if (!id) return;
+                composite.fieldIds.push(id);
+                onChange();
+              }}
+            >
+              <option value="">＋ field</option>
+              {available.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span class={css.previewLabel}>pick fields above first</span>
+          )}
+        </div>
+
+        <button type="button" class={css.remove} onClick={onRemove} title="remove index">
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function IndexList({
+  composites,
+  fields,
+  onChange,
+}: {
+  composites: Composite[];
+  fields: Field[];
+  onChange: () => void;
+}) {
+  return (
+    <div class={css.list}>
+      {composites.map((c, i) => (
+        <IndexRow
+          key={c.id}
+          composite={c}
+          fields={fields}
+          onChange={onChange}
+          onRemove={() => {
+            composites.splice(i, 1);
+            onChange();
+          }}
+        />
+      ))}
+      <button
+        type="button"
+        class={css.add}
+        onClick={() => {
+          composites.push(newComposite());
+          onChange();
+        }}
+      >
+        + add index
+      </button>
+    </div>
+  );
+}
+
 export const Component = () => {
   const params = useParams<{ name: string }>();
   const isNew = !params.name || params.name === "new";
@@ -453,7 +609,7 @@ export const Component = () => {
   const entities = loaded?.entities ?? [];
   const byName = new Map(entities.map((e) => [e.name, e] as const));
   const model = useSignal<EntityModel>(
-    loaded?.current ? irToModel(loaded.current) : { name: "", fields: [] },
+    loaded?.current ? irToModel(loaded.current) : { name: "", fields: [], composites: [] },
   );
 
   // Re-inicializa o form quando os dados do loader chegam (navegação SPA) ou a
@@ -461,7 +617,7 @@ export const Component = () => {
   const initedFor = useRef<string>(loaded ? key : "::pending");
   useEffect(() => {
     if (!loaded || initedFor.current === key) return;
-    model.value = loaded.current ? irToModel(loaded.current) : { name: "", fields: [] };
+    model.value = loaded.current ? irToModel(loaded.current) : { name: "", fields: [], composites: [] };
     initedFor.current = key;
   }, [loaded, key]);
 
@@ -524,6 +680,13 @@ export const Component = () => {
 
       <h2 class={css.section}>Fields</h2>
       <FieldList fields={model.value.fields} entities={entities} onChange={bump} />
+
+      <h2 class={css.section}>Index</h2>
+      <p class={css.managed}>
+        Composite <code>unique</code> / <code>index</code> across multiple fields (single-field lives on the field's{" "}
+        <code>UQ</code>/<code>IDX</code>).
+      </p>
+      <IndexList composites={model.value.composites} fields={model.value.fields} onChange={bump} />
 
       <div class={css.preview}>
         <span class={css.previewLabel}>Tables to be created: </span>
