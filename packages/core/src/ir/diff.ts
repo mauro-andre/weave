@@ -23,6 +23,10 @@ export type ChangeOp =
   | "dropUnique"
   | "addIndex"
   | "dropIndex"
+  | "addCompositeUnique"
+  | "dropCompositeUnique"
+  | "addCompositeIndex"
+  | "dropCompositeIndex"
   | "changeDefault"
   | "reshape";
 
@@ -33,6 +37,8 @@ export interface FieldChange {
   path: string;
   /** Para `renameField`: o nome ANTIGO (origem do rename). */
   from?: string;
+  /** Para ops de composto: o grupo de campos (nomes lógicos). */
+  columns?: string[];
   /** Resumo em linguagem de objeto (a UI pode reusar ou recompor). */
   title: string;
   detail: string;
@@ -51,7 +57,45 @@ export function diffEntityIR(prev: EntityIR | null, next: EntityIR): EntityDiff 
   if (!prev) return { entity: next.name, isNew: true, changes: [] };
   const changes: FieldChange[] = [];
   diffShape(prev.fields, next.fields, "", changes);
+  // Constraints de entidade (multi-coluna): grupo novo = add, grupo sumido = drop.
+  // `addCompositeUnique` é blocked (duplicatas travam, igual o unique de coluna); o
+  // resto é auto. Reordenar as colunas de um grupo conta como drop+add (novo índice).
+  diffGroups(prev.unique, next.unique, "addCompositeUnique", "dropCompositeUnique", "blocked", changes);
+  diffGroups(prev.index, next.index, "addCompositeIndex", "dropCompositeIndex", "auto", changes);
   return { entity: next.name, isNew: false, changes };
+}
+
+const GROUP_LABEL: Record<string, (g: string) => string> = {
+  addCompositeUnique: (g) => `Make ${g} unique together`,
+  dropCompositeUnique: (g) => `Drop composite unique on ${g}`,
+  addCompositeIndex: (g) => `Index ${g} together`,
+  dropCompositeIndex: (g) => `Drop composite index on ${g}`,
+};
+
+function diffGroups(
+  prev: string[][] | undefined,
+  next: string[][] | undefined,
+  addOp: ChangeOp,
+  dropOp: ChangeOp,
+  addRisk: ChangeRisk,
+  changes: FieldChange[],
+): void {
+  const key = (g: string[]) => JSON.stringify(g);
+  const prevKeys = new Set((prev ?? []).map(key));
+  const nextKeys = new Set((next ?? []).map(key));
+  const push = (op: ChangeOp, risk: ChangeRisk, g: string[]) => {
+    const label = g.join(" + ");
+    changes.push({
+      risk,
+      op,
+      path: label,
+      columns: g,
+      title: GROUP_LABEL[op]!(label),
+      detail: op === "addCompositeUnique" ? "Duplicate combinations would block this; resolve them first." : "",
+    });
+  };
+  for (const g of next ?? []) if (!prevKeys.has(key(g))) push(addOp, addRisk, g);
+  for (const g of prev ?? []) if (!nextKeys.has(key(g))) push(dropOp, "auto", g);
 }
 
 function diffShape(

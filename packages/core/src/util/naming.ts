@@ -44,6 +44,16 @@ export function indexName(table: string, column: string): string {
 }
 
 /**
+ * Nome determinístico de um índice COMPOSTO (várias colunas). `unique` → sufixo
+ * `_key`; senão `_idx`. Recebe as colunas JÁ resolvidas (snake_case). Estável: o
+ * diff dropa por este mesmo nome. (Postgres trunca em 63 chars — colisão em nomes
+ * gigantes é aceita no v1.)
+ */
+export function compositeIndexName(table: string, columns: string[], unique: boolean): string {
+  return `${table}_${columns.join("_")}_${unique ? "key" : "idx"}`;
+}
+
+/**
  * Child table name for an owned relationship. The ownership path is joined with
  * a **double** underscore so it stays unambiguous even when names contain `_`:
  * `("user", "addresses")` → `user__addresses`. `override` wins when given.

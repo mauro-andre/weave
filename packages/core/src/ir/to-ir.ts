@@ -19,7 +19,12 @@ import type { ColumnIR, EntityIR, FieldIR, OwnedIR, ReferenceIR } from "./types.
  * `notNull:false`, …), pra `toIR(fromIR(ir))` reproduzir o IR mínimo de origem.
  */
 export function toIR(entity: Entity<string, ShapeRecord>): EntityIR {
-  return { irVersion: 1, name: entity.name, fields: shapeToIR(entity.columns) };
+  const ir: EntityIR = { irVersion: 1, name: entity.name, fields: shapeToIR(entity.columns) };
+  // Grupos compostos passam crus (nomes lógicos); o `normalizeEntityIR` os cameliza
+  // junto com os campos. Omitidos quando ausentes (IR canônico/mínimo).
+  if (entity.options?.unique?.length) ir.unique = entity.options.unique.map((g) => [...g]);
+  if (entity.options?.index?.length) ir.index = entity.options.index.map((g) => [...g]);
+  return ir;
 }
 
 function shapeToIR(shape: ShapeRecord | OwnedShape): Record<string, FieldIR> {

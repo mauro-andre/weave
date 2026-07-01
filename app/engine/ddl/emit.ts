@@ -17,7 +17,7 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 
@@ -43,6 +43,13 @@ export interface IndexSpec {
   column: string;
 }
 
+/** A multi-column unique/index (entity-level). Columns are already resolved (snake_case). */
+export interface CompositeSpec {
+  name: string;
+  columns: string[];
+  unique: boolean;
+}
+
 /** A materialized table: columns + indexes (+ a composite PK for join tables). */
 export interface TableSpec {
   name: string;
@@ -50,6 +57,8 @@ export interface TableSpec {
   indexes: IndexSpec[];
   /** Composite primary key (join tables). Normal tables use `id` column-level. */
   primaryKey?: string[];
+  /** Unique/index compostos (entity-level) — só na tabela raiz. */
+  composites?: CompositeSpec[];
 }
 
 // ── Default rendering ────────────────────────────────────────────────────────
@@ -179,9 +188,32 @@ function collect(
   return [{ name: tableName, columns, indexes }, ...children];
 }
 
-/** Flatten an entity into all its table specs, parent-first. */
+/** Resolve um campo lógico de um grupo composto na sua COLUNA (coluna → snake; ref N:1 → `_id`). */
+function compositeColumn(shape: ShapeRecord, field: string): string {
+  const node = shape[field];
+  if (node instanceof Column) return camelToSnake(field);
+  if (node instanceof Reference && node.cardinality === "one") return `${camelToSnake(field)}_id`;
+  throw new Error(`weave: composite group field '${field}' must be a column or a to-one reference.`);
+}
+
+/** Flatten an entity into all its table specs, parent-first. Composites vão na raiz. */
 export function collectTables(entity: Entity<string, ShapeRecord>): TableSpec[] {
-  return collect(entity.name, singularize(entity.name), entity.columns, undefined);
+  const specs = collect(entity.name, singularize(entity.name), entity.columns, undefined);
+  const groups = (unique: boolean, list?: string[][]): CompositeSpec[] =>
+    (list ?? []).map((g) => {
+      const columns = g.map((f) => compositeColumn(entity.columns, f));
+      return { name: compositeIndexName(entity.name, columns, unique), columns, unique };
+    });
+  const composites = [...groups(true, entity.options?.unique), ...groups(false, entity.options?.index)];
+  if (composites.length) specs[0]!.composites = composites;
+  return specs;
+}
+
+/** `CREATE [UNIQUE] INDEX` para os compostos de uma tabela (vazio se não houver). */
+export function renderComposites(spec: TableSpec): string[] {
+  return (spec.composites ?? []).map(
+    (c) => `CREATE ${c.unique ? "UNIQUE " : ""}INDEX ${c.name} ON ${spec.name} (${c.columns.join(", ")});`,
+  );
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -236,7 +268,7 @@ export function emitIndexes(entity: Entity<string, ShapeRecord>): string[] {
 /** Emit the full DDL for an entity: every table (root + owned), then indexes. */
 export function emitEntity(entity: Entity<string, ShapeRecord>): string {
   return collectTables(entity)
-    .flatMap((spec) => [renderCreateTable(spec), ...renderIndexes(spec)])
+    .flatMap((spec) => [renderCreateTable(spec), ...renderIndexes(spec), ...renderComposites(spec)])
     .join("\n");
 }
 

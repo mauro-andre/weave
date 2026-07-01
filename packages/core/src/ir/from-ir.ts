@@ -21,6 +21,13 @@ export function fromIR(irs: EntityIR[]): Record<string, AnyEntity> {
   }
   for (const ir of irs) {
     (map[ir.name] as { columns: ShapeRecord }).columns = buildShape(ir.fields, map) as unknown as ShapeRecord;
+    // Reconstrói as options (unique/index compostos) pro DDL e o client embutido as verem.
+    if (ir.unique?.length || ir.index?.length) {
+      (map[ir.name] as { options?: unknown }).options = {
+        ...(ir.unique?.length ? { unique: ir.unique.map((g) => [...g]) } : {}),
+        ...(ir.index?.length ? { index: ir.index.map((g) => [...g]) } : {}),
+      };
+    }
   }
   return map;
 }
