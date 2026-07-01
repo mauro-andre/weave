@@ -7,6 +7,8 @@ import type {
   ExpandInput,
   WhereInput,
   OrderByInput,
+  AggregateInput,
+  AggregateRow,
 } from "@mauroandre/weave-core";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
@@ -74,6 +76,9 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
 
   deleteOne(where: WhereInput<E>, opts?: { orderBy?: OrderByInput<E> }): Promise<InferEntity<E> | null>;
   deleteMany(where: WhereInput<E>): Promise<{ count: number }>;
+
+  /** Agrega (groupBy + acumuladores + orderBy). Devolve as linhas agrupadas. */
+  aggregate(input: AggregateInput<E>): Promise<AggregateRow[]>;
 }
 
 /** O client completo: uma propriedade por entidade do entities + `as` (scope). */
@@ -206,6 +211,10 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
       async deleteMany(where: unknown) {
         const r = (await request("DELETE", path, { query: mutQuery(where, {}, "many") })) as { count: number };
         return { count: r.count };
+      },
+      async aggregate(input: unknown) {
+        const r = (await request("POST", `${path}/aggregate`, { body: input })) as { rows?: unknown[] };
+        return (r.rows ?? []) as Record<string, unknown>[];
       },
     };
   }

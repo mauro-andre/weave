@@ -17,7 +17,7 @@
  * Phase 3.
  */
 
-import { type WhereInput, type OrderByInput, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 
 export interface FindOptions<E> {
@@ -446,4 +446,87 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
   let text = `SELECT count(*)::int AS n FROM ${table}`;
   if (whereSql) text += ` WHERE ${whereSql}`;
   return { text, params };
+}
+
+// ── Aggregation (Phase: OLAP) ───────────────────────────────────────────────────
+// Compila `AggregateInput` num `SELECT … GROUP BY … ORDER BY`. Reusa `compileWhere`.
+// IDENTIFICADORES (campos, aliases) são VALIDADOS contra o shape / regex — nunca vêm
+// param-bindados (não dá), então a validação é a barreira contra injection.
+
+const AGGS = new Set(["count", "sum", "avg", "min", "max"]);
+const IDENT_RE = /^[A-Za-z0-9_]+$/;
+
+function safeAlias(alias: string): string {
+  if (!IDENT_RE.test(alias)) throw new Error(`weave: invalid aggregate alias '${alias}'.`);
+  return alias;
+}
+
+/** Coluna de um campo (managed ou escalar), validada contra o shape (barreira anti-injection). */
+function aggCol(table: string, shape: ShapeRecord | OwnedShape, key: string): string {
+  if (key === "id") return `${table}.id`;
+  if (key === "createdAt") return `${table}.created_at`;
+  if (key === "updatedAt") return `${table}.updated_at`;
+  if (!((shape as Record<string, unknown>)[key] instanceof Column)) {
+    throw new Error(`weave: unknown field '${key}' in aggregate.`);
+  }
+  return `${table}.${camelToSnake(key)}`;
+}
+
+/** "5min" → 300s. Uniforme (epoch-floor) pra qualquer intervalo. */
+function intervalSeconds(interval: string): number {
+  const m = /^(\d+)(s|min|h|d)$/.exec(interval.trim());
+  if (!m) throw new Error(`weave: invalid timeBucket interval '${interval}' (use 30s, 5min, 1h, 1d).`);
+  const unit = { s: 1, min: 60, h: 3600, d: 86400 }[m[2] as "s" | "min" | "h" | "d"];
+  return Number(m[1]) * unit;
+}
+
+function groupSql(table: string, shape: ShapeRecord | OwnedShape, g: string | GroupExpr): string {
+  if (typeof g === "string") return aggCol(table, shape, g);
+  const { field, interval } = g.timeBucket;
+  const secs = intervalSeconds(interval);
+  // epoch-floor: alinhado por UTC, uniforme pra qualquer intervalo (Decisão: epoch/UTC).
+  return `to_timestamp(floor(extract(epoch from ${aggCol(table, shape, field)}) / ${secs}) * ${secs})`;
+}
+
+function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator): string {
+  if (acc.agg === "count") return "count(*)";
+  if (!AGGS.has(acc.agg)) throw new Error(`weave: unknown accumulator '${acc.agg}'.`);
+  return `${acc.agg}(${aggCol(table, shape, acc.field)})`;
+}
+
+/** Compila um `aggregate` em SQL parametrizado. Devolve linhas agrupadas (alias → valor). */
+export function compileAggregate<E extends Entity<string, ShapeRecord>>(
+  entity: E,
+  input: AggregateInput<E>,
+): CompiledQuery {
+  const table = entity.name;
+  const shape = entity.columns;
+  const params: unknown[] = [];
+
+  // Chaves de grupo: array de campos (alias homônimo) ou mapa alias → campo|expr.
+  const groups: { alias: string; expr: string }[] = [];
+  const gb = input.groupBy;
+  if (Array.isArray(gb)) {
+    for (const f of gb) groups.push({ alias: safeAlias(f), expr: groupSql(table, shape, f) });
+  } else if (gb) {
+    for (const [alias, g] of Object.entries(gb)) groups.push({ alias: safeAlias(alias), expr: groupSql(table, shape, g) });
+  }
+
+  const cols: string[] = groups.map((g) => `${g.expr} AS "${g.alias}"`);
+  for (const [alias, acc] of Object.entries(input.select ?? {})) {
+    cols.push(`${accSql(table, shape, acc as Accumulator)} AS "${safeAlias(alias)}"`);
+  }
+  if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
+
+  const whereSql = compileWhere(table, singularize(table), shape, (input.where ?? {}) as Record<string, unknown>, params);
+
+  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}`];
+  if (whereSql) lines.push(`WHERE ${whereSql}`);
+  if (groups.length) lines.push(`GROUP BY ${groups.map((g) => g.expr).join(", ")}`);
+  const ob = input.orderBy ? Object.entries(input.orderBy) : [];
+  if (ob.length) {
+    // ORDER BY por ALIAS de saída (grupo ou acumulador) — permitido pelo Postgres.
+    lines.push(`ORDER BY ${ob.map(([a, d]) => `"${safeAlias(a)}" ${d === "desc" ? "DESC" : "ASC"}`).join(", ")}`);
+  }
+  return { text: lines.join("\n"), params };
 }

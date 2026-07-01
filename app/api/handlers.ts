@@ -49,6 +49,23 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
   }
 }
 
+// POST /api/:entity/aggregate — groupBy + acumuladores + orderBy. O `where` do body
+// é AND-ado com o filtro de linhas do scope (a agregação respeita o escopo). Projeção
+// não se aplica (o resultado são linhas agregadas, não objetos da entidade).
+export async function apiAggregate({ c, params }: EndpointHandlerArgs): Promise<Response> {
+  try {
+    const entity = params.entity ?? "";
+    const access = await resolveAccess(c, entity, "read");
+    const { aggregateObjects } = await import("../engine/control-plane/data.js");
+    const body = (await c.req.json()) as { where?: WNode } & Record<string, unknown>;
+    const where = access.god ? (body.where ?? {}) : (andWhere(access.rows, (body.where ?? {}) as WNode) as WNode);
+    const rows = await aggregateObjects(entity, { ...body, where });
+    return c.json({ rows });
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
 export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";

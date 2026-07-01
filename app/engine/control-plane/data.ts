@@ -1,4 +1,4 @@
-import { weave, compileCount } from "../index.js";
+import { weave, compileCount, compileAggregate } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
@@ -76,6 +76,31 @@ export async function listObjects(
       pageQuantity: Math.max(1, Math.ceil(docsQuantity / pp)),
       currentPage: p,
     });
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Roda um `aggregate` (groupBy + acumuladores + orderBy) e devolve as linhas
+ * agrupadas. `input` é o AggregateInput frouxo (JSON do SDK/API), já com o `where`
+ * do scope AND-ado pelo handler. O `jsonSafe` normaliza o bigint do `count`.
+ */
+export async function aggregateObjects(name: string, input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  const irs = await listEntities();
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
+  const byName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const entities = fromIR(resolved);
+  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("weave: DATABASE_URL is not set.");
+  const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
+  const agg = compileAggregate as unknown as (e: unknown, i: unknown) => { text: string; params: unknown[] };
+  try {
+    const q = agg(entities[name], input);
+    const rows = (await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
+    return jsonSafe(rows);
   } finally {
     await client.close();
   }

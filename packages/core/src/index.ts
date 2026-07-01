@@ -14,6 +14,20 @@ export {
   type ArrayFilter,
 } from "./schema/where.js";
 
+// ── Linguagem de agregação tipada (idioma de objeto) — engine/GUI/SDK ──
+export {
+  type AggregateInput,
+  type Accumulator,
+  type GroupExpr,
+  type AggregateRow,
+  count,
+  sum,
+  avg,
+  min,
+  max,
+  timeBucket,
+} from "./schema/aggregate.js";
+
 // ── IR (planta serializável + serialização/validação) ────────────────────────
 export * from "./ir/types.js";
 export { toIR } from "./ir/to-ir.js";
