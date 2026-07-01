@@ -1,24 +1,24 @@
 {
-  "name": "weave-todos",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "npx velojs dev",
-    "build": "npx velojs build",
-    "start": "npx velojs start",
-    "push": "npx weave push",
-    "gen": "npx weave gen"
-  },
-  "dependencies": {
-    "@mauroandre/velojs": "^0.0.36",
-    "@mauroandre/weave-sdk": "^0.0.2",
-    "@preact/signals": "^2.9.2",
-    "dotenv": "^17.4.2"
-  },
-  "devDependencies": {
-    "@vanilla-extract/css": "^1.21.1",
-    "@vanilla-extract/vite-plugin": "^5.2.3",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.2"
-  }
+    "name": "weave-todos",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "npx velojs dev",
+        "build": "npx velojs build",
+        "start": "npx velojs start",
+        "push": "npx weave push",
+        "gen": "npx weave gen"
+    },
+    "dependencies": {
+        "@mauroandre/velojs": "^0.0.36",
+        "@mauroandre/weave-sdk": "^0.0.3",
+        "@preact/signals": "^2.9.2",
+        "dotenv": "^17.4.2"
+    },
+    "devDependencies": {
+        "@vanilla-extract/css": "^1.21.1",
+        "@vanilla-extract/vite-plugin": "^5.2.3",
+        "typescript": "^6.0.3",
+        "vite": "^8.1.2"
+    }
 }

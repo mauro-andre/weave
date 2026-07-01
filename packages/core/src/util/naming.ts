@@ -16,6 +16,28 @@ export function camelToSnake(name: string): string {
     .replace(/^_/, "");
 }
 
+/**
+ * Nome LÓGICO de um campo, em camelCase canônico. Aceita qualquer estilo de entrada
+ * (espaços, camelCase, snake_case, kebab, acentos) e converge pro MESMO identificador
+ * — do qual a coluna do Postgres deriva via `camelToSnake` (snake_case, o idioma do PG).
+ *
+ * `"First Name"` / `"first_name"` / `"firstName"` → `"firstName"` → coluna `first_name`.
+ * `"nome do campo"` → `"nomeDoCampo"` → coluna `nome_do_campo`.
+ */
+export function camelize(name: string): string {
+  const words = name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // remove acentos (marcas combinantes)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // separa a corcunda camelCase
+    .split(/[^A-Za-z0-9]+/) // separa por qualquer não-alfanumérico
+    .filter(Boolean);
+  if (words.length === 0) return "";
+  const camel = words
+    .map((w, i) => (i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .join("");
+  return /^[0-9]/.test(camel) ? `_${camel}` : camel; // identificador não começa com dígito
+}
+
 /** Deterministic name for a single-column index: `users_email_idx`. */
 export function indexName(table: string, column: string): string {
   return `${table}_${column}_idx`;

@@ -333,7 +333,7 @@ describe("entidades — criar e materializar", () => {
       });
       expect(p.changes.find((c) => c.op === "renameField")).toMatchObject({
         risk: "auto",
-        path: "nome_completo",
+        path: "nomeCompleto", // input snake → camelize → nomeCompleto
       });
     });
 
@@ -404,7 +404,7 @@ describe("entidades — criar e materializar", () => {
       });
       expect(p.changes.find((c) => c.op === "renameField")).toBeUndefined();
       expect(p.changes.find((c) => c.op === "removeField")).toMatchObject({ path: "nome" });
-      expect(p.changes.find((c) => c.op === "addField")).toMatchObject({ path: "nome_completo" });
+      expect(p.changes.find((c) => c.op === "addField")).toMatchObject({ path: "nomeCompleto" });
     });
 
     it("entidade nova não tem mudanças a revisar (isNew)", async () => {

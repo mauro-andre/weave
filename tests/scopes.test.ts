@@ -33,7 +33,7 @@ describe("scopes (enforcement na API)", () => {
             code: { kind: "column", type: "text" },
             total: { kind: "column", type: "int4" },
             cost: { kind: "column", type: "int4" },
-            company_id: { kind: "column", type: "int4" },
+            companyId: { kind: "column", type: "int4" },
           },
         });
         await applyEntity({
@@ -48,7 +48,7 @@ describe("scopes (enforcement na API)", () => {
             },
           },
         });
-        await applyEntity({ irVersion: 1, name: "dept", fields: { company_id: { kind: "column", type: "int4" } } });
+        await applyEntity({ irVersion: 1, name: "dept", fields: { companyId: { kind: "column", type: "int4" } } });
         await applyEntity({
           irVersion: 1,
           name: "emp",
@@ -62,12 +62,12 @@ describe("scopes (enforcement na API)", () => {
 
     const { getEntity } = await import("../app/engine/control-plane/entities.js");
     const ir = (await getEntity("purchase"))!;
-    companyIdFieldId = ir.fields.company_id!.id!;
+    companyIdFieldId = ir.fields.companyId!.id!;
     costFieldId = ir.fields.cost!.id!;
 
     const { saveObject } = await import("../app/engine/control-plane/data.js");
     for (const [code, company] of [["P1", 1], ["P2", 1], ["P3", 1], ["P4", 2], ["P5", 2]] as const) {
-      await saveObject("purchase", { code, total: 100, cost: 60, company_id: company });
+      await saveObject("purchase", { code, total: 100, cost: 60, companyId: company });
     }
 
     const { saveScope } = await import("../app/engine/control-plane/scopes.js");
@@ -106,12 +106,12 @@ describe("scopes (enforcement na API)", () => {
       },
     });
 
-    // deptscope: alcança `emp` cujo dept.company_id == :companyId (filtro ANINHADO).
+    // deptscope: alcança `emp` cujo dept.companyId == :companyId (filtro ANINHADO).
     const empIr = (await getEntity("emp"))!;
     const deptRefId = empIr.fields.dept!.id!;
-    const cidId = (await getEntity("dept"))!.fields.company_id!.id!;
-    const d1 = ((await saveObject("dept", { company_id: 1 })) as { id: string }).id;
-    const d2 = ((await saveObject("dept", { company_id: 2 })) as { id: string }).id;
+    const cidId = (await getEntity("dept"))!.fields.companyId!.id!;
+    const d1 = ((await saveObject("dept", { companyId: 1 })) as { id: string }).id;
+    const d2 = ((await saveObject("dept", { companyId: 2 })) as { id: string }).id;
     await saveObject("emp", { name: "e1", dept: { id: d1 } });
     await saveObject("emp", { name: "e2", dept: { id: d2 } });
     await saveObject("emp", { name: "e3", dept: { id: d1 } });
@@ -157,7 +157,7 @@ describe("scopes (enforcement na API)", () => {
   it("verbo fora do scope → 403", async () => {
     const res = await app.post("/api/purchase", {
       headers: scoped("admin", { companyId: 1 }),
-      body: { code: "X", total: 1, cost: 1, company_id: 1 },
+      body: { code: "X", total: 1, cost: 1, companyId: 1 },
     });
     expect(res.status).toBe(403);
   });
@@ -172,7 +172,7 @@ describe("scopes (enforcement na API)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("filtro de linhas ANINHADO (emp via dept.company_id)", async () => {
+  it("filtro de linhas ANINHADO (emp via dept.companyId)", async () => {
     const res = await app.get("/api/emp", { headers: scoped("deptscope", { companyId: 1 }) });
     const page = await res.json();
     expect(page.docs.map((d: { name: string }) => d.name).sort()).toEqual(["e1", "e3"]);
