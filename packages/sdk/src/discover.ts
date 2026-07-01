@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Entity, ShapeRecord } from "@mauroandre/weave-core";
+import type { Entity, ShapeRecord } from "../../core/src/index.js";
 import type { ScopeDef } from "./scope.js";
 
 // Descoberta por pasta (file-based, igual o VeloJS acha rotas): cada arquivo é uma

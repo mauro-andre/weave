@@ -1,5 +1,5 @@
-import { toIR } from "@mauroandre/weave-core";
-import type { Entity, ShapeRecord, EntityIR, FieldIR } from "@mauroandre/weave-core";
+import { toIR } from "../../core/src/index.js";
+import type { Entity, ShapeRecord, EntityIR, FieldIR } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 

@@ -1,4 +1,4 @@
-import type { Entity, ShapeRecord, InferEntity, InferInsert } from "@mauroandre/weave-core";
+import type { Entity, ShapeRecord, InferEntity, InferInsert } from "../../core/src/index.js";
 
 // Aliases de nível-SDK, voltados pro dev (nomear tipos em fronteiras de função).
 // No fluxo normal nem são necessários — find/create se auto-tipam.

@@ -9,7 +9,7 @@ import type {
   OrderByInput,
   AggregateInput,
   AggregateOutput,
-} from "@mauroandre/weave-core";
+} from "../../core/src/index.js";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
 

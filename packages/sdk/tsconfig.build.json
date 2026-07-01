@@ -1,0 +1,9 @@
+{
+  "//": "tsconfig do BUILD (tsup dts). rootDir cobre sdk/src + core/src, pra o core ser",
+  "//2": "compilado como fonte interna e inlinado no .d.ts (nada referencia weave-core).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../.."
+  },
+  "include": ["src", "../core/src"]
+}

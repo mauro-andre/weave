@@ -45,7 +45,9 @@
     "typescript"
   ],
   "dependencies": {
-    "@mauroandre/weave-core": "*",
     "jiti": "^2.7.0"
+  },
+  "devDependencies": {
+    "@mauroandre/weave-core": "*"
   }
 }

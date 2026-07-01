@@ -35,10 +35,12 @@ jobs:
             const fs = require("fs");
             const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
             p.version = process.env.TAG.replace(/^v/, "");
-            // o core foi embutido no bundle — não é dependência publicada
-            if (p.dependencies) {
-              delete p.dependencies["@mauroandre/weave-core"];
-              if (Object.keys(p.dependencies).length === 0) delete p.dependencies;
+            // o core é importado como fonte relativa e embutido no bundle (JS + tipos):
+            // nenhum artefato o menciona, então ele sai do manifest publicado.
+            for (const key of ["dependencies", "devDependencies"]) {
+              if (!p[key]) continue;
+              delete p[key]["@mauroandre/weave-core"];
+              if (Object.keys(p[key]).length === 0) delete p[key];
             }
             // publicado: exports apontam pro dist (em dev apontam pro src)
             p.exports = {

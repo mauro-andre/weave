@@ -1,4 +1,4 @@
-import { Column, Owned, Reference, type ShapeRecord } from "@mauroandre/weave-core";
+import { Column, Owned, Reference, type ShapeRecord } from "../../core/src/index.js";
 
 // json → obj: a API devolve datas como string ISO. Aqui revivemos pra `Date`,
 // dirigidos pela FORMA da entidade (mesma ideia do read do engine): colunas de

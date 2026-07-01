@@ -84,4 +84,4 @@ export {
   type AggregateRow,
   type Expr,
   type ExprOperand,
-} from "@mauroandre/weave-core";
+} from "../../core/src/index.js";
