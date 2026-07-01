@@ -65,6 +65,7 @@ export {
   max,
   distinct,
   percentile,
+  histogram,
   timeBucket,
   type Entity,
   type InferEntity,

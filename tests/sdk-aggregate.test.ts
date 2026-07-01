@@ -13,6 +13,7 @@ import {
   avg,
   distinct,
   percentile,
+  histogram,
   timeBucket,
 } from "@mauroandre/weave-sdk";
 
@@ -175,6 +176,14 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
     expect(rows).toHaveLength(1);
     expect(rows[0]!.host).toBe("a");
     expect(Number(rows[0]!.n)).toBe(3);
+  });
+
+  it("histogram: barras de latência [<100, [100,200), >=200] sobre [50,100,200,300]", async () => {
+    const rows = await weave().aggreq.aggregate({
+      select: { bars: histogram("durationMs", [100, 200]) },
+    });
+    // 50→balde0 · 100→balde1 · 200,300→balde2 (overflow). 2 fronteiras → 3 baldes.
+    expect((rows[0]!.bars as number[]).map(Number)).toEqual([1, 1, 2]);
   });
 
   it("latestPer: o req MAIS RECENTE por host (DISTINCT ON — métricas vivas)", async () => {

@@ -28,6 +28,7 @@ export {
   max,
   distinct,
   percentile,
+  histogram,
   timeBucket,
 } from "./schema/aggregate.js";
 

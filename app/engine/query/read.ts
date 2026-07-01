@@ -511,6 +511,14 @@ function groupSql(table: string, shape: ShapeRecord | OwnedShape, g: string | Gr
 // `params` recebe os binds na ORDEM em que a expressão aparece no SELECT (o chamador
 // respeita a ordem SELECT→WHERE→HAVING pra os $N baterem com `.unsafe`).
 function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator, params: unknown[]): string {
+  const wRaw = (acc as { where?: Record<string, unknown> }).where;
+
+  // histogram monta N+1 `count(*) FILTER` num array[] — trata o `{ where }` INLINE
+  // (AND-ado em cada balde), já que não dá pra pôr FILTER sobre o array constructor.
+  if (acc.agg === "histogram") {
+    return histogramSql(table, shape, acc, params, wRaw);
+  }
+
   let base: string;
   switch (acc.agg) {
     case "count":
@@ -536,12 +544,46 @@ function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator
     default:
       throw new Error(`weave: unknown accumulator '${(acc as { agg?: string }).agg}'.`);
   }
-  const w = (acc as { where?: Record<string, unknown> }).where;
-  if (w && Object.keys(w).length) {
-    const f = compileWhere(table, singularize(table), shape, w, params);
+  if (wRaw && Object.keys(wRaw).length) {
+    const f = compileWhere(table, singularize(table), shape, wRaw, params);
     if (f) base += ` FILTER (WHERE ${f})`;
   }
   return base;
+}
+
+// N fronteiras (estritamente crescentes) → N+1 baldes: `< b0`, `[b0,b1)`, …, `>= b_{N-1}`
+// (overflow). Cada balde é um `count(*) FILTER`; o array[] os junta num valor só. As
+// fronteiras são BINDADAS (validadas numéricas); um `{ where }` opcional é AND-ado em todos.
+function histogramSql(
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  acc: { field: string; bounds: number[] },
+  params: unknown[],
+  where?: Record<string, unknown>,
+): string {
+  const bounds = acc.bounds;
+  if (!Array.isArray(bounds) || bounds.length === 0) {
+    throw new Error("weave: histogram needs at least one boundary.");
+  }
+  for (let i = 0; i < bounds.length; i++) {
+    const b = bounds[i];
+    if (typeof b !== "number" || !Number.isFinite(b)) {
+      throw new Error("weave: histogram boundaries must be finite numbers.");
+    }
+    if (i > 0 && b <= (bounds[i - 1] as number)) {
+      throw new Error("weave: histogram boundaries must be strictly ascending.");
+    }
+  }
+  const col = aggCol(table, shape, acc.field);
+  const ph = bounds.map((b) => bind(params, b)); // fronteira → $N (bindada uma vez, reusada)
+  const w = where && Object.keys(where).length ? compileWhere(table, singularize(table), shape, where, params) : "";
+  const andW = w ? ` AND (${w})` : "";
+  const bucket = (cond: string) => `count(*) FILTER (WHERE ${cond}${andW})`;
+
+  const buckets = [bucket(`${col} < ${ph[0]}`)];
+  for (let i = 1; i < ph.length; i++) buckets.push(bucket(`${col} >= ${ph[i - 1]} AND ${col} < ${ph[i]}`));
+  buckets.push(bucket(`${col} >= ${ph[ph.length - 1]}`)); // balde de overflow (+∞)
+  return `array[${buckets.join(", ")}]`;
 }
 
 /** Compila um `aggregate` em SQL parametrizado. Devolve linhas agrupadas (alias → valor). */

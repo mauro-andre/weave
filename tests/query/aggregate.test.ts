@@ -5,6 +5,7 @@ import {
   sum,
   distinct,
   percentile,
+  histogram,
   timeBucket,
   defineEntity,
   text,
@@ -85,6 +86,37 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     expect(sql).toContain(`count(*) AS "total"`);
     expect(sql).toMatch(/count\(\*\) FILTER \(WHERE appreq\.status >= \$1\) AS "errors"/);
     expect(params[0]).toBe(500);
+  });
+
+  it("histogram → N fronteiras viram N+1 baldes (< b0 · [b0,b1) · >= b1), bindadas", () => {
+    const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { bars: histogram("durationMs", [100, 300]) } });
+    const col = "appreq.duration_ms";
+    expect(sql).toContain(
+      `array[count(*) FILTER (WHERE ${col} < $1), ` +
+        `count(*) FILTER (WHERE ${col} >= $1 AND ${col} < $2), ` +
+        `count(*) FILTER (WHERE ${col} >= $2)] AS "bars"`,
+    );
+    expect(params).toEqual([100, 300]);
+  });
+
+  it("histogram com { where } → AND-ado em cada balde", () => {
+    const { text: sql, params } = sqlOf({
+      select: { bars: histogram("durationMs", [100], { where: { status: 200 } }) },
+    });
+    const col = "appreq.duration_ms";
+    expect(sql).toContain(
+      `array[count(*) FILTER (WHERE ${col} < $1 AND (appreq.status = $2)), ` +
+        `count(*) FILTER (WHERE ${col} >= $1 AND (appreq.status = $2))]`,
+    );
+    expect(params).toEqual([100, 200]);
+  });
+
+  it("guard: histogram sem fronteiras → erro", () => {
+    expect(() => sqlOf({ select: { h: histogram("durationMs", []) } })).toThrow(/at least one boundary/);
+  });
+
+  it("guard: histogram com fronteiras não-crescentes → erro", () => {
+    expect(() => sqlOf({ select: { h: histogram("durationMs", [300, 100]) } })).toThrow(/strictly ascending/);
   });
 
   it("having → HAVING sobre a expressão do acumulador (não o alias)", () => {

@@ -17,7 +17,8 @@ export interface AggOpts {
 export type Accumulator =
   | { readonly agg: "count"; readonly where?: Record<string, unknown> }
   | { readonly agg: "sum" | "avg" | "min" | "max" | "distinct"; readonly field: string; readonly where?: Record<string, unknown> }
-  | { readonly agg: "percentile"; readonly field: string; readonly p: number; readonly where?: Record<string, unknown> };
+  | { readonly agg: "percentile"; readonly field: string; readonly p: number; readonly where?: Record<string, unknown> }
+  | { readonly agg: "histogram"; readonly field: string; readonly bounds: number[]; readonly where?: Record<string, unknown> };
 
 // Anexa `{ where }` (→ FILTER) preservando o membro específico do union.
 const withWhere = <A extends Accumulator>(base: A, opts?: AggOpts): A =>
@@ -33,6 +34,13 @@ export const distinct = (field: string, opts?: AggOpts): Accumulator => withWher
 /** Percentil EXATO (`percentile_cont`) sobre escalar cru. `p` é fração 0..1 (p95 → 0.95). */
 export const percentile = (field: string, p: number, opts?: AggOpts): Accumulator =>
   withWhere({ agg: "percentile", field, p }, opts);
+/**
+ * Contagem por balde sobre escalar cru (as "barras" de latência). `bounds`
+ * ESTRITAMENTE crescente com N fronteiras → **N+1 baldes**: `< b0`, `[b0,b1)`, …,
+ * `>= b_{N-1}` (o último é o overflow, +∞). Devolve o array de contagens como UM valor.
+ */
+export const histogram = (field: string, bounds: number[], opts?: AggOpts): Accumulator =>
+  withWhere({ agg: "histogram", field, bounds }, opts);
 
 /** Expressão de grupo por tempo — trunca `field` em baldes de `interval` (epoch/UTC). */
 export type GroupExpr = { readonly timeBucket: { readonly field: string; readonly interval: string } };
