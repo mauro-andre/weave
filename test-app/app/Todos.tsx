@@ -27,8 +27,8 @@ export const loader = async ({}: LoaderArgs): Promise<LoaderData> => {
   const { weave } = await import("./weave.js");
   try {
     const [lists, todos] = await Promise.all([
-      weave.list.find({ orderBy: { createdAt: "asc" } }),
-      weave.todo.find({ expand: { list: true }, orderBy: { createdAt: "asc" } }),
+      weave.list.findMany({}, { orderBy: { createdAt: "asc" } }),
+      weave.todo.findMany({}, { expand: { list: true }, orderBy: { createdAt: "asc" } }),
     ]);
     return { ready: true, lists: lists as ListView[], todos: todos as TodoView[] };
   } catch (e) {
@@ -50,7 +50,7 @@ export const action_addTodo = async ({ body }: ActionArgs<{ title: string; listI
 export const action_toggleTodo = async ({ body }: ActionArgs<{ id: string; done: boolean }>) => {
   const { weave } = await import("./weave.js");
   try {
-    await weave.todo.update(body.id, { done: body.done });
+    await weave.todo.updateOne({ id: body.id }, { done: body.done });
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -60,7 +60,7 @@ export const action_toggleTodo = async ({ body }: ActionArgs<{ id: string; done:
 export const action_deleteTodo = async ({ body }: ActionArgs<{ id: string }>) => {
   const { weave } = await import("./weave.js");
   try {
-    await weave.todo.delete(body.id);
+    await weave.todo.deleteOne({ id: body.id });
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };

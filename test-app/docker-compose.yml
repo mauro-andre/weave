@@ -19,7 +19,7 @@ services:
       retries: 20
 
   weave:
-    image: ghcr.io/mauro-andre/weave:latest
+    image: ghcr.io/mauro-andre/weave:0.0.3
     restart: unless-stopped
     depends_on:
       postgres:
