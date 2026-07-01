@@ -5,8 +5,8 @@ import type { WhereInput, SortDir } from "./where.js";
 // `groupBy` + acumuladores no `select` + `orderBy`; o engine (compileAggregate)
 // compila num `SELECT … GROUP BY … HAVING … ORDER BY`. Os helpers (count/sum/…,
 // timeBucket) produzem marcadores que o compilador lê. Coberto: count/sum/avg/min/max
-// + distinct + percentile (exato) + `{ where }` por acumulador (→ FILTER) + groupBy
-// (campo | timeBucket) + having + orderBy. (histogram/hll/facets/expressões = depois.)
+// + distinct + percentile + histogram + `{ where }` por acumulador (→ FILTER) + groupBy
+// (campo | timeBucket) + having + orderBy + facets + expressões (div/mul/add/sub). (hll = depois.)
 
 /** Opções comuns a todo acumulador. `where` recorta a métrica → `agg(…) FILTER (WHERE …)`. */
 export interface AggOpts {
@@ -47,13 +47,32 @@ export type GroupExpr = { readonly timeBucket: { readonly field: string; readonl
 export const timeBucket = (field: string, interval: string): GroupExpr => ({ timeBucket: { field, interval } });
 
 /**
+ * Operando de uma expressão aritmética: **nome de um alias do select** (`"errors"`),
+ * um **número** literal, um **acumulador inline** (`count(...)`), ou outra `Expr`.
+ */
+export type ExprOperand = string | number | Accumulator | Expr;
+
+/** Expressão aritmética sobre agregados (Decisão 5/8). Vale em `orderBy`/`having`. */
+export interface Expr {
+  readonly op: "div" | "mul" | "add" | "sub";
+  readonly left: ExprOperand;
+  readonly right: ExprOperand;
+}
+
+/** `a / b` — com `nullif(b,0)` (divisão-por-zero → null) e cast numérico (sem trunc inteiro). */
+export const div = (left: ExprOperand, right: ExprOperand): Expr => ({ op: "div", left, right });
+export const mul = (left: ExprOperand, right: ExprOperand): Expr => ({ op: "mul", left, right });
+export const add = (left: ExprOperand, right: ExprOperand): Expr => ({ op: "add", left, right });
+export const sub = (left: ExprOperand, right: ExprOperand): Expr => ({ op: "sub", left, right });
+
+/**
  * Uma faceta: sub-agregação independente que RODA SOB O MESMO `where` do pai. É o
  * `aggregate` sem `where`/`facets` (herda o do pai) e com `limit` (top-N por faceta —
  * pressupõe `orderBy`). Alimenta o caso dashboard: vários breakdowns numa passada.
  */
 export interface FacetInput<E extends Entity<string, ShapeRecord>> {
   groupBy?: string[] | Record<string, string | GroupExpr>;
-  select: Record<string, Accumulator>;
+  select: Record<string, Accumulator | Expr>;
   having?: Record<string, unknown>;
   orderBy?: Record<string, SortDir>;
   limit?: number;
@@ -70,7 +89,7 @@ export interface FacetInput<E extends Entity<string, ShapeRecord>> {
 export interface AggregateInput<E extends Entity<string, ShapeRecord>> {
   where?: WhereInput<E>;
   groupBy?: string[] | Record<string, string | GroupExpr>;
-  select: Record<string, Accumulator>;
+  select: Record<string, Accumulator | Expr>;
   having?: Record<string, unknown>;
   orderBy?: Record<string, SortDir>;
   page?: number;

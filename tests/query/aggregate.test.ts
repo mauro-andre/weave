@@ -6,6 +6,8 @@ import {
   distinct,
   percentile,
   histogram,
+  div,
+  mul,
   timeBucket,
   defineEntity,
   text,
@@ -157,6 +159,61 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     });
     // FILTER 500 (no SELECT) → host "h" (WHERE) → having 3 (HAVING).
     expect(params).toEqual([500, "h", 3]);
+  });
+
+  const RATE = `((count(*) FILTER (WHERE appreq.status >= $1))::numeric / nullif((count(*)), 0))`;
+
+  it("expressão div('errors','total') → inlina os aliases + nullif + cast numeric", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: {
+        errors: count({ where: { status: { gte: 500 } } }),
+        total: count(),
+        errorRate: div("errors", "total"),
+      },
+      orderBy: { errorRate: "desc" },
+    });
+    expect(sql).toContain(`${RATE} AS "errorRate"`);
+    expect(sql).toContain(`ORDER BY "errorRate" DESC`); // orderBy por alias de saída (Postgres deixa)
+    expect(params).toEqual([500]);
+  });
+
+  it("acumulador INLINE como operando: div(count({where}), count()) sem selecionar os dois", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: { rate: div(count({ where: { status: { gte: 500 } } }), count()) },
+    });
+    expect(sql).toContain(`${RATE} AS "rate"`);
+    expect(params).toEqual([500]);
+  });
+
+  it("número como operando (bindado) + mul aninhado", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: {
+        errors: count({ where: { status: { gte: 500 } } }),
+        total: count(),
+        pct: mul(div("errors", "total"), 100),
+      },
+    });
+    expect(sql).toContain(`((${RATE}) * ($2)) AS "pct"`);
+    expect(params).toEqual([500, 100]); // 500 (filter) → 100 (literal do mul)
+  });
+
+  it("having sobre alias de EXPRESSÃO → inlina a div no HAVING", () => {
+    const { text: sql, params } = sqlOf({
+      groupBy: ["route"],
+      select: { errors: count({ where: { status: { gte: 500 } } }), total: count(), errorRate: div("errors", "total") },
+      having: { errorRate: { gt: 0.1 } },
+    });
+    expect(sql).toContain(`HAVING ${RATE} > $2`);
+    expect(params).toEqual([500, 0.1]);
+  });
+
+  it("guard: expressão referencia alias inexistente → erro", () => {
+    expect(() => sqlOf({ groupBy: ["route"], select: { total: count(), r: div("nope", "total") } })).toThrow(
+      /unknown select alias 'nope'/,
+    );
   });
 
   it("guard: campo desconhecido no acumulador → erro", () => {

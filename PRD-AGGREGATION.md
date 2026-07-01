@@ -263,8 +263,10 @@ Sem a extensão, o Weave segue 100% menos esse campo.
    `div(...)` · `mul(...)` · `add(...)` · `sub(...)`, referenciando **aliases do select por
    nome** (`div("errors", "total")`, lê melhor que re-inlinar acumuladores). O Postgres não
    referencia alias de SELECT no mesmo SELECT, então o compilador **inlina a expressão do
-   alias** por baixo (açúcar resolvido em compile-time, não alias-de-SQL real). Vale em
-   `orderBy`/`having` server-side. *(Próximo tijolo — ainda não implementado.)*
+   alias** por baixo (açúcar resolvido em compile-time, não alias-de-SQL real). Operando
+   também pode ser **número** (bindado) ou **acumulador inline** (`div(count(...), count())`).
+   Vale em `orderBy` (alias de saída) e `having` (inlinado) server-side. `div` protege com
+   `nullif(b,0)` + cast `::numeric`. **Implementado.**
 
 ## Notas
 

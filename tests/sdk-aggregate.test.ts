@@ -14,6 +14,7 @@ import {
   distinct,
   percentile,
   histogram,
+  div,
   timeBucket,
 } from "@mauroandre/weave-sdk";
 
@@ -176,6 +177,31 @@ describe("SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket", () => 
     expect(rows).toHaveLength(1);
     expect(rows[0]!.host).toBe("a");
     expect(Number(rows[0]!.n)).toBe(3);
+  });
+
+  it("expressões: errorRate = errors/total, ordenável server-side pela taxa", async () => {
+    const rows = await weave().aggreq.aggregate({
+      groupBy: ["host"],
+      select: {
+        errors: count({ where: { status: { gte: 500 } } }),
+        total: count(),
+        errorRate: div("errors", "total"),
+      },
+      orderBy: { errorRate: "desc" }, // as que mais falham, proporcionalmente
+    });
+    // host b: 1/1 = 100% erro; host a: 0/3 = 0%. Ordena b antes de a.
+    expect(rows.map((r) => r.host)).toEqual(["b", "a"]);
+    expect(Number(rows[0]!.errorRate)).toBeCloseTo(1, 5);
+    expect(Number(rows[1]!.errorRate)).toBeCloseTo(0, 5);
+  });
+
+  it("expressões: having sobre a taxa filtra server-side (só quem falha)", async () => {
+    const rows = await weave().aggreq.aggregate({
+      groupBy: ["host"],
+      select: { errors: count({ where: { status: { gte: 500 } } }), total: count(), errorRate: div("errors", "total") },
+      having: { errorRate: { gt: 0 } },
+    });
+    expect(rows.map((r) => r.host)).toEqual(["b"]); // host a (0%) fica de fora
   });
 
   it("facets: números de manchete + breakdowns independentes numa passada", async () => {

@@ -17,7 +17,7 @@
  * Phase 3.
  */
 
-import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
 
 
 export interface FindOptions<E> {
@@ -587,6 +587,59 @@ function histogramSql(
 }
 
 /** Compila um `aggregate` em SQL parametrizado. Devolve linhas agrupadas (alias → valor). */
+// Um nó do `select` é Expr (aritmético) quando tem `op`; senão é Accumulator (`agg`).
+function isExpr(node: unknown): node is Expr {
+  return typeof node === "object" && node !== null && "op" in node;
+}
+
+// Resolve um operando de expressão em SQL. String = nome de um alias já resolvido
+// (inlina a expressão dele — o Postgres não referencia alias de SELECT no mesmo SELECT).
+// Número = bindado. Acumulador inline = accSql. Expr aninhada = recursão.
+function operandSql(
+  operand: ExprOperand,
+  aliasExpr: Record<string, string>,
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  params: unknown[],
+): string {
+  if (typeof operand === "number") {
+    if (!Number.isFinite(operand)) throw new Error("weave: expression numbers must be finite.");
+    return bind(params, operand);
+  }
+  if (typeof operand === "string") {
+    const e = aliasExpr[operand];
+    if (!e) throw new Error(`weave: expression references unknown select alias '${operand}'.`);
+    return e;
+  }
+  if (isExpr(operand)) return exprSql(operand, aliasExpr, table, shape, params);
+  return accSql(table, shape, operand, params); // acumulador inline
+}
+
+// Expressão aritmética → SQL. `div` protege contra divisão-por-zero (nullif) e casta
+// pra numeric (senão int/int trunca). Parênteses generosos preservam a precedência.
+function exprSql(
+  node: Expr,
+  aliasExpr: Record<string, string>,
+  table: string,
+  shape: ShapeRecord | OwnedShape,
+  params: unknown[],
+): string {
+  const l = operandSql(node.left, aliasExpr, table, shape, params);
+  const r = operandSql(node.right, aliasExpr, table, shape, params);
+  switch (node.op) {
+    case "div":
+      return `((${l})::numeric / nullif((${r}), 0))`;
+    case "mul":
+      return `((${l}) * (${r}))`;
+    case "add":
+      return `((${l}) + (${r}))`;
+    case "sub":
+      return `((${l}) - (${r}))`;
+    default:
+      throw new Error(`weave: unknown expression op '${(node as { op?: string }).op}'.`);
+  }
+}
+
 export function compileAggregate<E extends Entity<string, ShapeRecord>>(
   entity: E,
   input: AggregateInput<E>,
@@ -605,25 +658,37 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
   }
 
   const cols: string[] = groups.map((g) => `${g.expr} AS "${g.alias}"`);
-  // alias → expressão SQL do acumulador. Reusada NO HAVING: o Postgres não aceita alias
-  // de saída no HAVING, então re-emitimos a expressão idêntica (mesmos $N — bind uma vez,
-  // referência N vezes; o valor é vinculado uma só vez pelo driver).
-  const accExpr: Record<string, string> = {};
-  for (const [alias, acc] of Object.entries(input.select ?? {})) {
+  // alias → expressão SQL. Reusado NO HAVING (o Postgres não aceita alias de saída no
+  // HAVING, então re-emitimos a expressão idêntica: mesmos $N — bind uma vez, ref N) e
+  // pelas EXPRESSÕES (que inlinam aliases de acumuladores). Duas passadas: acumuladores
+  // primeiro (populam o mapa), expressões depois (podem referenciar qualquer alias já visto).
+  const aliasExpr: Record<string, string> = {};
+  const deferred: [string, Expr][] = [];
+  for (const [alias, node] of Object.entries(input.select ?? {})) {
     const a = safeAlias(alias);
-    const expr = accSql(table, shape, acc as Accumulator, params);
-    accExpr[a] = expr;
+    if (isExpr(node)) {
+      deferred.push([a, node]); // passada 2
+      continue;
+    }
+    const expr = accSql(table, shape, node as Accumulator, params);
+    aliasExpr[a] = expr;
+    cols.push(`${expr} AS "${a}"`);
+  }
+  for (const [a, node] of deferred) {
+    const expr = exprSql(node, aliasExpr, table, shape, params);
+    aliasExpr[a] = expr;
     cols.push(`${expr} AS "${a}"`);
   }
   if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
 
   const whereSql = compileWhere(table, singularize(table), shape, (input.where ?? {}) as Record<string, unknown>, params);
 
-  // HAVING: mesmo shorthand escalar do `where`, mas o "campo" é a expressão do agregado
-  // (reusada de accExpr). `{ requests: { gte: 100 } }` → `HAVING count(*) >= $N`.
+  // HAVING: mesmo shorthand escalar do `where`, mas o "campo" é a expressão do alias
+  // (acumulador OU expressão, reusada de aliasExpr). `{ requests: { gte: 100 } }`
+  // → `HAVING count(*) >= $N`; `{ errorRate: { gt: 0.1 } }` → inlina a div.
   const havingConds: string[] = [];
   for (const [alias, cond] of Object.entries((input.having ?? {}) as Record<string, unknown>)) {
-    const expr = accExpr[safeAlias(alias)];
+    const expr = aliasExpr[safeAlias(alias)];
     if (!expr) throw new Error(`weave: having references unknown select alias '${alias}'.`);
     havingConds.push(compileFieldFilter(expr, cond, params));
   }

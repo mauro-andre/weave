@@ -23,6 +23,8 @@ export {
   type AggOpts,
   type GroupExpr,
   type AggregateRow,
+  type Expr,
+  type ExprOperand,
   count,
   sum,
   avg,
@@ -31,6 +33,10 @@ export {
   distinct,
   percentile,
   histogram,
+  div,
+  mul,
+  add,
+  sub,
   timeBucket,
 } from "./schema/aggregate.js";
 

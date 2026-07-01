@@ -66,6 +66,10 @@ export {
   distinct,
   percentile,
   histogram,
+  div,
+  mul,
+  add,
+  sub,
   timeBucket,
   type Entity,
   type InferEntity,
@@ -78,4 +82,6 @@ export {
   type AggOpts,
   type GroupExpr,
   type AggregateRow,
+  type Expr,
+  type ExprOperand,
 } from "@mauroandre/weave-core";
