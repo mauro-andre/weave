@@ -62,7 +62,16 @@ não só o `count`:
 
 **Expressões de grupo** (no `groupBy` mapa): `timeBucket(timeField, "5min"|"1h"|"1d")`
 (alinha por **epoch/UTC**, não pelo timezone da sessão — senão "1d" desloca a fronteira
-do dia) · campo puro (`"route"`).
+do dia) · campo puro (`"route"`) · **caminho atravessado** (`"stack.user.name"`), que
+**espelha a travessia de reference/owned do `where`**. Idem nos acumuladores:
+`sum("apps.ram")` sobre owned. É **núcleo geral** (qualquer domínio relacional agrega
+assim), não específico de telemetria — **desenhado agora, implementado quando o domínio
+relacional migrar** (Decisão 4). Barato desenhar, caro retrofitar.
+
+**Expressões sobre agregados (v1, núcleo geral):** aliases do `select` combinam-se
+aritmeticamente e valem em `orderBy`/`having` — ex.: `errorRate: sum("errors") / count()`,
+depois `orderBy: { errorRate: "desc" }` ("as rotas que mais falham, proporcionalmente").
+Filtrar/ordenar por taxa é **server-side**, antes da paginação; só exibir é app (Decisão 5).
 
 `{ where }` geral resolve o app-vs-stack numa passada:
 ```ts
@@ -168,6 +177,39 @@ weave.appRequest.aggregate({
 Se isso ler como objeto e compilar limpo, todo o resto (percentile, histogram, facets,
 having) pendura nesse esqueleto.
 
+## §7. Push-down & não-metas
+
+**Push-down total.** `SELECT`/`GROUP BY`/`HAVING`/`ORDER BY`/`LIMIT` vão **sempre** pro
+Postgres; o app só revive linha → objeto. Explora `percentile_cont`, `FILTER (WHERE)`,
+`DISTINCT ON`, `INSERT … ON CONFLICT`, `GROUPING SETS`, `width_bucket`, particionamento —
+e, por baixo (o dev nunca vê), **BRIN** na tabela de eventos time-partitioned, **generated
+columns** pra chave de bucket, **partial indexes**.
+
+**Interpolação de histograma em SQL — requisito de PARIDADE entre tiers (não-negociável).**
+O `percentile` sobre campo `histogram` usa **cumulative sum via window function** por
+baixo, no SQL. Motivo concreto: "top rotas por p95, paginado" numa janela longa bate no
+tier histórico → a ordenação por p95 tem que acontecer **no SQL, antes da paginação**. Se
+a interpolação rodasse em JS, `orderBy`/`having` por p95 **quebraria** e os dois tiers
+perderiam paridade. Não é estilo — é a única forma de "top-N-mais-lentas paginado"
+funcionar no histórico.
+
+**HLL / `postgresql-hll` — dependência OPT-IN e escopada, NÃO requisito global.**
+O core do Weave roda em **Postgres puro**. A extensão só entra **se você declarar um campo
+`hll()`** — que existe pra um caso: **únicos aproximados em janela histórica longa** (no
+tier recente, `count(distinct)` exato resolve, sem HLL). Sobrevive à lente do counterMap
+**porque "visitantes únicos" é métrica de manchete** (está na UI, o seletor de período
+cobre). **Preço registrado:** quem usa `hll()` precisa da extensão no *seu* Postgres (a
+imagem do Weave pode incluí-la; gerenciado nem sempre). **Escape** (se um dia incomodar):
+escopar uniques só pro tier recente e **dropar o HLL inteiro** — igual ao counterMap.
+Sem a extensão, o Weave segue 100% menos esse campo.
+
+**Não-metas do v1 (conscientes):**
+- **Window functions user-facing** (running-total, rank, moving-avg) — o cliente renderiza
+  a série; **parked**. Distinto do **cumsum interno pro percentile** (esse é **needed-now**,
+  detalhe de implementação do compilador no caminho crítico — ver acima).
+- (Agregação relacional e expressões-sobre-agregados **não** são não-metas: a 1ª é
+  design-agora, a 2ª é v1.)
+
 ## Decisões registradas
 
 1. **`accumulate` retorna a linha** (`RETURNING`) — habilita inc-and-return (contadores
@@ -179,6 +221,18 @@ having) pendura nesse esqueleto.
    histórico e evita "agregação de mapa-dentro-de-doc" (que fugiria do idioma).
 3. **`approxDistinct` polimórfico** (igual `percentile`), e sketches (`histogram`/`hll`)
    são **mergeáveis no group** — explícito no §0, o compilador os trata assim.
+4. **Agregação relacional desenhada agora** (núcleo geral). `groupBy`/acumuladores aceitam
+   caminho atravessado, espelhando o `where` (`groupBy: ["stack.user.name"]`,
+   `sum("apps.ram")`). Implementa quando o domínio relacional migrar; desenhar agora é
+   barato, retrofitar é caro.
+5. **Expressões sobre agregados = v1** (não parked), núcleo geral. Aritmética entre aliases
+   do `select`, usável em `orderBy`/`having` (ex.: ordenar por `errors/count`). Filtrar
+   /ordenar por taxa é server-side (antes da paginação); só exibir é app.
+6. **Push-down total** (§7). Interpolação de histograma **em SQL** como requisito de
+   paridade entre tiers (via cumsum-window interno). `postgresql-hll` é **opt-in/gated**
+   ao campo `hll()`, **não requisito global** — core roda em Postgres puro; escape =
+   uniques recent-only + dropar HLL. **Window functions user-facing = não-meta v1**
+   (parked), distinta do cumsum-interno-pro-percentile (needed-now).
 
 ## Notas
 
