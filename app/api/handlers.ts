@@ -76,33 +76,64 @@ export async function apiCreate({ c, params }: EndpointHandlerArgs): Promise<Res
   }
 }
 
-export async function apiUpdate({ c, params }: EndpointHandlerArgs): Promise<Response> {
+/** Resolve o where efetivo (user + filtro de linhas do scope) e exige que exista. */
+function mutationWhere(access: { god: boolean; rows: WNode | null }, query: Record<string, string | undefined>): WNode {
+  const userWhere = parseJson<WNode>(query.where);
+  if (!userWhere || Object.keys(userWhere).length === 0) {
+    throw new ScopeError("A where is required for update/delete.", 400);
+  }
+  return access.god ? userWhere : (andWhere(access.rows, userWhere) as WNode);
+}
+
+// Teto de linhas afetadas por um bulk (guarda contra rodar sem querer sobre tudo).
+const BULK_CAP = 100_000;
+
+// PATCH /api/:entity — atualiza por WHERE. `?mode=many` → bulk (`{ count }`);
+// senão o PRIMEIRO match (`orderBy` desempata) → o objeto atualizado, ou 404→null.
+export async function apiUpdate({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "update");
     const { listObjects, saveObject } = await import("../engine/control-plane/data.js");
-    const where = andWhere(access.rows, idEquals(params.id ?? ""));
-    const existing = (await listObjects(entity, 1, 1, where)).docs[0];
+    const where = mutationWhere(access, query);
+    const orderBy = parseJson<WNode>(query.orderBy);
+    const patch = (await c.req.json()) as Record<string, unknown>;
+    // merge: campos omitidos vêm do objeto atual (owned/refs preservados).
+    const apply = (existing: WNode) => saveObject(entity, { ...existing, ...patch, id: existing.id });
+
+    if (query.mode === "many") {
+      const rows = (await listObjects(entity, 1, BULK_CAP, where, orderBy)).docs;
+      for (const existing of rows) await apply(existing as WNode);
+      return c.json({ count: rows.length });
+    }
+    const existing = (await listObjects(entity, 1, 1, where, orderBy)).docs[0];
     if (!existing) return c.json({ error: "Not found." }, 404);
-    const body = (await c.req.json()) as Record<string, unknown>;
-    // PATCH = merge: campos omitidos vêm do objeto atual (owned/refs preservados).
-    const obj = (await saveObject(entity, { ...existing, ...body, id: params.id })) as Record<string, unknown>;
+    const obj = (await apply(existing as WNode)) as WNode;
     return c.json(access.god ? obj : prune(obj, access.projection));
   } catch (e) {
     return fail(c, e);
   }
 }
 
-export async function apiDelete({ c, params }: EndpointHandlerArgs): Promise<Response> {
+// DELETE /api/:entity — deleta por WHERE. `?mode=many` → bulk (`{ count }`);
+// senão o PRIMEIRO match → o objeto deletado, ou 404→null.
+export async function apiDelete({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
     const access = await resolveAccess(c, entity, "delete");
     const { listObjects, deleteObject } = await import("../engine/control-plane/data.js");
-    const where = andWhere(access.rows, idEquals(params.id ?? ""));
-    const existing = (await listObjects(entity, 1, 1, where)).docs[0];
+    const where = mutationWhere(access, query);
+    const orderBy = parseJson<WNode>(query.orderBy);
+
+    if (query.mode === "many") {
+      const rows = (await listObjects(entity, 1, BULK_CAP, where, orderBy)).docs;
+      for (const row of rows) await deleteObject(entity, String((row as WNode).id));
+      return c.json({ count: rows.length });
+    }
+    const existing = (await listObjects(entity, 1, 1, where, orderBy)).docs[0] as WNode | undefined;
     if (!existing) return c.json({ error: "Not found." }, 404);
-    await deleteObject(entity, params.id ?? "");
-    return c.json({ ok: true });
+    await deleteObject(entity, String(existing.id));
+    return c.json(access.god ? existing : prune(existing, access.projection));
   } catch (e) {
     return fail(c, e);
   }

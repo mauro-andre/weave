@@ -79,7 +79,7 @@ describe("SDK entities push (F3)", () => {
 
     // o dado sobreviveu: a linha agora tem `title` = "Widget"
     const w2 = createClient({ ...opts(), entities: { pushren: v2 } });
-    const got = (await w2.pushren.get(row.id)) as { title?: string; price?: number } | null;
+    const got = (await w2.pushren.findOne({ id: row.id })) as { title?: string; price?: number } | null;
     expect(got?.title).toBe("Widget");
     expect(got?.price).toBe(10);
   });

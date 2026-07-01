@@ -76,10 +76,10 @@ describe("SDK weave.as — acesso escopado (F4a)", () => {
 
   it("god (sem scope) vê tudo; escopado vê só as linhas permitidas + projeção", async () => {
     const god = createClient({ ...base(), entities: { sdkpur: purchase } });
-    expect((await god.sdkpur.find()).length).toBe(5);
+    expect((await god.sdkpur.findMany()).length).toBe(5);
 
     const store = god.as("sdkstore", { company: 1 });
-    const rows = await store.sdkpur.find();
+    const rows = await store.sdkpur.findMany();
     expect(rows.length).toBe(3); // só company 1
     expect(rows.every((r) => r.code !== undefined)).toBe(true);
     expect(rows.every((r) => !("cost" in (r as Record<string, unknown>)))).toBe(true); // cost podado
@@ -92,6 +92,6 @@ describe("SDK weave.as — acesso escopado (F4a)", () => {
 
   it("param faltando → erro do scope (não vaza dado)", async () => {
     const store = createClient({ ...base(), entities: { sdkpur: purchase } }).as("sdkstore", {});
-    await expect(store.sdkpur.find()).rejects.toMatchObject({ status: 400 });
+    await expect(store.sdkpur.findMany()).rejects.toMatchObject({ status: 400 });
   });
 });

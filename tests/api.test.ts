@@ -68,14 +68,16 @@ describe("API REST + API keys", () => {
     res = await app.get(`/api/widget/${id}`, { headers: KEY() });
     expect((await res.json()).qty).toBe(5);
 
-    // PATCH = merge: qty muda, name preservado.
-    res = await app.patch(`/api/widget/${id}`, { headers: KEY(), body: { qty: 9 } });
+    // PATCH por where (updateOne) = merge: qty muda, name preservado.
+    res = await app.patch("/api/widget", { headers: KEY(), query: { where: JSON.stringify({ id }) }, body: { qty: 9 } });
     const patched = await res.json();
     expect(patched.qty).toBe(9);
     expect(patched.name).toBe("Alpha");
 
-    res = await app.delete(`/api/widget/${id}`, { headers: KEY() });
+    // DELETE por where (deleteOne) devolve o objeto deletado.
+    res = await app.delete("/api/widget", { headers: KEY(), query: { where: JSON.stringify({ id }) } });
     expect(res.status).toBe(200);
+    expect((await res.json()).id).toBe(id);
     expect((await app.get(`/api/widget/${id}`, { headers: KEY() })).status).toBe(404);
   });
 

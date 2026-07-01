@@ -31,14 +31,16 @@ export interface ClientOptions<S> {
 }
 
 /**
- * Opções de leitura, todas **tipadas pela entidade**: `where` (`WhereInput`),
- * `orderBy` (`OrderByInput`), e `expand` (`ExpandInput`) que ainda **dirige o tipo
- * do retorno** (`InferRead<E, X>`). Mesmo idioma do engine e da GUI.
+ * Modificadores de leitura, **tipados pela entidade**: `orderBy` (`OrderByInput`) e
+ * `expand` (`ExpandInput`), que ainda **dirige o tipo do retorno** (`InferRead<E, X>`).
+ * O `where` NÃO vem aqui — é o 1º argumento cru do método.
  */
-export interface FindArgs<E extends Entity<string, ShapeRecord>, X> {
-  where?: WhereInput<E>;
+export interface ReadOpts<E extends Entity<string, ShapeRecord>, X> {
   orderBy?: OrderByInput<E>;
   expand?: X & ExpandInput<E>;
+}
+
+export interface PageOpts<E extends Entity<string, ShapeRecord>, X> extends ReadOpts<E, X> {
   page?: number;
   perPage?: number;
 }
@@ -51,21 +53,27 @@ export interface PageResult<T> {
 }
 
 /**
- * Client tipado de UMA entidade. Os reads se **auto-tipam pelo `expand`** que você
- * passa (`const X`), então `find({ expand: { category: true } })` já devolve o
- * objeto com `category` expandido e tipado — sem escrever nenhum `Infer`.
+ * Client tipado de UMA entidade. Uma linha se mira por **`where` cru** (1º arg) —
+ * `{ id: "123" }` é açúcar pra `{ id: { eq: "123" } }`. Verbos com `One` pegam o
+ * **primeiro match** (`orderBy` desempata); com `Many` operam em massa e devolvem
+ * `{ count }`. Os reads se **auto-tipam pelo `expand`** (`const X` → `InferRead`).
  */
 export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   create(input: InferInsert<E>): Promise<InferEntity<E>>;
-  get<const X = {}>(
-    id: string,
-    opts?: { expand?: X & ExpandInput<E> },
-  ): Promise<InferRead<E, X> | null>;
-  find<const X = {}>(opts?: FindArgs<E, X>): Promise<InferRead<E, X>[]>;
-  findOne<const X = {}>(opts?: FindArgs<E, X>): Promise<InferRead<E, X> | null>;
-  paginate<const X = {}>(opts?: FindArgs<E, X>): Promise<PageResult<InferRead<E, X>>>;
-  update(id: string, patch: Partial<InferInsert<E>>): Promise<InferEntity<E>>;
-  delete(id: string): Promise<void>;
+
+  findOne<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X> | null>;
+  findMany<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X>[]>;
+  paginate<const X = {}>(where?: WhereInput<E>, opts?: PageOpts<E, X>): Promise<PageResult<InferRead<E, X>>>;
+
+  updateOne(
+    where: WhereInput<E>,
+    patch: Partial<InferInsert<E>>,
+    opts?: { orderBy?: OrderByInput<E> },
+  ): Promise<InferEntity<E> | null>;
+  updateMany(where: WhereInput<E>, patch: Partial<InferInsert<E>>): Promise<{ count: number }>;
+
+  deleteOne(where: WhereInput<E>, opts?: { orderBy?: OrderByInput<E> }): Promise<InferEntity<E> | null>;
+  deleteMany(where: WhereInput<E>): Promise<{ count: number }>;
 }
 
 /** O client completo: uma propriedade por entidade do entities + `as` (scope). */
@@ -83,8 +91,8 @@ interface ListResponse {
   currentPage: number;
 }
 
-// Forma frouxa das opções, usada SÓ na implementação (a interface dá os tipos).
-type AnyArgs = { where?: unknown; orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
+// Formas frouxas usadas SÓ na implementação (a interface dá os tipos).
+type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number };
 
 /**
  * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
@@ -138,12 +146,18 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
 
   // `where` e `expand` vão SEMPRE (default `{}`): `where={}` força o caminho
   // WhereInput na API e o `expand={}` deixa o tipo de retorno determinístico.
-  const queryFrom = (o: AnyArgs): Record<string, string | undefined> => ({
+  const readQuery = (where: unknown, o: AnyOpts): Record<string, string | undefined> => ({
+    where: JSON.stringify(where ?? {}),
     expand: JSON.stringify(o.expand ?? {}),
-    where: JSON.stringify(o.where ?? {}),
     orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,
     perPage: o.perPage !== undefined ? String(o.perPage) : undefined,
+  });
+  // Mutação por where: `where` (+ `orderBy` pro *One desempatar) + `mode` (`many` no bulk).
+  const mutQuery = (where: unknown, o: AnyOpts, mode?: "many"): Record<string, string | undefined> => ({
+    where: JSON.stringify(where ?? {}),
+    orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
+    mode,
   });
 
   const client: Record<string, unknown> = {};
@@ -152,29 +166,22 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     const shape = entity.columns;
     const path = `/api/${entity.name}`;
     const revive = (o: unknown) => reviveShape(shape, o);
-    const list = async (o: AnyArgs): Promise<ListResponse> =>
-      (await request("GET", path, { query: queryFrom(o) })) as ListResponse;
+    const list = async (where: unknown, o: AnyOpts): Promise<ListResponse> =>
+      (await request("GET", path, { query: readQuery(where, o) })) as ListResponse;
 
     client[key] = {
       async create(input: unknown) {
         return revive(await request("POST", path, { body: input }));
       },
-      async get(id: string, o: { expand?: unknown } = {}) {
-        const r = await request("GET", `${path}/${encodeURIComponent(id)}`, {
-          query: { expand: JSON.stringify(o.expand ?? {}) },
-          allowNull: true,
-        });
-        return r === null ? null : revive(r);
-      },
-      async find(o: AnyArgs = {}) {
-        return (await list(o)).docs?.map(revive) ?? [];
-      },
-      async findOne(o: AnyArgs = {}) {
-        const d = (await list({ ...o, perPage: 1 })).docs?.[0];
+      async findOne(where: unknown = {}, o: AnyOpts = {}) {
+        const d = (await list(where, { ...o, perPage: 1 })).docs?.[0];
         return d === undefined ? null : revive(d);
       },
-      async paginate(o: AnyArgs = {}) {
-        const page = await list(o);
+      async findMany(where: unknown = {}, o: AnyOpts = {}) {
+        return (await list(where, o)).docs?.map(revive) ?? [];
+      },
+      async paginate(where: unknown = {}, o: AnyOpts = {}) {
+        const page = await list(where, o);
         return {
           docs: page.docs?.map(revive) ?? [],
           docsQuantity: page.docsQuantity,
@@ -182,11 +189,23 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
           currentPage: page.currentPage,
         };
       },
-      async update(id: string, patch: unknown) {
-        return revive(await request("PATCH", `${path}/${encodeURIComponent(id)}`, { body: patch }));
+      async updateOne(where: unknown, patch: unknown, o: AnyOpts = {}) {
+        const r = await request("PATCH", path, { query: mutQuery(where, o), body: patch, allowNull: true });
+        return r === null ? null : revive(r);
       },
-      async delete(id: string) {
-        await request("DELETE", `${path}/${encodeURIComponent(id)}`);
+      async updateMany(where: unknown, patch: unknown) {
+        const r = (await request("PATCH", path, { query: mutQuery(where, {}, "many"), body: patch })) as {
+          count: number;
+        };
+        return { count: r.count };
+      },
+      async deleteOne(where: unknown, o: AnyOpts = {}) {
+        const r = await request("DELETE", path, { query: mutQuery(where, o), allowNull: true });
+        return r === null ? null : revive(r);
+      },
+      async deleteMany(where: unknown) {
+        const r = (await request("DELETE", path, { query: mutQuery(where, {}, "many") })) as { count: number };
+        return { count: r.count };
       },
     };
   }

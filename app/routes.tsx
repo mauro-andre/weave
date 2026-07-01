@@ -32,9 +32,9 @@ export default [
         children: [
           { path: "/:entity", method: "GET", handler: DataApi.apiList },
           { path: "/:entity", method: "POST", handler: DataApi.apiCreate },
+          { path: "/:entity", method: "PATCH", handler: DataApi.apiUpdate },
+          { path: "/:entity", method: "DELETE", handler: DataApi.apiDelete },
           { path: "/:entity/:id", method: "GET", handler: DataApi.apiGetOne },
-          { path: "/:entity/:id", method: "PATCH", handler: DataApi.apiUpdate },
-          { path: "/:entity/:id", method: "DELETE", handler: DataApi.apiDelete },
         ],
       },
       // API de admin (control-plane): entidades (plan/apply) + scopes. Mesma key.
