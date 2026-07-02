@@ -6,7 +6,7 @@
 import type postgres from "postgres";
 import { weave } from "../index.js";
 import { emitChanges } from "../ddl/diff.js";
-import { camelToSnake, ownedChildTable, indexName, compositeIndexName, singularize, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
+import { camelToSnake, ownedChildTable, indexName, compositeIndexName, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;
@@ -96,7 +96,7 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
     case "removeField": {
       const node = prev.fields[c.path];
       if (node?.kind === "owned") {
-        const child = ownedChildTable(singularize(table), col, node.table);
+        const child = ownedChildTable(table, col, node.table);
         await tx.unsafe(`DROP TABLE IF EXISTS ${child} CASCADE`);
       } else {
         await tx.unsafe(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${col}`);

@@ -31,8 +31,8 @@ describe("collectTables", () => {
   it("produces one table per owned level, parent-first", () => {
     expect(specs.map((s) => s.name)).toEqual([
       "users",
-      "user__addresses",
-      "user__addresses__landmarks",
+      "users__addresses",
+      "users__addresses__landmarks",
     ]);
   });
 
@@ -49,7 +49,7 @@ describe("collectTables", () => {
 
   it("child tables get the parent FK with cascade, named by parent segment", () => {
     const addresses = specs[1]!;
-    const fk = addresses.columns.find((c) => c.name === "user_id");
+    const fk = addresses.columns.find((c) => c.name === "users_id");
     expect(fk).toMatchObject({
       sqlType: "uuid",
       notNull: true,
@@ -57,16 +57,16 @@ describe("collectTables", () => {
     });
 
     const landmarks = specs[2]!;
-    const fk2 = landmarks.columns.find((c) => c.name === "address_id");
-    expect(fk2).toMatchObject({ references: { table: "user__addresses", cascade: true } });
+    const fk2 = landmarks.columns.find((c) => c.name === "addresses_id");
+    expect(fk2).toMatchObject({ references: { table: "users__addresses", cascade: true } });
   });
 
   it("auto-indexes each parent FK", () => {
     expect(specs[1]!.indexes).toEqual([
-      { name: "user__addresses_user_id_idx", column: "user_id" },
+      { name: "users__addresses_users_id_idx", column: "users_id" },
     ]);
     expect(specs[2]!.indexes).toEqual([
-      { name: "user__addresses__landmarks_address_id_idx", column: "address_id" },
+      { name: "users__addresses__landmarks_addresses_id_idx", column: "addresses_id" },
     ]);
   });
 });
@@ -82,22 +82,22 @@ describe("emitEntity (owned tree)", () => {
         "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
         "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
         ");",
-        "CREATE TABLE user__addresses (",
+        "CREATE TABLE users__addresses (",
         "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
-        "  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
+        "  users_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,",
         "  street text NOT NULL,",
         "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
         "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
         ");",
-        "CREATE INDEX user__addresses_user_id_idx ON user__addresses (user_id);",
-        "CREATE TABLE user__addresses__landmarks (",
+        "CREATE INDEX users__addresses_users_id_idx ON users__addresses (users_id);",
+        "CREATE TABLE users__addresses__landmarks (",
         "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
-        "  address_id uuid NOT NULL REFERENCES user__addresses(id) ON DELETE CASCADE,",
+        "  addresses_id uuid NOT NULL REFERENCES users__addresses(id) ON DELETE CASCADE,",
         "  label text NOT NULL,",
         "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
         "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
         ");",
-        "CREATE INDEX user__addresses__landmarks_address_id_idx ON user__addresses__landmarks (address_id);",
+        "CREATE INDEX users__addresses__landmarks_addresses_id_idx ON users__addresses__landmarks (addresses_id);",
       ].join("\n"),
     );
   });
@@ -110,7 +110,7 @@ describe("owned 1:1 and table override", () => {
     });
     expect(collectTables(account).map((s) => s.name)).toEqual([
       "accounts",
-      "account__profile",
+      "accounts__profile",
     ]);
   });
 
@@ -128,6 +128,6 @@ describe("owned 1:1 and table override", () => {
     });
     const specs = collectTables(u);
     expect(specs[0]!.columns.find((c) => c.name === "tags")?.sqlType).toBe("text[]");
-    expect(specs.map((s) => s.name)).toEqual(["users", "user__pets"]);
+    expect(specs.map((s) => s.name)).toEqual(["users", "users__pets"]);
   });
 });

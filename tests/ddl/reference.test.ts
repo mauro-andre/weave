@@ -62,7 +62,7 @@ describe("reference read compile", () => {
       addresses: owned(array({ city: reference(city) })),
     });
     const sql = compileFind(u, { expand: { addresses: { city: true } } }).text;
-    expect(sql).toContain("'cityId', user__addresses.city_id");
-    expect(sql).toContain("FROM cities WHERE cities.id = user__addresses.city_id LIMIT 1");
+    expect(sql).toContain("'cityId', users__addresses.city_id");
+    expect(sql).toContain("FROM cities WHERE cities.id = users__addresses.city_id LIMIT 1");
   });
 });

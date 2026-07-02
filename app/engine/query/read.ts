@@ -17,7 +17,7 @@
  * Phase 3.
  */
 
-import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
 
 
 export interface FindOptions<E> {
@@ -95,7 +95,7 @@ function buildObject(
       const wantObj = select ? select[field] : expand?.[field];
       if (wantObj) {
         const t = value.target.name;
-        const targetObj = buildObject(t, singularize(t), value.target.columns, childExpand, childSelect);
+        const targetObj = buildObject(t, t, value.target.columns, childExpand, childSelect);
         parts.push(`'${field}', (SELECT ${targetObj} FROM ${t} WHERE ${t}.id = ${table}.${fkCol} LIMIT 1)`);
       }
     } else if (value instanceof Reference) {
@@ -106,7 +106,7 @@ function buildObject(
         const join = joinTableName(prefix, camelToSnake(field));
         const owningFk = ownedFkColumn(prefix);
         const targetFk = joinTargetFk(camelToSnake(field));
-        const targetObj = buildObject(t, singularize(t), value.target.columns, childExpand, childSelect);
+        const targetObj = buildObject(t, t, value.target.columns, childExpand, childSelect);
         parts.push(
           `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${t}.created_at), '[]'::json) ` +
             `FROM ${t} JOIN ${join} ON ${join}.${targetFk} = ${t}.id WHERE ${join}.${owningFk} = ${table}.id)`,
@@ -323,14 +323,14 @@ function compileWhere(
       }
     } else if (field instanceof Reference && field.cardinality === "one") {
       const t = field.target.name;
-      const inner = compileWhere(t, singularize(t), field.target.columns, val as Record<string, unknown>, params);
+      const inner = compileWhere(t, t, field.target.columns, val as Record<string, unknown>, params);
       conds.push(existsClause(t, `${t}.id = ${table}.${camelToSnake(key)}_id`, inner, false));
     } else if (field instanceof Reference) {
       const t = field.target.name;
       const join = joinTableName(prefix, camelToSnake(key));
       const from = `${t} JOIN ${join} ON ${join}.${joinTargetFk(camelToSnake(key))} = ${t}.id`;
       const correlate = `${join}.${ownedFkColumn(prefix)} = ${table}.id`;
-      conds.push(compileQuantifier(from, t, singularize(t), field.target.columns, val, params, correlate));
+      conds.push(compileQuantifier(from, t, t, field.target.columns, val, params, correlate));
     } else if (key.endsWith("Id")) {
       // `<field>Id` — filter a reference's FK directly, without a join.
       const base = key.slice(0, -2);
@@ -353,12 +353,12 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   options: FindOptions<E> = {},
 ): CompiledQuery {
   const table = entity.name;
-  const obj = buildObject(table, singularize(table), entity.columns, options.expand, options.select);
+  const obj = buildObject(table, table, entity.columns, options.expand, options.select);
 
   const params: unknown[] = [];
   const whereSql = compileWhere(
     table,
-    singularize(table),
+    table,
     entity.columns,
     (options.where ?? {}) as Record<string, unknown>,
     params,
@@ -369,7 +369,7 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   const lp = options.latestPer;
   const distinctExprs = lp && lp.length ? lp.map((k) => aggCol(table, entity.columns, k)) : null;
   const distinctOn = distinctExprs ? `DISTINCT ON (${distinctExprs.join(", ")}) ` : "";
-  const userOrder = compileOrderBy(table, singularize(table), entity.columns, options.orderBy);
+  const userOrder = compileOrderBy(table, table, entity.columns, options.orderBy);
   const orderBody = distinctExprs ? `${distinctExprs.join(", ")}, ${userOrder}` : userOrder;
 
   const lines = [`SELECT ${distinctOn}${obj} AS data`, `FROM ${table}`];
@@ -425,7 +425,7 @@ function orderScalar(
 
   if (field instanceof Reference && field.cardinality === "one") {
     const t = field.target.name;
-    const inner = orderScalar(t, singularize(t), field.target.columns, subKey, subVal);
+    const inner = orderScalar(t, t, field.target.columns, subKey, subVal);
     return {
       expr: `(SELECT ${inner.expr} FROM ${t} WHERE ${t}.id = ${table}.${camelToSnake(key)}_id LIMIT 1)`,
       dir: inner.dir,
@@ -454,7 +454,7 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
   const params: unknown[] = [];
   const whereSql = compileWhere(
     table,
-    singularize(table),
+    table,
     entity.columns,
     (where ?? {}) as Record<string, unknown>,
     params,
@@ -545,7 +545,7 @@ function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator
       throw new Error(`weave: unknown accumulator '${(acc as { agg?: string }).agg}'.`);
   }
   if (wRaw && Object.keys(wRaw).length) {
-    const f = compileWhere(table, singularize(table), shape, wRaw, params);
+    const f = compileWhere(table, table, shape, wRaw, params);
     if (f) base += ` FILTER (WHERE ${f})`;
   }
   return base;
@@ -576,7 +576,7 @@ function histogramSql(
   }
   const col = aggCol(table, shape, acc.field);
   const ph = bounds.map((b) => bind(params, b)); // fronteira → $N (bindada uma vez, reusada)
-  const w = where && Object.keys(where).length ? compileWhere(table, singularize(table), shape, where, params) : "";
+  const w = where && Object.keys(where).length ? compileWhere(table, table, shape, where, params) : "";
   const andW = w ? ` AND (${w})` : "";
   const bucket = (cond: string) => `count(*) FILTER (WHERE ${cond}${andW})`;
 
@@ -681,7 +681,7 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
   }
   if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
 
-  const whereSql = compileWhere(table, singularize(table), shape, (input.where ?? {}) as Record<string, unknown>, params);
+  const whereSql = compileWhere(table, table, shape, (input.where ?? {}) as Record<string, unknown>, params);
 
   // HAVING: mesmo shorthand escalar do `where`, mas o "campo" é a expressão do alias
   // (acumulador OU expressão, reusada de aliasExpr). `{ requests: { gte: 100 } }`

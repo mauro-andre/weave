@@ -106,12 +106,21 @@ describe("composite unique / index (entity-level)", () => {
 });
 
 describe("duplicate-column guard (scalar *Id vs link column)", () => {
-  it("owned-array com scalar terminando em Id → erro claro (não o cru do PG)", () => {
-    // child de `orders` ganha o FK `order_id`; o scalar `orderId` → `order_id` colide.
-    const e = defineEntity("orders", {
-      items: owned(array({ orderId: text().notNull(), sku: text().notNull() })),
+  it("owned-array com scalar terminando em Id agora funciona (FK plural não colide com o singular)", () => {
+    // O FK do child de `dbPresets` é `presets_id` (plural, de lastSegment) — NÃO colide
+    // com o scalar `presetId` → `preset_id`. O caso do PodCubo passou a materializar.
+    const e = defineEntity("dbPresets", {
+      presets: owned(array({ presetId: text().notNull(), name: text().notNull() })),
     });
-    expect(() => emitEntity(e)).toThrow(/duplicate column 'order_id'/);
+    expect(() => emitEntity(e)).not.toThrow();
+  });
+
+  it("owned-array cujo scalar bate no FK plural do child → aí sim erro claro", () => {
+    // child de `orders` ganha `orders_id`; um scalar `ordersId` → `orders_id` colide.
+    const e = defineEntity("orders", {
+      items: owned(array({ ordersId: text().notNull(), sku: text().notNull() })),
+    });
+    expect(() => emitEntity(e)).toThrow(/duplicate column 'orders_id'/);
   });
 
   it("reference + scalar homônimo (fooId) → mesmo guard", () => {

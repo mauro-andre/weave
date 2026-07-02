@@ -29,9 +29,9 @@ describe("select projection", () => {
   it("prunes an owned child to selected sub-fields", () => {
     expect(objOf({ select: { comments: { body: true } } })).toBe(
       "json_build_object('id', posts.id, 'comments', (SELECT coalesce(json_agg(" +
-        "json_build_object('id', post__comments.id, 'body', post__comments.body) " +
-        "ORDER BY post__comments.created_at), '[]'::json) " +
-        "FROM post__comments WHERE post__comments.post_id = posts.id))",
+        "json_build_object('id', posts__comments.id, 'body', posts__comments.body) " +
+        "ORDER BY posts__comments.created_at), '[]'::json) " +
+        "FROM posts__comments WHERE posts__comments.posts_id = posts.id))",
     );
   });
 
@@ -50,8 +50,8 @@ describe("select projection", () => {
 
   it("select: true on owned brings the full child", () => {
     expect(objOf({ select: { comments: true } })).toContain(
-      "json_build_object('id', post__comments.id, 'body', post__comments.body, " +
-        "'createdAt', post__comments.created_at, 'updatedAt', post__comments.updated_at)",
+      "json_build_object('id', posts__comments.id, 'body', posts__comments.body, " +
+        "'createdAt', posts__comments.created_at, 'updatedAt', posts__comments.updated_at)",
     );
   });
 });

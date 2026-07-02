@@ -2,7 +2,7 @@ import type { LoaderArgs } from "@mauroandre/velojs";
 import { useLoader, useParams, useNavigate, touch } from "@mauroandre/velojs/hooks";
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
-import { catalog, ownedChildTable, singularize, camelize, tableize, camelToSnake, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
+import { catalog, ownedChildTable, camelize, tableize, camelToSnake, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
 import { action_saveEntity, action_deleteEntity } from "./Entities.js";
 import { ReviewSheet } from "./ReviewSheet.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
@@ -193,7 +193,7 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
 function previewTables(name: string, fields: Field[], byName: Map<string, EntityIR>): string[] {
   const root = tableize(name); // igual ao DDL: nome lógico → tabela snake_case
   const out = [root];
-  walkOwned(fields, singularize(root), out, byName);
+  walkOwned(fields, root, out, byName);
   return out;
 }
 

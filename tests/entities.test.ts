@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages CASCADE`;
+        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -50,7 +50,7 @@ describe("entidades — criar e materializar", () => {
     await closeDb();
   });
 
-  it("salva o IR e materializa as tabelas (products + product__variants)", async () => {
+  it("salva o IR e materializa as tabelas (products + products__variants)", async () => {
     const res = await app.as({ user: master }).action(action_saveEntity, { body: { ir: productsIR } });
     expect(await res.json()).toMatchObject({ ok: true, name: "products" });
 
@@ -62,10 +62,10 @@ describe("entidades — criar e materializar", () => {
 
     const tables = await sql<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name IN ('products', 'product__variants')
+      WHERE table_schema = 'public' AND table_name IN ('products', 'products__variants')
       ORDER BY table_name
     `;
-    expect(tables.map((t) => t.table_name)).toEqual(["product__variants", "products"]);
+    expect(tables.map((t) => t.table_name)).toEqual(["products", "products__variants"]);
   });
 
   it("a tela de nova entidade renderiza com a seção Index (SSR)", async () => {
@@ -558,8 +558,9 @@ describe("entidades — criar e materializar", () => {
     expect((await res.json()).error).toBeTruthy();
   });
 
-  it("owned-array com scalar *Id colidente → erro claro, não o cru do Postgres", async () => {
-    // dbPresets → tabela db_presets; o child ganha o link `preset_id`, e `presetId` → `preset_id` colide.
+  it("owned-array com scalar *Id agora materializa (FK plural não colide com o singular)", async () => {
+    // dbPresets → tabela db_presets; o child ganha o link `presets_id` (plural), que NÃO
+    // colide com o scalar `presetId` → `preset_id`. O caso do PodCubo passou a funcionar.
     const res = await app.as({ user: master }).action(action_saveEntity, {
       body: {
         ir: {
@@ -578,9 +579,14 @@ describe("entidades — criar e materializar", () => {
         },
       },
     });
-    const err = (await res.json()).error as string;
-    expect(err).toMatch(/duplicate column/); // mensagem clara do Weave
-    expect(err).not.toMatch(/specified more than once/); // não vaza o erro cru do PG
+    expect((await res.json()).status).toBe("applied");
+    const sql = (await import("../app/engine/control-plane/db.js")).db();
+    const cols = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='db_presets__presets'`;
+    const names = cols.map((c) => c.column_name);
+    expect(names).toContain("presets_id"); // o link pro pai (plural)
+    expect(names).toContain("preset_id"); // o scalar presetId — coexistem
   });
 
   describe("único/índice composto (aplicação)", () => {

@@ -56,17 +56,17 @@ describe("reference N:1 nested filter", () => {
 describe("owned 1:N quantifiers", () => {
   it("some → EXISTS", () => {
     expect(whereOf({ where: { comments: { some: { approved: "yes" } } } }).where).toBe(
-      "EXISTS (SELECT 1 FROM post__comments WHERE post__comments.post_id = posts.id AND post__comments.approved = $1)",
+      "EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id AND posts__comments.approved = $1)",
     );
   });
   it("none → NOT EXISTS", () => {
     expect(whereOf({ where: { comments: { none: {} } } }).where).toBe(
-      "NOT EXISTS (SELECT 1 FROM post__comments WHERE post__comments.post_id = posts.id)",
+      "NOT EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id)",
     );
   });
   it("every → NOT EXISTS(... AND NOT ...)", () => {
     expect(whereOf({ where: { comments: { every: { approved: "yes" } } } }).where).toBe(
-      "NOT EXISTS (SELECT 1 FROM post__comments WHERE post__comments.post_id = posts.id AND NOT (post__comments.approved = $1))",
+      "NOT EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id AND NOT (posts__comments.approved = $1))",
     );
   });
 });
@@ -74,8 +74,8 @@ describe("owned 1:N quantifiers", () => {
 describe("reference N:N quantifier", () => {
   it("some → EXISTS over join", () => {
     expect(whereOf({ where: { tags: { some: { label: "sql" } } } }).where).toBe(
-      "EXISTS (SELECT 1 FROM tags JOIN post__tags ON post__tags.tag_id = tags.id " +
-        "WHERE post__tags.post_id = posts.id AND tags.label = $1)",
+      "EXISTS (SELECT 1 FROM tags JOIN posts__tags ON posts__tags.tags_id = tags.id " +
+        "WHERE posts__tags.posts_id = posts.id AND tags.label = $1)",
     );
   });
 });
@@ -88,8 +88,8 @@ describe("recursion + composition", () => {
       },
     });
     expect(where).toBe(
-      "(posts.title ILIKE $1 AND EXISTS (SELECT 1 FROM tags JOIN post__tags " +
-        "ON post__tags.tag_id = tags.id WHERE post__tags.post_id = posts.id AND tags.label = $2))",
+      "(posts.title ILIKE $1 AND EXISTS (SELECT 1 FROM tags JOIN posts__tags " +
+        "ON posts__tags.tags_id = tags.id WHERE posts__tags.posts_id = posts.id AND tags.label = $2))",
     );
   });
 });

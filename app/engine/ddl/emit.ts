@@ -17,7 +17,7 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize } from "@mauroandre/weave-core";
+import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 
@@ -214,7 +214,7 @@ function compositeColumn(shape: ShapeRecord, field: string): string {
 
 /** Flatten an entity into all its table specs, parent-first. Composites vão na raiz. */
 export function collectTables(entity: Entity<string, ShapeRecord>): TableSpec[] {
-  const specs = collect(entity.name, singularize(entity.name), entity.columns, undefined);
+  const specs = collect(entity.name, entity.name, entity.columns, undefined);
   const groups = (unique: boolean, list?: string[][]): CompositeSpec[] =>
     (list ?? []).map((g) => {
       const columns = g.map((f) => compositeColumn(entity.columns, f));

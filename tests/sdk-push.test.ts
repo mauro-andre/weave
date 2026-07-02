@@ -20,7 +20,7 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_preset__items, push_presets, stk_stacks, stk_workers CASCADE`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_presets__items, push_presets, stk_stacks, stk_workers CASCADE`;
         await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets','stk_stacks','stk_workers')`;
         await sql`DELETE FROM weave_api_keys`;
       },
@@ -136,8 +136,8 @@ describe("SDK entities push (F3)", () => {
     const sql = db();
     const tables = await sql<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema='public' AND table_name IN ('push_presets','push_preset__items')`;
-    expect(tables.map((t) => t.table_name).sort()).toEqual(["push_preset__items", "push_presets"]);
+      WHERE table_schema='public' AND table_name IN ('push_presets','push_presets__items')`;
+    expect(tables.map((t) => t.table_name).sort()).toEqual(["push_presets", "push_presets__items"]);
 
     // 3) CRIAÇÃO via SDK, com o array aninhado (accessor camelCase resolve pra a tabela snake)
     const weave = createClient({ ...opts(), entities: { pushPresets } });
@@ -154,7 +154,7 @@ describe("SDK entities push (F3)", () => {
 
     // 4) as linhas do array chegaram no child table (na BASE), ligadas ao pai
     const childRows = await sql<{ name: string; port: number }[]>`
-      SELECT name, port FROM push_preset__items ORDER BY port`;
+      SELECT name, port FROM push_presets__items ORDER BY port`;
     expect(childRows).toEqual([
       { name: "web", port: 80 },
       { name: "db", port: 5432 },

@@ -14,7 +14,7 @@
  * `reference` is not handled here (Phase 3).
  */
 
-import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, singularize, uuidv7 } from "@mauroandre/weave-core";
+import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, uuidv7 } from "@mauroandre/weave-core";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
 export interface Executor {
@@ -146,5 +146,5 @@ export function shred(
   entity: Entity<string, ShapeRecord>,
   input: Record<string, unknown>,
 ): Promise<string> {
-  return writeNode(exec, entity.name, singularize(entity.name), entity.columns, input, undefined);
+  return writeNode(exec, entity.name, entity.name, entity.columns, input, undefined);
 }

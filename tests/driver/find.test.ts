@@ -23,8 +23,8 @@ describe.skipIf(noDb)("find (weave read)", () => {
   beforeAll(async () => {
     db = weave({ url, entities: { user } });
     await db.sql`drop table if exists
-      weave_find_user__addresses__landmarks,
-      weave_find_user__addresses,
+      weave_find_users__addresses__landmarks,
+      weave_find_users__addresses,
       weave_find_users cascade`;
     await db.sync();
 
@@ -34,17 +34,17 @@ describe.skipIf(noDb)("find (weave read)", () => {
         insert into weave_find_users (name, email)
         values ('Mauro', 'm@x.com') returning id`;
       const [a] = await tx<{ id: string }[]>`
-        insert into weave_find_user__addresses (user_id, street)
+        insert into weave_find_users__addresses (users_id, street)
         values (${u!.id}, 'Rua X') returning id`;
-      await tx`insert into weave_find_user__addresses__landmarks (address_id, label)
+      await tx`insert into weave_find_users__addresses__landmarks (addresses_id, label)
         values (${a!.id}, 'Esquina')`;
     });
   });
 
   afterAll(async () => {
     await db.sql`drop table if exists
-      weave_find_user__addresses__landmarks,
-      weave_find_user__addresses,
+      weave_find_users__addresses__landmarks,
+      weave_find_users__addresses,
       weave_find_users cascade`;
     await db.close();
   });

@@ -2,7 +2,7 @@
  * Naming helpers shared by the DDL and query layers.
  */
 
-import { lastSegment, singularize } from "./inflect.js";
+import { lastSegment } from "./inflect.js";
 
 /**
  * Convert a camelCase identifier to snake_case.
@@ -77,11 +77,12 @@ export function ownedChildTable(
 }
 
 /**
- * FK column a child uses to point at its parent, from the parent's path prefix.
- * `"user"` → `user_id`; `"user_addresses"` → `address_id`.
+ * FK column a child uses to point at its parent, from the parent's path prefix
+ * (the last `_`-segment + `_id`). `"apps"` → `apps_id`; `"apps__detected_volumes"`
+ * → `volumes_id`. No pluralization heuristic — the name is derived as-is.
  */
 export function ownedFkColumn(parentPathPrefix: string): string {
-  return `${singularize(lastSegment(parentPathPrefix))}_id`;
+  return `${lastSegment(parentPathPrefix)}_id`;
 }
 
 /** Join table for an N:N reference (path joined with `__`): `("user", "cities")` → `user__cities`. */
@@ -89,7 +90,7 @@ export function joinTableName(pathPrefix: string, fieldSnake: string): string {
   return `${pathPrefix}__${fieldSnake}`;
 }
 
-/** Join-table FK to the target, from the (snake) field: `"cities"` → `city_id`. */
+/** Join-table FK to the target, from the (snake) field: `"cities"` → `cities_id`. */
 export function joinTargetFk(fieldSnake: string): string {
-  return `${singularize(fieldSnake)}_id`;
+  return `${fieldSnake}_id`;
 }
