@@ -12,7 +12,7 @@ export type {
   PageResult,
   FetchLike,
 } from "./client.js";
-export type { Infer, InferUpdate } from "./types.js";
+export type { Infer, InferWhere, InferPatch, InferOrderBy, InferUpdate } from "./types.js";
 export { pushEntities } from "./push.js";
 export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";
 export { defineConfig } from "./config.js";
@@ -75,6 +75,8 @@ export {
   type InferEntity,
   type InferRead,
   type InferInsert,
+  type WhereInput,
+  type OrderByInput,
   type AggregateInput,
   type FacetInput,
   type AggregateOutput,

@@ -58,6 +58,27 @@ await weave.order.findMany(
 );
 ```
 
+### Typing your own helpers
+
+Wrapping the client in service functions? Name the query types at the boundary with the
+`Infer*` aliases — no `as never`, no `Parameters<>`:
+
+```ts
+import type { InferWhere, InferPatch, InferOrderBy } from "@mauroandre/weave-sdk";
+import user from "./weave/entities/user.js";
+
+const getUser    = (where: InferWhere<typeof user>) => weave.user.findOne(where);
+const updateUser = (where: InferWhere<typeof user>, patch: InferPatch<typeof user>) =>
+  weave.user.updateOne(where, patch);
+
+// verifyEmail in one call — find by token, set verified, clear the code:
+await updateUser({ emailVerifyCode: token }, { emailVerified: true, emailVerifyCode: null });
+```
+
+The full family: `Infer` (read object) · `InferInsert` (create) · `InferPatch` (update) ·
+`InferWhere` · `InferOrderBy` · `InferRead<E, X>` (return shape for an `expand`). The raw
+`WhereInput` / `OrderByInput` are exported too.
+
 ## Aggregation
 
 Roll rows into numbers — counts, sums, percentiles, breakdowns — in one call, pushed
