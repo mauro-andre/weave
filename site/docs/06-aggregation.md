@@ -208,7 +208,7 @@ window — a `DROP TABLE`, not a row-by-row `DELETE` that would bloat under load
 run a cron or a cleanup job; it's internal to Weave. Reads (`findMany`, `aggregate`) span
 all partitions transparently — Postgres prunes by the `ts` predicate.
 
-Two things to know:
+Things to know:
 
 - **Append-only.** The partition key rides in the primary key (`(id, ts)`), so a
   partitioned entity is insert-only — ingest with `createMany`, never `updateOne`. That's
@@ -216,6 +216,14 @@ Two things to know:
 - **Past the window is skipped.** A row whose `ts` is already older than `retention` is
   dropped on ingest (its partition is gone) — `createMany` skips it and logs the count;
   a single `create` of such a row is a clear error.
+- **Partitions materialize on first write.** A brand-new partitioned table has *no*
+  partitions until the first row lands — the day's partition is created then, lazily. An
+  empty table showing zero partitions is expected, not a problem. Insert through Weave
+  (not a raw SQL `INSERT`), so it can create the partition the row needs.
+- **Buckets align to UTC.** A `"1d"` bucket is a UTC day, not a local-timezone day — the
+  same boundary `timeBucket("ts", "1d")` uses in `aggregate`, so the raw partitioned tier
+  and your rollups agree on what "a day" is. In practice a late-local-evening event can
+  land in the next UTC day's partition; that's intended.
 
 The partition field must be a `timestamptz().notNull()`. This is a general time-series
 capability — logs, metrics, events — not tied to any one domain.
