@@ -2,7 +2,7 @@ import type { LoaderArgs } from "@mauroandre/velojs";
 import { useLoader, useParams, useNavigate, touch } from "@mauroandre/velojs/hooks";
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
-import { catalog, ownedChildTable, singularize, slug, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
+import { catalog, ownedChildTable, singularize, camelize, tableize, camelToSnake, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
 import { action_saveEntity, action_deleteEntity } from "./Entities.js";
 import { ReviewSheet } from "./ReviewSheet.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
@@ -191,7 +191,7 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
 
 // ── Preview ao vivo das tabelas (espelha o collectTables; resolve mirrors) ────
 function previewTables(name: string, fields: Field[], byName: Map<string, EntityIR>): string[] {
-  const root = slug(name);
+  const root = tableize(name); // igual ao DDL: nome lógico → tabela snake_case
   const out = [root];
   walkOwned(fields, singularize(root), out, byName);
   return out;
@@ -200,7 +200,7 @@ function previewTables(name: string, fields: Field[], byName: Map<string, Entity
 function walkOwned(fields: Field[], prefix: string, out: string[], byName: Map<string, EntityIR>): void {
   for (const f of fields) {
     if ((f.family === "ownedOne" || f.family === "ownedMany") && f.name) {
-      const child = ownedChildTable(prefix, slug(f.name), undefined);
+      const child = ownedChildTable(prefix, camelToSnake(f.name), undefined);
       out.push(child);
       if (f.mirror) {
         const base = byName.get(f.mirror);
@@ -216,7 +216,7 @@ function walkOwned(fields: Field[], prefix: string, out: string[], byName: Map<s
 function walkIR(fields: Record<string, FieldIR>, prefix: string, out: string[], byName: Map<string, EntityIR>): void {
   for (const [name, node] of Object.entries(fields)) {
     if (node.kind !== "owned") continue;
-    const child = ownedChildTable(prefix, slug(name), node.table);
+    const child = ownedChildTable(prefix, camelToSnake(name), node.table);
     out.push(child);
     if (node.mirror) {
       const base = byName.get(node.mirror);
@@ -401,7 +401,7 @@ function FieldRow({
             <option value="">define fields here</option>
             {entities.map((ent) => (
               <option key={ent.name} value={ent.name}>
-                mirror: {ent.name}
+                mirror: {camelize(ent.name)}
               </option>
             ))}
           </select>
@@ -419,7 +419,7 @@ function FieldRow({
             <option value="">— choose entity —</option>
             {entities.map((ent) => (
               <option key={ent.name} value={ent.name}>
-                {ent.name}
+                {camelize(ent.name)}
               </option>
             ))}
           </select>
@@ -669,7 +669,7 @@ export const Component = () => {
 
   return (
     <Page
-      title={isNew ? "New entity" : `Entity: ${model.value.name}`}
+      title={isNew ? "New entity" : `Entity: ${camelize(model.value.name)}`}
       actions={
         <>
           {!isNew ? (
@@ -692,7 +692,7 @@ export const Component = () => {
         <input
           class={css.nameInput}
           placeholder="e.g. products"
-          value={model.value.name}
+          value={isNew ? model.value.name : camelize(model.value.name)}
           readOnly={!isNew}
           onInput={(e) => {
             model.value.name = (e.currentTarget as HTMLInputElement).value;
@@ -742,10 +742,10 @@ export const Component = () => {
 
       {confirmingDelete.value ? (
         <ConfirmModal
-          title={`Delete ${model.value.name}?`}
+          title={`Delete ${camelize(model.value.name)}?`}
           message={
             <>
-              This permanently drops <code>{model.value.name}</code> and{" "}
+              This permanently drops <code>{camelize(model.value.name)}</code> and{" "}
               <strong>all its tables and data</strong>. This can't be undone.
             </>
           }

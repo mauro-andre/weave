@@ -7,6 +7,7 @@ import { Select } from "../components/Select.js";
 import { FilterBar } from "./FilterBar.js";
 import { SortBar } from "./SortBar.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
+import { camelize } from "@mauroandre/weave-core";
 import type { ColumnIR, FieldIR } from "@mauroandre/weave-core";
 import type { ObjectPage } from "../engine/control-plane/data.js";
 import * as btn from "../styles/button.css.js";
@@ -159,7 +160,7 @@ export const Component = () => {
       ) : (
         <div class={css.picker}>
           <Select
-            options={entities.map((name) => ({ value: name, label: name }))}
+            options={entities.map((name) => ({ value: name, label: camelize(name) }))}
             value={sel ?? ""}
             onChange={(name) => load(name, 1, null, null)}
             placeholder="Select entity…"
@@ -345,7 +346,7 @@ function RootCard({
 
       {confirming.value ? (
         <ConfirmModal
-          title={`Delete this ${root}?`}
+          title={`Delete this ${camelize(root)}?`}
           message="This permanently deletes the object and its nested data. This can't be undone."
           confirmLabel="Delete"
           danger

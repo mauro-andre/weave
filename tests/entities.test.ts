@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -558,6 +558,31 @@ describe("entidades — criar e materializar", () => {
     expect((await res.json()).error).toBeTruthy();
   });
 
+  it("owned-array com scalar *Id colidente → erro claro, não o cru do Postgres", async () => {
+    // dbPresets → tabela db_presets; o child ganha o link `preset_id`, e `presetId` → `preset_id` colide.
+    const res = await app.as({ user: master }).action(action_saveEntity, {
+      body: {
+        ir: {
+          irVersion: 1,
+          name: "dbPresets",
+          fields: {
+            presets: {
+              kind: "owned",
+              array: true,
+              shape: {
+                presetId: { kind: "column", type: "text", notNull: true },
+                name: { kind: "column", type: "text", notNull: true },
+              },
+            },
+          },
+        },
+      },
+    });
+    const err = (await res.json()).error as string;
+    expect(err).toMatch(/duplicate column/); // mensagem clara do Weave
+    expect(err).not.toMatch(/specified more than once/); // não vaza o erro cru do PG
+  });
+
   describe("único/índice composto (aplicação)", () => {
     const saveIR = (ir: object, extra: object = {}) =>
       app.as({ user: master }).action(action_saveEntity, { body: { ir, ...extra } });
@@ -702,6 +727,15 @@ describe("entidades — criar e materializar", () => {
       expect(novo).not.toContain(">Delete<");
       const edit = await (await app.as({ user: master }).get("/entities/products")).text();
       expect(edit).toContain(">Delete<");
+    });
+
+    it("designer exibe a entity em camelCase (nome lógico) + tabela snake no preview (SSR)", async () => {
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: { ir: { irVersion: 1, name: "backupStorages", fields: { label: { kind: "column", type: "text" } } } },
+      });
+      const html = await (await app.as({ user: master }).get("/entities/backup_storages")).text();
+      expect(html).toContain("backupStorages"); // nome lógico no título/input
+      expect(html).toContain("backup_storages"); // a TABELA aparece no preview "Tables to be created"
     });
   });
 });

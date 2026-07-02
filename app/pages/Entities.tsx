@@ -2,7 +2,7 @@ import type { ActionArgs, LoaderArgs } from "@mauroandre/velojs";
 import { Link } from "@mauroandre/velojs";
 import { useLoader } from "@mauroandre/velojs/hooks";
 import { Page } from "../components/Page.js";
-import type { EntityIR } from "@mauroandre/weave-core";
+import { camelize, type EntityIR } from "@mauroandre/weave-core";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Entities.css.js";
 
@@ -65,7 +65,7 @@ export const Component = () => {
         <div class={css.list}>
           {entities.map((e) => (
             <Link key={e.name} to={`~/entities/${e.name}`} class={css.item}>
-              {e.name}
+              {camelize(e.name)}
             </Link>
           ))}
         </div>

@@ -104,3 +104,24 @@ describe("composite unique / index (entity-level)", () => {
     ).toThrow(/owned/);
   });
 });
+
+describe("duplicate-column guard (scalar *Id vs link column)", () => {
+  it("owned-array com scalar terminando em Id → erro claro (não o cru do PG)", () => {
+    // child de `orders` ganha o FK `order_id`; o scalar `orderId` → `order_id` colide.
+    const e = defineEntity("orders", {
+      items: owned(array({ orderId: text().notNull(), sku: text().notNull() })),
+    });
+    expect(() => emitEntity(e)).toThrow(/duplicate column 'order_id'/);
+  });
+
+  it("reference + scalar homônimo (fooId) → mesmo guard", () => {
+    const target = defineEntity("targets", { name: text().notNull() });
+    const e = defineEntity("things", { foo: reference(target), fooId: text() });
+    expect(() => emitEntity(e)).toThrow(/duplicate column 'foo_id'/);
+  });
+
+  it("scalar *Id sem link homônimo passa (caso normal de entity raiz)", () => {
+    const e = defineEntity("dns", { zoneId: text().notNull(), accountId: text().notNull() });
+    expect(() => emitEntity(e)).not.toThrow();
+  });
+});

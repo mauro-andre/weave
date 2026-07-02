@@ -185,6 +185,22 @@ function collect(
     { name: "updated_at", sqlType: TIMESTAMP_SQL, notNull: true, default: "now()" },
   );
 
+  // Guard: duas colunas com o mesmo nome fariam o Postgres estourar um "specified more
+  // than once" cru. Acontece quando um scalar termina em `Id` e colide com uma coluna
+  // gerada — o link `<pai>_id` de um owned, ou o `<ref>_id` de uma reference. Erro claro
+  // ANTES do SQL, apontando a causa (o nome de tabela ajuda a localizar o owned).
+  const seen = new Set<string>();
+  for (const c of columns) {
+    if (seen.has(c.name)) {
+      throw new Error(
+        `weave: duplicate column '${c.name}' in table '${tableName}'. A field ending in 'Id' ` +
+          `collides with a generated link column (an owned list's '<parent>_id', or a reference's '<field>_id'). ` +
+          `Rename the field (e.g. drop the 'Id' suffix).`,
+      );
+    }
+    seen.add(c.name);
+  }
+
   return [{ name: tableName, columns, indexes }, ...children];
 }
 
