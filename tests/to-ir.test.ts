@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toIR, fromIR, type EntityIR } from "@mauroandre/weave-core";
-import { defineEntity, text, int4, owned, reference, array } from "../app/engine/index.js";
+import { defineEntity, text, int4, owned, mirror, reference, array } from "../app/engine/index.js";
 
 // `toIR` é o caminho de IDA (Entity → IR), inverso do `fromIR`. Testes puros, sem
 // banco. Duas direções: (1) round-trip IR→fromIR→toIR reproduz o IR canônico;
@@ -155,5 +155,32 @@ describe("composite unique / index — to/from IR + normalize + diff", () => {
     // reorder das colunas = grupo diferente → drop do antigo + add do novo.
     const reordered = diffEntityIR(withUq, { ...base, unique: [["b", "a"]] }).changes;
     expect(reordered.map((c) => c.op).sort()).toEqual(["addCompositeUnique", "dropCompositeUnique"]);
+  });
+});
+
+describe("mirror() builder → IR (owned que espelha outra entity)", () => {
+  const product = defineEntity("product", { name: text().notNull(), price: int4() });
+
+  it("owned(mirror(base)) 1:1 puro → { owned, mirror, sem shape }", () => {
+    const e = defineEntity("snapshot", { item: owned(mirror(product)) });
+    expect(toIR(e).fields.item).toEqual({ kind: "owned", array: false, mirror: "product" });
+  });
+
+  it("owned(array(mirror(base, { extras }))) 1:N → mirror + só os campos LOCAIS no shape", () => {
+    const order = defineEntity("order", {
+      items: owned(array(mirror(product, { quantity: int4().notNull() }))),
+    });
+    expect(toIR(order).fields.items).toEqual({
+      kind: "owned",
+      array: true,
+      mirror: "product",
+      shape: { quantity: { kind: "column", type: "int4", notNull: true } },
+    });
+  });
+
+  it("mirror pega o nome do ENTITY-alvo (não string)", () => {
+    // `mirror(product)` usa product.name — igual reference(product).
+    const e = defineEntity("s", { m: owned(mirror(product)) });
+    expect((toIR(e).fields.m as { mirror: string }).mirror).toBe("product");
   });
 });

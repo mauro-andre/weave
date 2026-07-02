@@ -67,6 +67,28 @@ export default defineEntity("order", {
 });
 ```
 
+## Mirror — snapshot another entity's shape
+
+`mirror(base)` copies another entity's fields into an owned child — a **snapshot**
+that won't change when the base changes. Add local fields alongside it. Like
+`reference`, it takes the entity, not its name:
+
+```ts
+import { defineEntity, text, int4, owned, array, mirror } from "@mauroandre/weave-sdk";
+import product from "./product.js";
+
+export default defineEntity("order", {
+  code: text().notNull(),
+  // each item snapshots `product` (name, price, …) and adds a local `quantity`:
+  items: owned(array(mirror(product, { quantity: int4().notNull() }))),
+});
+```
+
+`owned(mirror(base))` for 1:1, `owned(array(mirror(base)))` for a 1:N set. The item's
+type is the **base's fields ∩ your extras**, so `create({ items: [{ name, price,
+quantity }] })` is fully typed. Use it for line-item snapshots that must stay frozen
+even if the source product later changes.
+
 ## References — association
 
 A **reference** points at another independent entity — shared, never owned:

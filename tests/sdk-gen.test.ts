@@ -50,6 +50,33 @@ describe("SDK codegen — irToSource", () => {
     expect(src).toContain('owned(array({ qty: int4().notNull().$id("fid-qty") })).$id("fid-items")');
   });
 
+  it("mirror: gera owned(array(mirror(Base, { extras }))) + importa a base + sem aviso", () => {
+    const ir = {
+      irVersion: 1,
+      name: "orders",
+      fields: {
+        items: {
+          kind: "owned",
+          array: true,
+          mirror: "products",
+          shape: { quantity: { kind: "column", type: "int4", notNull: true } },
+        },
+      },
+    } as const;
+    const src = irToSource(ir as never);
+    expect(src).toContain("owned(array(mirror(products, { quantity: int4().notNull() })))");
+    expect(src).toContain('import products from "./products.js"'); // a base pelo nome lógico
+    expect(src).not.toMatch(/write\/edit the shape by hand/); // aviso antigo sumiu
+    const importLine = src.split("\n").find((l) => l.startsWith("import {"))!;
+    for (const b of ["owned", "array", "mirror"]) expect(importLine).toContain(b);
+  });
+
+  it("mirror 1:1 puro (sem extras) → owned(mirror(Base))", () => {
+    const ir = { irVersion: 1, name: "snap", fields: { p: { kind: "owned", array: false, mirror: "products" } } } as const;
+    const src = irToSource(ir as never);
+    expect(src).toContain("owned(mirror(products))");
+  });
+
   it("importa `array` quando SÓ um owned(array({…})) usa (sem scalar-array pra mascarar)", () => {
     const ownedArrayIr = {
       irVersion: 1,

@@ -8,8 +8,10 @@ export {
 export * from "./scalars.js";
 export {
   owned,
+  mirror,
   Owned,
   OwnedArray,
+  Mirror,
   type AnyOwned,
   type OwnedShape,
   type OwnedCardinality,

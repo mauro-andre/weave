@@ -7,7 +7,7 @@
 
 import { catalog } from "../types/registry.js";
 import { Column, scalarColumn, type AnyColumn } from "./column.js";
-import { OwnedArray, type OwnedShape } from "./owned.js";
+import { OwnedArray, Mirror, type OwnedShape } from "./owned.js";
 import { ReferenceArray } from "./reference.js";
 import type { Entity, ShapeRecord } from "./entity.js";
 
@@ -58,9 +58,10 @@ export function array<TData>(
   inner: Column<TData, boolean, boolean>,
 ): Column<TData[], true, true>;
 export function array<T extends Entity<string, ShapeRecord>>(target: T): ReferenceArray<T>;
+export function array<TShape extends OwnedShape>(m: Mirror<TShape>): OwnedArray<TShape>;
 export function array<TShape extends OwnedShape>(shape: TShape): OwnedArray<TShape>;
 export function array(
-  arg: Column<unknown, boolean, boolean> | Entity<string, ShapeRecord> | OwnedShape,
+  arg: Column<unknown, boolean, boolean> | Entity<string, ShapeRecord> | Mirror<OwnedShape> | OwnedShape,
 ): Column<unknown[], true, true> | ReferenceArray<Entity<string, ShapeRecord>> | OwnedArray<OwnedShape> {
   if (arg instanceof Column) {
     return new Column<unknown[], true, true>({
@@ -72,6 +73,10 @@ export function array(
       unique: false,
       index: false,
     });
+  }
+  // `array(mirror(base, { extras }))` → 1:N mirror set (carries the base's name).
+  if (arg instanceof Mirror) {
+    return new OwnedArray(arg.extra, arg.mirrorName);
   }
   // An Entity has a string `name` and an object `columns`; a shape does not.
   const candidate = arg as { name?: unknown; columns?: unknown };

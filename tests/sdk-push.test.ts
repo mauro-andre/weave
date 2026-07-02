@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { pushEntities, genProject, createClient, defineEntity, text, int4, reference, owned, array } from "@mauroandre/weave-sdk";
+import { pushEntities, genProject, createClient, defineEntity, text, int4, reference, owned, array, mirror } from "@mauroandre/weave-sdk";
 
 // F3: entities.push — entities-as-code → /admin/entities (plan/apply), em ordem de
 // dependência, devolvendo applied / review (plano por risco). Via app.hono.fetch.
@@ -20,8 +20,8 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_presets__items, push_presets, stk_stacks, stk_workers CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets','stk_stacks','stk_workers')`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_presets__items, push_presets, stk_stacks, stk_workers, mir_carts__items, mir_carts, mir_products CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets','stk_stacks','stk_workers','mir_carts','mir_products')`;
         await sql`DELETE FROM weave_api_keys`;
       },
       getSessionCookie: async ({ user }) => {
@@ -208,6 +208,57 @@ describe("SDK entities push (F3)", () => {
     const after = await weave.stkStacks.findOne({ id: s.id });
     expect(after?.migratingFromId).toBeNull();
     expect(after?.workerId).toBe(B.id); // a outra ref não foi afetada
+  });
+
+  it("mirror(entity): push (SDK) → materializa a base + extras no child → CRUD → gen round-trip", async () => {
+    const products = defineEntity("mirProducts", { name: text().notNull(), price: int4().notNull() });
+    const carts = defineEntity("mirCarts", {
+      code: text().notNull(),
+      // espelha `products` (name, price) + campo local `quantity`, 1:N.
+      items: owned(array(mirror(products, { quantity: int4().notNull() }))),
+    });
+
+    // 1) PUSH via SDK
+    const res = await pushEntities({ mirProducts: products, mirCarts: carts }, opts());
+    expect(res.review).toEqual([]);
+
+    // 2) o child materializou a forma ESPELHADA (name, price) + o extra (quantity)
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const cols = await sql<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='mir_carts__items'`;
+    const names = cols.map((c) => c.column_name);
+    for (const c of ["name", "price", "quantity"]) expect(names).toContain(c); // base + extra
+
+    // 3) CRIA via SDK com a forma mesclada (base + extra), tipado
+    const weave = createClient({ ...opts(), entities: { mirProducts: products, mirCarts: carts } });
+    const cart = await weave.mirCarts.create({
+      code: "C1",
+      items: [
+        { name: "Widget", price: 100, quantity: 2 },
+        { name: "Gadget", price: 50, quantity: 1 },
+      ],
+    });
+    expect(cart.items).toHaveLength(2);
+
+    // 4) as linhas foram pra o child com base + extra (na BASE)
+    const rows = await sql<{ name: string; price: number; quantity: number }[]>`
+      SELECT name, price, quantity FROM mir_carts__items ORDER BY price DESC`;
+    expect(rows).toEqual([
+      { name: "Widget", price: 100, quantity: 2 },
+      { name: "Gadget", price: 50, quantity: 1 },
+    ]);
+
+    // 5) leitura de volta
+    const found = await weave.mirCarts.findOne({ code: "C1" });
+    expect(found?.items.map((i) => i.name).sort()).toEqual(["Gadget", "Widget"]);
+
+    // 6) GEN: o arquivo gerado usa owned(array(mirror(...))) e importa a base
+    const { files } = await genProject(opts());
+    const src = files["entities/mirCarts.ts"]!;
+    expect(src).toContain("owned(array(mirror(mirProducts");
+    expect(src).toContain('from "./mirProducts.js"');
   });
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {

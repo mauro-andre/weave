@@ -14,7 +14,6 @@ import type { FetchLike } from "./client.js";
 interface GenCtx {
   builders: Set<string>; // construtores/helpers usados (text, owned, reference, array…)
   imports: Set<string>; // entidades-alvo de reference (pra importar)
-  mirror: boolean; // owned com mirror — o builder não tem `mirror()` (limitação)
   withId: boolean; // emitir `.$id(...)` (rename-safe) — ligado pelo `weave gen`
 }
 
@@ -48,9 +47,17 @@ function baseExpr(node: FieldIR, ctx: GenCtx, self: string): string {
     return `reference(${target})${node.notNull ? ".notNull()" : ""}`;
   }
   // owned
-  if (node.mirror) ctx.mirror = true; // sem builder de mirror — gera o shape concreto (vazio se só mirror)
   ctx.builders.add("owned");
-  if (node.array) ctx.builders.add("array"); // owned(array({…})) usa `array` — precisa importar
+  if (node.array) ctx.builders.add("array"); // owned(array(…)) usa `array` — precisa importar
+  if (node.mirror) {
+    // Mirror: `owned(mirror(Base, { extras }))` — a base pelo nome lógico, + campos locais.
+    ctx.builders.add("mirror");
+    const target = camelize(node.mirror);
+    if (node.mirror !== self) ctx.imports.add(target);
+    const extras = node.shape && Object.keys(node.shape).length ? shapeSource(node.shape, ctx, self) : "";
+    const m = extras ? `mirror(${target}, { ${extras} })` : `mirror(${target})`;
+    return node.array ? `owned(array(${m}))` : `owned(${m})`;
+  }
   const inner = shapeSource(node.shape ?? {}, ctx, self);
   return node.array ? `owned(array({ ${inner} }))` : `owned({ ${inner} })`;
 }
@@ -74,7 +81,7 @@ export interface IrToSourceOptions {
 
 /** Gera o source `export default defineEntity(...)` de UMA entidade (com imports). */
 export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): string {
-  const ctx: GenCtx = { builders: new Set(), imports: new Set(), mirror: false, withId: options.withId ?? false };
+  const ctx: GenCtx = { builders: new Set(), imports: new Set(), withId: options.withId ?? false };
   const body = Object.entries(ir.fields)
     .map(([k, n]) => `  ${k}: ${fieldSource(n, ctx, ir.name)},`)
     .join("\n");
@@ -82,7 +89,6 @@ export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): strin
   const builders = ["defineEntity", ...[...ctx.builders].sort()];
   const lines = [`import { ${builders.join(", ")} } from "@mauroandre/weave-sdk";`];
   for (const t of [...ctx.imports].sort()) lines.push(`import ${t} from "./${t}.js";`);
-  if (ctx.mirror) lines.push(`// ⚠ This entity uses a mirror — write/edit the shape by hand (the builder has no mirror()).`);
   lines.push("", `export default defineEntity(${JSON.stringify(camelize(ir.name))}, {`, body, `}${optsSource(ir)});`, "");
   return lines.join("\n");
 }

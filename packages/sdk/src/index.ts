@@ -35,6 +35,7 @@ export {
 export {
   defineEntity,
   owned,
+  mirror,
   reference,
   array,
   // construtores de coluna (escalares)

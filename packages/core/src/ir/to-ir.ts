@@ -56,12 +56,16 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
     return ir;
   }
   if (node instanceof Owned) {
-    const ir: OwnedIR = {
-      kind: "owned",
-      array: node.cardinality === "many",
-      shape: shapeToIR(node.shape),
-    };
+    const ir: OwnedIR = { kind: "owned", array: node.cardinality === "many" };
     if (node.id) ir.id = node.id;
+    if (node.mirrorName) {
+      // Mirror: emite o alvo + só os campos LOCAIS (extras); a base é resolvida no sync.
+      ir.mirror = node.mirrorName;
+      const extras = shapeToIR(node.shape);
+      if (Object.keys(extras).length) ir.shape = extras;
+    } else {
+      ir.shape = shapeToIR(node.shape);
+    }
     if (node.options.table !== undefined) ir.table = node.options.table;
     return ir;
   }
