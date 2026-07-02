@@ -20,8 +20,8 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_preset__items, push_presets CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets')`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_preset__items, push_presets, stk_stacks, stk_workers CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets','stk_stacks','stk_workers')`;
         await sql`DELETE FROM weave_api_keys`;
       },
       getSessionCookie: async ({ user }) => {
@@ -171,6 +171,43 @@ describe("SDK entities push (F3)", () => {
     const importLine = src.split("\n").find((l) => l.startsWith("import {"))!;
     expect(importLine).toContain("array");
     expect(importLine).toContain("owned");
+  });
+
+  it("updateOne troca/limpa FK de reference que já tem valor (múltiplas refs pro mesmo alvo)", async () => {
+    // duas refs pro MESMO entity (worker + migratingFrom → workers) — o caso do PodCubo.
+    const workers = defineEntity("stkWorkers", { name: text().notNull() });
+    const stacks = defineEntity("stkStacks", {
+      name: text().notNull(),
+      worker: reference(workers),
+      migratingFrom: reference(workers),
+    });
+    await pushEntities({ stkWorkers: workers, stkStacks: stacks }, opts());
+    const weave = createClient({ ...opts(), entities: { stkWorkers: workers, stkStacks: stacks } });
+
+    const A = await weave.stkWorkers.create({ name: "A" });
+    const B = await weave.stkWorkers.create({ name: "B" });
+
+    // create com FK (uma das duas refs pro mesmo alvo)
+    const s = await weave.stkStacks.create({ name: "s", workerId: A.id });
+    expect(s.workerId).toBe(A.id);
+
+    // ❌→✅ trocar um FK que JÁ tem valor: worker A → B (era no-op silencioso)
+    await weave.stkStacks.updateOne({ id: s.id }, { workerId: B.id });
+    expect((await weave.stkStacks.findOne({ id: s.id }))?.workerId).toBe(B.id);
+    // confirma NA BASE (não só no read)
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const rows = await db()<{ worker_id: string }[]>`SELECT worker_id FROM stk_stacks WHERE id = ${s.id}`;
+    expect(rows[0]?.worker_id).toBe(B.id);
+
+    // null → valor (setar a outra ref que estava null)
+    await weave.stkStacks.updateOne({ id: s.id }, { migratingFromId: A.id });
+    expect((await weave.stkStacks.findOne({ id: s.id }))?.migratingFromId).toBe(A.id);
+
+    // valor → null (limpar FK que tinha valor)
+    await weave.stkStacks.updateOne({ id: s.id }, { migratingFromId: null });
+    const after = await weave.stkStacks.findOne({ id: s.id });
+    expect(after?.migratingFromId).toBeNull();
+    expect(after?.workerId).toBe(B.id); // a outra ref não foi afetada
   });
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {

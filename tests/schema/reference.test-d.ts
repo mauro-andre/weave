@@ -45,7 +45,7 @@ describe("reference insert inference", () => {
       id?: string;
       name: string;
       homeCityId: string; // required (notNull)
-      cityId?: string; // optional (nullable)
+      cityId?: string | null; // optional + nullable — pode setar null pra limpar a ref
     }>();
   });
 

@@ -210,7 +210,11 @@ function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unkn
     if (node.kind === "reference") {
       const v = obj[name];
       if (node.cardinality === "one") {
-        if (v && typeof v === "object") obj[`${name}Id`] = (v as { id?: unknown }).id;
+        // O FK EXPLÍCITO (`<field>Id`, ex.: o patch de updateOne) tem precedência sobre a
+        // reference expandida — o objeto `<field>` só vem de um read (refs são read-only na
+        // edição). Derivar dele só quando NÃO há `<field>Id`; senão trocar/limpar um FK que
+        // já tem valor virava no-op silencioso (o objeto antigo re-derivava o id velho).
+        if (v && typeof v === "object" && obj[`${name}Id`] === undefined) obj[`${name}Id`] = (v as { id?: unknown }).id;
       } else if (Array.isArray(v)) {
         obj[`${name}Ids`] = v.map((x) => (x as { id?: unknown })?.id).filter(Boolean);
       }

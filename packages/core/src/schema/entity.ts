@@ -216,12 +216,12 @@ type InsertBody<TShape> = Prettify<
         : never
       : never]: string;
   } & {
-    // nullable N:1 reference → optional `<field>Id`.
+    // nullable N:1 reference → optional `<field>Id`, aceitando `null` (limpar a ref).
     [K in keyof TShape as IsRefOne<TShape[K]> extends true
       ? RefNotNull<TShape[K]> extends true
         ? never
         : `${K & string}Id`
-      : never]?: string;
+      : never]?: string | null;
   } & {
     // N:N reference → optional `<field>Ids` (the link set; absent = empty).
     [K in keyof TShape as IsRefMany<TShape[K]> extends true
