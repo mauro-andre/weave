@@ -35,7 +35,8 @@ export function fromIR(irs: EntityIR[]): Record<string, AnyEntity> {
 function buildShape(fields: Record<string, FieldIR>, map: Record<string, AnyEntity>): OwnedShape {
   const shape: Record<string, unknown> = {};
   for (const [key, node] of Object.entries(fields)) {
-    shape[key] = buildNode(node, map);
+    const built = buildNode(node, map);
+    if (built !== null) shape[key] = built; // referência pendurada (alvo deletado) → omitida
   }
   return shape as OwnedShape;
 }
@@ -54,7 +55,10 @@ function buildNode(node: FieldIR, map: Record<string, AnyEntity>) {
   }
   if (node.kind === "reference") {
     const target = map[node.target];
-    if (!target) throw new Error(`IR — reference to unknown entity: '${node.target}'.`);
+    // Alvo inexistente = referência PENDURADA (a entity-alvo foi deletada). Em vez de
+    // estourar — o que travaria TODA operação (a coluna FK já perdeu a constraint no
+    // DROP CASCADE) — omitimos o campo. O consumidor pode limpar editando a entity.
+    if (!target) return null;
     return new Reference(target, node.cardinality, node.notNull ?? false);
   }
   return new Owned(

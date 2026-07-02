@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets CASCADE`;
+        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -742,6 +742,36 @@ describe("entidades — criar e materializar", () => {
       const html = await (await app.as({ user: master }).get("/entities/backup_storages")).text();
       expect(html).toContain("backupStorages"); // nome lógico no título/input
       expect(html).toContain("backup_storages"); // a TABELA aparece no preview "Tables to be created"
+    });
+
+    it("deletar uma entity REFERENCIADA não trava as operações seguintes (ref pendurada tolerada)", async () => {
+      // "apps" é referenciada por "stacks".
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: { ir: { irVersion: 1, name: "apps", fields: { name: { kind: "column", type: "text", notNull: true } } } },
+      });
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: {
+          ir: {
+            irVersion: 1,
+            name: "stacks",
+            fields: {
+              name: { kind: "column", type: "text", notNull: true },
+              app: { kind: "reference", target: "apps", cardinality: "one" },
+            },
+          },
+        },
+      });
+
+      // deleta "apps" (referenciada) — ok
+      const d1 = await app.as({ user: master }).action(action_deleteEntity, { body: { name: "apps" } });
+      expect((await d1.json()).ok).toBe(true);
+
+      // agora deletar OUTRA entity ("stacks", que tinha a ref pendurada pra "apps") NÃO pode
+      // estourar "reference to unknown entity: 'apps'".
+      const d2 = await app.as({ user: master }).action(action_deleteEntity, { body: { name: "stacks" } });
+      const j2 = await d2.json();
+      expect(j2.error).toBeUndefined();
+      expect(j2.ok).toBe(true);
     });
   });
 });
