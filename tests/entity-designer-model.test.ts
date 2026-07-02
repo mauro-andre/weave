@@ -64,3 +64,61 @@ describe("EntityDesigner — compostos IR ↔ model", () => {
     expect(back.index).toBeUndefined();
   });
 });
+
+describe("EntityDesigner — partição IR ↔ model", () => {
+  const partIr: EntityIR = {
+    irVersion: 1,
+    name: "appReq",
+    fields: {
+      host: { kind: "column", id: "h", type: "text", notNull: true },
+      ts: { kind: "column", id: "t", type: "timestamptz", notNull: true },
+    },
+    partitionBy: { field: "ts", interval: "1d" },
+    retention: "30d",
+  };
+
+  it("irToModel liga a partição, mapeia o campo→id e separa o bucket/retenção", () => {
+    const m = irToModel(partIr);
+    expect(m.partition.enabled).toBe(true);
+    expect(m.partition.fieldId).toBe("t"); // ts → id
+    expect(m.partition.interval).toBe("1d");
+    expect(m.partition.keepForever).toBe(false);
+    expect(m.partition.retention).toBe("30d");
+  });
+
+  it("round-trip estável reproduz partitionBy + retention", () => {
+    const back = toIR(irToModel(partIr));
+    expect(back.partitionBy).toEqual({ field: "ts", interval: "1d" });
+    expect(back.retention).toBe("30d");
+  });
+
+  it("partitionBy sem retention → keepForever (modo 2), e volta sem retention", () => {
+    const { retention, ...noRet } = partIr; // omite a chave (não seta undefined)
+    void retention;
+    const m = irToModel(noRet);
+    expect(m.partition.keepForever).toBe(true);
+    const back = toIR(m);
+    expect(back.partitionBy).toEqual({ field: "ts", interval: "1d" });
+    expect(back.retention).toBeUndefined();
+  });
+
+  it("rename-proof: renomear o campo de tempo re-emite o partitionBy com o nome novo", () => {
+    const m = irToModel(partIr);
+    m.fields.find((f) => f.id === "t")!.name = "eventAt"; // rename via GUI
+    expect(toIR(m).partitionBy).toEqual({ field: "eventAt", interval: "1d" });
+  });
+
+  it("campo não-elegível (não é timestamptz notNull) não emite partitionBy", () => {
+    const m = irToModel(partIr);
+    m.fields.find((f) => f.id === "t")!.notNull = false; // deixa de ser elegível
+    expect(toIR(m).partitionBy).toBeUndefined();
+  });
+
+  it("desligada → sem partitionBy/retention no IR", () => {
+    const m = irToModel(partIr);
+    m.partition.enabled = false;
+    const back = toIR(m);
+    expect(back.partitionBy).toBeUndefined();
+    expect(back.retention).toBeUndefined();
+  });
+});

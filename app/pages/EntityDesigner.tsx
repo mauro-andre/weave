@@ -35,10 +35,23 @@ interface Composite {
   fieldIds: string[];
 }
 
+// Partição por tempo (nível da entidade). `fieldId` aponta o campo temporal por id
+// (rename-proof). `partitionBy` (ligar/campo/bucket) é ESTRUTURAL → só na criação; a
+// `retention` é um knob de runtime, editável a qualquer hora. `keepForever` = particiona
+// mas nunca dropa (modo 2).
+interface Partition {
+  enabled: boolean;
+  fieldId: string;
+  interval: string; // bucket: "1h" · "6h" · "12h" · "1d" · "7d"
+  keepForever: boolean;
+  retention: string; // ex.: "30d" — usado quando !keepForever
+}
+
 interface EntityModel {
   name: string;
   fields: Field[];
   composites: Composite[];
+  partition: Partition;
 }
 
 interface LoaderData {
@@ -63,6 +76,23 @@ const newField = (): Field => ({
 });
 
 const newComposite = (): Composite => ({ id: crypto.randomUUID(), kind: "unique", fieldIds: [] });
+
+const newPartition = (): Partition => ({ enabled: false, fieldId: "", interval: "1d", keepForever: false, retention: "30d" });
+const emptyModel = (): EntityModel => ({ name: "", fields: [], composites: [], partition: newPartition() });
+
+// Buckets oferecidos + unidades de retenção. 1d é o default (alinha em meia-noite UTC);
+// 7d é "blocos de 7 dias do epoch", não semana de calendário.
+const BUCKETS = ["1h", "6h", "12h", "1d", "7d"];
+const RET_UNITS = ["min", "h", "d"];
+const RET_RE = /^(\d+)(s|min|h|d)$/;
+const retNum = (r: string): string => RET_RE.exec(r)?.[1] ?? "";
+const retUnit = (r: string): string => RET_RE.exec(r)?.[2] ?? "d";
+
+// Campos elegíveis pra chave de partição: coluna escalar `timestamptz` **notNull** (a
+// chave de RANGE não pode ser nula). Espelha a validação do `defineEntity`.
+function partitionEligibleFields(fields: Field[]): Field[] {
+  return fields.filter((f) => f.name.trim() !== "" && f.family === "scalar" && f.type === "timestamptz" && f.notNull);
+}
 
 // Campos elegíveis pra um composto: coluna escalar (ou lista) ou reference N:1 — nunca
 // owned nem N:N (espelha a validação do `defineEntity`). Precisa ter nome.
@@ -104,6 +134,17 @@ export function toIR(m: EntityModel): EntityIR {
   const idx = groups("index");
   if (uniq.length) ir.unique = uniq;
   if (idx.length) ir.index = idx;
+
+  // Partição: só emite se ligada E o campo escolhido for elegível (timestamptz notNull).
+  const p = m.partition;
+  if (p.enabled) {
+    const okIds = new Set(partitionEligibleFields(m.fields).map((f) => f.id));
+    const field = m.fields.find((f) => f.id === p.fieldId && okIds.has(f.id))?.name;
+    if (field) {
+      ir.partitionBy = { field, interval: p.interval };
+      if (!p.keepForever && RET_RE.test(p.retention)) ir.retention = p.retention;
+    }
+  }
   return ir;
 }
 
@@ -161,7 +202,16 @@ export function irToModel(ir: EntityIR): EntityModel {
       kind,
       fieldIds: g.map((n) => idOf.get(n)).filter((x): x is string => !!x),
     }));
-  return { name: ir.name, fields, composites: [...from(ir.unique, "unique"), ...from(ir.index, "index")] };
+  const partition = newPartition();
+  if (ir.partitionBy) {
+    partition.enabled = true;
+    partition.fieldId = idOf.get(ir.partitionBy.field) ?? "";
+    partition.interval = ir.partitionBy.interval;
+    // partitionBy sem retention = modo 2 (particiona, guarda tudo).
+    if (ir.retention) partition.retention = ir.retention;
+    else partition.keepForever = true;
+  }
+  return { name: ir.name, fields, composites: [...from(ir.unique, "unique"), ...from(ir.index, "index")], partition };
 }
 
 function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
@@ -600,6 +650,126 @@ function IndexList({
   );
 }
 
+// Seção "Retention": liga a partição por tempo + a janela. O ESTRUTURAL (ligar/campo/
+// bucket) fica travado numa entity que já existe (partição é decisão de criação); a
+// retenção (a janela) é um knob e continua editável.
+function PartitionSection({
+  partition: p,
+  fields,
+  locked,
+  onChange,
+}: {
+  partition: Partition;
+  fields: Field[];
+  locked: boolean;
+  onChange: () => void;
+}) {
+  const eligible = partitionEligibleFields(fields);
+  const set = (fn: () => void) => {
+    fn();
+    onChange();
+  };
+
+  return (
+    <div class={css.list}>
+      <label class={css.managed} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <input
+          type="checkbox"
+          checked={p.enabled}
+          disabled={locked}
+          onChange={(e) =>
+            set(() => {
+              p.enabled = (e.currentTarget as HTMLInputElement).checked;
+              if (p.enabled && !p.fieldId && eligible[0]) p.fieldId = eligible[0].id;
+            })
+          }
+        />
+        Partition this table by time
+        {locked ? <span class={css.previewLabel}>· structure locked (set at creation)</span> : null}
+      </label>
+
+      {p.enabled ? (
+        <div class={`${css.field} ${css.accentScalar}`}>
+          {/* Estrutural: campo temporal + bucket (travado em entity existente). */}
+          <div class={css.fieldRow}>
+            <select
+              class={css.select}
+              value={p.fieldId}
+              disabled={locked}
+              onChange={(e) => set(() => (p.fieldId = (e.currentTarget as HTMLSelectElement).value))}
+            >
+              <option value="">time field…</option>
+              {eligible.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            <span class={css.previewLabel}>
+              a <code>timestamptz</code> field marked <code>NN</code> (not-null)
+            </span>
+            <select
+              class={css.select}
+              value={p.interval}
+              disabled={locked}
+              onChange={(e) => set(() => (p.interval = (e.currentTarget as HTMLSelectElement).value))}
+            >
+              {BUCKETS.map((b) => (
+                <option key={b} value={b}>
+                  every {b}
+                </option>
+              ))}
+            </select>
+            {eligible.length === 0 ? (
+              <span class={css.previewLabel}>→ none yet: add one in Fields above, then pick it here</span>
+            ) : null}
+          </div>
+
+          {/* Retenção: a janela — um knob, editável mesmo em entity existente. */}
+          <div class={css.fieldRow}>
+            <label class={css.previewLabel} style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={p.keepForever}
+                onChange={(e) => set(() => (p.keepForever = (e.currentTarget as HTMLInputElement).checked))}
+              />
+              keep forever
+            </label>
+            {!p.keepForever ? (
+              <>
+                <span class={css.previewLabel}>keep for</span>
+                <input
+                  class={css.select}
+                  style={{ width: "4.5rem" }}
+                  type="number"
+                  min={1}
+                  value={retNum(p.retention)}
+                  onInput={(e) =>
+                    set(() => (p.retention = `${(e.currentTarget as HTMLInputElement).value || "0"}${retUnit(p.retention)}`))
+                  }
+                />
+                <select
+                  class={css.select}
+                  value={retUnit(p.retention)}
+                  onChange={(e) =>
+                    set(() => (p.retention = `${retNum(p.retention) || "1"}${(e.currentTarget as HTMLSelectElement).value}`))
+                  }
+                >
+                  {RET_UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u === "d" ? "days" : u === "h" ? "hours" : "minutes"}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export const Component = () => {
   const params = useParams<{ name: string }>();
   const isNew = !params.name || params.name === "new";
@@ -610,7 +780,7 @@ export const Component = () => {
   const entities = loaded?.entities ?? [];
   const byName = new Map(entities.map((e) => [e.name, e] as const));
   const model = useSignal<EntityModel>(
-    loaded?.current ? irToModel(loaded.current) : { name: "", fields: [], composites: [] },
+    loaded?.current ? irToModel(loaded.current) : emptyModel(),
   );
 
   // Re-inicializa o form quando os dados do loader chegam (navegação SPA) ou a
@@ -618,7 +788,7 @@ export const Component = () => {
   const initedFor = useRef<string>(loaded ? key : "::pending");
   useEffect(() => {
     if (!loaded || initedFor.current === key) return;
-    model.value = loaded.current ? irToModel(loaded.current) : { name: "", fields: [], composites: [] };
+    model.value = loaded.current ? irToModel(loaded.current) : emptyModel();
     initedFor.current = key;
   }, [loaded, key]);
 
@@ -633,9 +803,16 @@ export const Component = () => {
   // Save = portão: se o plano tem risco, abre a folha; senão aplica e navega.
   const submit = async (confirm?: string[], fill?: Record<string, unknown>) => {
     error.value = "";
+    const ir = toIR(model.value);
+    // Partição ligada mas sem campo resolvido → NÃO salva calado (viraria uma tabela
+    // não-particionada em silêncio, sem gaveta nenhuma). Bloqueia com um aviso claro.
+    if (model.value.partition.enabled && !ir.partitionBy) {
+      error.value = "Pick a time field for the partition — a timestamptz not-null field (add one in Fields, then select it).";
+      return;
+    }
     saving.value = true;
     const res = (await action_saveEntity({
-      body: { ir: toIR(model.value), ...(confirm ? { confirm } : {}), ...(fill ? { fill } : {}) },
+      body: { ir, ...(confirm ? { confirm } : {}), ...(fill ? { fill } : {}) },
     })) as { error?: string; status?: string; plan?: EntityDiff };
     saving.value = false;
     if (res.error) {
@@ -714,6 +891,14 @@ export const Component = () => {
         <code>UQ</code>/<code>IDX</code>).
       </p>
       <IndexList composites={model.value.composites} fields={model.value.fields} onChange={bump} />
+
+      <h2 class={css.section}>Retention</h2>
+      <p class={css.managed}>
+        Partition a high-volume table by time and keep a rolling window — old data is dropped by whole
+        partitions (the table becomes <strong>append-only</strong>).{" "}
+        {!isNew ? "Partitioning is fixed at creation; only the retention window is editable here." : ""}
+      </p>
+      <PartitionSection partition={model.value.partition} fields={model.value.fields} locked={!isNew} onChange={bump} />
 
       <div class={css.preview}>
         <span class={css.previewLabel}>Tables to be created: </span>
