@@ -3,8 +3,9 @@ import { useLoader, useParams, useNavigate, touch } from "@mauroandre/velojs/hoo
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
 import { catalog, ownedChildTable, singularize, slug, type ColumnIR, type EntityIR, type FieldIR, type OwnedIR, type EntityDiff } from "@mauroandre/weave-core";
-import { action_saveEntity } from "./Entities.js";
+import { action_saveEntity, action_deleteEntity } from "./Entities.js";
 import { ReviewSheet } from "./ReviewSheet.js";
+import { ConfirmModal } from "../components/ConfirmModal.js";
 import { Page } from "../components/Page.js";
 import * as btn from "../styles/button.css.js";
 import * as css from "./EntityDesigner.css.js";
@@ -624,6 +625,8 @@ export const Component = () => {
   const error = useSignal("");
   const saving = useSignal(false);
   const pending = useSignal<EntityDiff | null>(null); // plano aguardando revisão
+  const deleting = useSignal(false);
+  const confirmingDelete = useSignal(false);
   const bump = () => touch(model);
   const navigate = useNavigate();
 
@@ -649,15 +652,39 @@ export const Component = () => {
 
   const save = () => submit();
 
+  // Delete = ação destrutiva (confirmada no modal): dropa as tabelas + o metastore.
+  const doDelete = async () => {
+    deleting.value = true;
+    const res = (await action_deleteEntity({ body: { name: model.value.name } })) as { error?: string };
+    deleting.value = false;
+    confirmingDelete.value = false;
+    if (res.error) {
+      error.value = res.error;
+      return;
+    }
+    navigate("/entities");
+  };
+
   const tables = previewTables(model.value.name || "entity", model.value.fields, byName);
 
   return (
     <Page
       title={isNew ? "New entity" : `Entity: ${model.value.name}`}
       actions={
-        <button class={btn.primary} disabled={saving.value || !model.value.name} onClick={save}>
-          {saving.value ? "Saving…" : "Save"}
-        </button>
+        <>
+          {!isNew ? (
+            <button
+              class={btn.danger}
+              disabled={saving.value || deleting.value}
+              onClick={() => (confirmingDelete.value = true)}
+            >
+              Delete
+            </button>
+          ) : null}
+          <button class={btn.primary} disabled={saving.value || !model.value.name} onClick={save}>
+            {saving.value ? "Saving…" : "Save"}
+          </button>
+        </>
       }
     >
       <div class={css.nameField}>
@@ -710,6 +737,23 @@ export const Component = () => {
           saving={saving.value}
           onCancel={() => (pending.value = null)}
           onApply={(confirm, fill) => submit(confirm, fill)}
+        />
+      ) : null}
+
+      {confirmingDelete.value ? (
+        <ConfirmModal
+          title={`Delete ${model.value.name}?`}
+          message={
+            <>
+              This permanently drops <code>{model.value.name}</code> and{" "}
+              <strong>all its tables and data</strong>. This can't be undone.
+            </>
+          }
+          confirmLabel="Delete entity"
+          danger
+          busy={deleting.value}
+          onConfirm={doDelete}
+          onCancel={() => (confirmingDelete.value = false)}
         />
       ) : null}
     </Page>

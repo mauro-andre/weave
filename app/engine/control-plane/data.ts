@@ -1,7 +1,7 @@
 import { weave, compileCount, compileAggregate } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
-import { resolveMirrors, fromIR, slug, type FieldIR } from "@mauroandre/weave-core";
+import { resolveMirrors, fromIR, tableize, type FieldIR } from "@mauroandre/weave-core";
 
 // `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API/GUI;
 // aqui tratamos como mapas frouxos e repassamos pro engine (compileFind/compileCount).
@@ -33,6 +33,7 @@ export async function listObjects(
   expand?: ExpandSpec | null,
   latestPer?: string[] | null,
 ): Promise<ObjectPage> {
+  name = tableize(name); // camelCase do SDK → nome de tabela guardado
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
 
@@ -99,6 +100,7 @@ export interface AggregateResult {
 }
 
 export async function aggregateObjects(name: string, input: Record<string, unknown>): Promise<AggregateResult> {
+  name = tableize(name);
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
   const byName = new Map(irs.map((e) => [e.name, e] as const));
@@ -150,6 +152,7 @@ function jsonSafe<T>(v: T): T {
  * `save` do engine **preservar** os vínculos (sobretudo N:N, que ele substitui).
  */
 export async function saveObject(name: string, object: Record<string, unknown>): Promise<unknown> {
+  name = tableize(name);
   const irs = await listEntities();
   const root = irs.find((e) => e.name === name);
   if (!root) throw new Error(`Unknown entity: ${name}`);
@@ -179,6 +182,7 @@ export async function createManyObjects(
   name: string,
   inputs: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
+  name = tableize(name);
   const irs = await listEntities();
   const root = irs.find((e) => e.name === name);
   if (!root) throw new Error(`Unknown entity: ${name}`);
@@ -232,11 +236,12 @@ export async function getObject(name: string, id: string): Promise<Record<string
  * amigável (nunca o erro SQL cru).
  */
 export async function deleteObject(name: string, id: string): Promise<void> {
+  name = tableize(name);
   const irs = await listEntities();
   if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
   const sql = db();
   try {
-    await sql`DELETE FROM ${sql(slug(name))} WHERE id = ${id}`;
+    await sql`DELETE FROM ${sql(name)} WHERE id = ${id}`;
   } catch (e) {
     if ((e as { code?: string }).code === "23503") {
       throw new Error("Can't delete: this object is referenced by other objects.");

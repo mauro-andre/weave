@@ -88,6 +88,26 @@ orders[0].items[0].product.price; // nested, revived (Dates too), inferred
 
 No hand-written result types — the shape follows the `expand` you pass.
 
+## Naming types at the boundary
+
+Inside a query you never name a type. But when you wrap the client in your own service
+helpers, name the query types with the `Infer*` aliases — no `as never`, no `Parameters<>`:
+
+```ts
+import type { InferWhere, InferPatch } from "@mauroandre/weave-sdk";
+import user from "./weave/entities/user.js";
+
+const getUser    = (where: InferWhere<typeof user>) => weave.user.findOne(where);
+const updateUser = (where: InferWhere<typeof user>, patch: InferPatch<typeof user>) =>
+  weave.user.updateOne(where, patch);
+
+// verify an email in one call — find by token, set verified, clear the code:
+await updateUser({ emailVerifyCode: token }, { emailVerified: true, emailVerifyCode: null });
+```
+
+The family: `Infer` (read object) · `InferInsert` (create) · `InferPatch` (update) ·
+`InferWhere` · `InferOrderBy`. The raw `WhereInput` / `OrderByInput` are exported too.
+
 ## Bulk updates and deletes
 
 ```ts

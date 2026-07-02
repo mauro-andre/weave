@@ -26,6 +26,17 @@ export const action_saveEntity = async ({
   }
 };
 
+// Apaga a entidade: dropa as tabelas físicas que ela criou + o metastore (destrutivo).
+export const action_deleteEntity = async ({ body }: ActionArgs<{ name: string }>) => {
+  const { deleteEntity } = await import("../engine/control-plane/entities.js");
+  try {
+    await deleteEntity(body.name);
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to delete entity." };
+  }
+};
+
 // Dry-run: devolve o plano de mudanças (diff por id) sem aplicar nada.
 export const action_planEntity = async ({ body }: ActionArgs<{ ir: unknown }>) => {
   const { planEntity } = await import("../engine/control-plane/entities.js");

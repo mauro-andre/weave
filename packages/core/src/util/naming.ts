@@ -44,6 +44,16 @@ export function indexName(table: string, column: string): string {
 }
 
 /**
+ * Nome de TABELA/armazenamento de uma ENTITY: `camelize` (nome lógico canônico) →
+ * `camelToSnake`. Espelha o tratamento dos campos no nível da entity — `backupStorages`
+ * → tabela `backup_storages`, enquanto o SDK preserva o `backupStorages` lógico.
+ * Idempotente pra nomes já em snake/uma-palavra (`category` → `category`).
+ */
+export function tableize(name: string): string {
+  return camelToSnake(camelize(name));
+}
+
+/**
  * Nome determinístico de um índice COMPOSTO (várias colunas). `unique` → sufixo
  * `_key`; senão `_idx`. Recebe as colunas JÁ resolvidas (snake_case). Estável: o
  * diff dropa por este mesmo nome. (Postgres trunca em 63 chars — colisão em nomes

@@ -46,6 +46,10 @@ You always read and query with the camelCase name (`{ firstName: "Ada" }`); the
 snake_case column stays under the hood. Whatever style you type in the GUI (`First
 Name`, `first_name`) converges on the same camelCase field.
 
+The **entity name** follows the exact same rule: `defineEntity("backupStorages", …)` →
+table `backup_storages` in Postgres, while the SDK keeps the logical name everywhere you
+touch it — accessor `weave.backupStorages`, generated file `backupStorages.ts`.
+
 ## Owned objects — composition
 
 An **owned** object lives inside its parent (its own child table, cascade-deleted

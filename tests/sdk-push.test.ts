@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { pushEntities, createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
+import { pushEntities, genProject, createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
 
 // F3: entities.push — entities-as-code → /admin/entities (plan/apply), em ordem de
 // dependência, devolvendo applied / review (plano por risco). Via app.hono.fetch.
@@ -20,8 +20,8 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack')`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys')`;
         await sql`DELETE FROM weave_api_keys`;
       },
       getSessionCookie: async ({ user }) => {
@@ -85,6 +85,39 @@ describe("SDK entities push (F3)", () => {
     await weave.pushreg.create({ slugName: "web", stackId: s1.id });
     await weave.pushreg.create({ slugName: "web", stackId: s2.id }); // mesmo slug, stack diferente: ok
     await expect(weave.pushreg.create({ slugName: "web", stackId: s1.id })).rejects.toThrow(); // repetida: barra
+  });
+
+  it("nome multi-palavra: lógico camelCase / tabela snake / accessor camelCase resolve", async () => {
+    const staticDeploys = defineEntity("staticDeploys", { url: text().notNull() });
+    const backupStorages = defineEntity("backupStorages", { label: text().notNull(), deploy: reference(staticDeploys) });
+    const res = await pushEntities({ backupStorages, staticDeploys }, opts());
+    expect(res.review).toEqual([]);
+
+    // tabelas em snake_case (não mashadas): backup_storages / static_deploys.
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const tables = await sql<{ table_name: string }[]>`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema='public' AND table_name IN ('backup_storages','static_deploys')`;
+    expect(tables.map((t) => t.table_name).sort()).toEqual(["backup_storages", "static_deploys"]);
+
+    // accessor camelCase + o servidor resolve o path camelCase (tableize) pra a tabela snake.
+    const weave = createClient({ ...opts(), entities: { backupStorages, staticDeploys } });
+    const d = await weave.staticDeploys.create({ url: "https://x" });
+    const b = await weave.backupStorages.create({ label: "nightly", deployId: d.id });
+    expect(b.label).toBe("nightly");
+    expect(b.deployId).toBe(d.id);
+    expect((await weave.backupStorages.findOne({ label: "nightly" }))?.id).toBe(b.id);
+  });
+
+  it("gen: arquivo/barrel/arg usam o nome lógico camelCase", async () => {
+    const { files } = await genProject(opts());
+    expect(Object.keys(files)).toContain("entities/backupStorages.ts");
+    expect(Object.keys(files)).toContain("entities/staticDeploys.ts");
+    const src = files["entities/backupStorages.ts"]!;
+    expect(src).toContain('defineEntity("backupStorages"');
+    expect(src).toContain("reference(staticDeploys)"); // alvo pelo nome lógico
+    expect(src).toContain('from "./staticDeploys.js"'); // import pelo arquivo lógico
   });
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {

@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Verb } from "../engine/control-plane/scopes.js";
+import { tableize } from "@mauroandre/weave-core";
 import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 export class ScopeError extends Error {
@@ -38,13 +39,17 @@ export interface Access {
  * linhas (id→nome + params do header) e a projeção (id→nome). Lança ScopeError.
  */
 export async function resolveAccess(c: Context, entity: string, verb: Verb): Promise<Access> {
+  entity = tableize(entity); // camelCase do SDK → nome de tabela guardado
   const scopeName = c.req.header("x-weave-scope");
   if (!scopeName) return { god: true, rows: null, projection: null };
 
   const { getScope } = await import("../engine/control-plane/scopes.js");
   const scope = await getScope(scopeName);
   if (!scope) throw new ScopeError(`Unknown scope '${scopeName}'.`, 403);
-  const rule = scope.entities[entity];
+  // As chaves do scope são o nome de entity que o dev escreveu (camelCase) — casa por
+  // nome de tabela normalizado, pra bater com o `entity` já tableizado.
+  const rules = new Map(Object.entries(scope.entities).map(([k, v]) => [tableize(k), v] as const));
+  const rule = rules.get(entity);
   if (!rule) throw new ScopeError(`Scope '${scopeName}' has no access to '${entity}'.`, 403);
   if (!rule.verbs.includes(verb)) throw new ScopeError(`Scope '${scopeName}' can't ${verb} '${entity}'.`, 403);
 

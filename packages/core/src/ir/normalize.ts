@@ -1,12 +1,12 @@
-import { slug } from "../util/slug.js";
-import { camelize } from "../util/naming.js";
+import { camelize, tableize } from "../util/naming.js";
 import type { EntityIR, FieldIR } from "./types.js";
 
-// Normaliza os nomes do IR. ENTIDADE (vira nome de tabela) e alvos de reference/mirror
-// usam `slug` (snake_case, minúsculo). CAMPO usa `camelize` (camelCase canônico) — o
-// nome lógico do dev; a COLUNA no Postgres deriva dele via `camelToSnake` (snake_case).
+// Normaliza os nomes do IR. ENTIDADE (e alvos de reference/mirror) usa `tableize`
+// (nome lógico camelCase → tabela snake_case), MESMO tratamento dos campos, só no
+// nível da entity: `backupStorages` → tabela `backup_storages`. CAMPO usa `camelize`
+// (nome lógico); a COLUNA deriva via `camelToSnake`.
 export function normalizeEntityIR(ir: EntityIR): EntityIR {
-  const out: EntityIR = { ...ir, name: slug(ir.name), fields: normFields(ir.fields) };
+  const out: EntityIR = { ...ir, name: tableize(ir.name), fields: normFields(ir.fields) };
   // Grupos compostos referenciam campos → camelize cada membro (alinha com os
   // nomes de campo canônicos). Omitidos quando vazios.
   if (ir.unique?.length) out.unique = ir.unique.map((g) => g.map(camelize));
@@ -28,12 +28,12 @@ function normNode(node: FieldIR): FieldIR {
     if (node.mirror) {
       return {
         ...node,
-        mirror: slug(node.mirror),
+        mirror: tableize(node.mirror),
         ...(node.shape ? { shape: normFields(node.shape) } : {}),
       };
     }
     return { ...node, shape: normFields(node.shape ?? {}) };
   }
-  if (node.kind === "reference") return { ...node, target: slug(node.target) };
+  if (node.kind === "reference") return { ...node, target: tableize(node.target) };
   return node;
 }

@@ -1,3 +1,4 @@
+import { camelize } from "../../core/src/index.js";
 import type { EntityIR, FieldIR } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
@@ -38,12 +39,13 @@ function baseExpr(node: FieldIR, ctx: GenCtx, self: string): string {
   }
   if (node.kind === "reference") {
     ctx.builders.add("reference");
-    if (node.target !== self) ctx.imports.add(node.target);
+    const target = camelize(node.target); // nome lógico do alvo (arquivo/var no SDK)
+    if (node.target !== self) ctx.imports.add(target);
     if (node.cardinality === "many") {
       ctx.builders.add("array");
-      return `reference(array(${node.target}))`;
+      return `reference(array(${target}))`;
     }
-    return `reference(${node.target})${node.notNull ? ".notNull()" : ""}`;
+    return `reference(${target})${node.notNull ? ".notNull()" : ""}`;
   }
   // owned
   if (node.mirror) ctx.mirror = true; // sem builder de mirror — gera o shape concreto (vazio se só mirror)
@@ -80,7 +82,7 @@ export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): strin
   const lines = [`import { ${builders.join(", ")} } from "@mauroandre/weave-sdk";`];
   for (const t of [...ctx.imports].sort()) lines.push(`import ${t} from "./${t}.js";`);
   if (ctx.mirror) lines.push(`// ⚠ This entity uses a mirror — write/edit the shape by hand (the builder has no mirror()).`);
-  lines.push("", `export default defineEntity(${JSON.stringify(ir.name)}, {`, body, `}${optsSource(ir)});`, "");
+  lines.push("", `export default defineEntity(${JSON.stringify(camelize(ir.name))}, {`, body, `}${optsSource(ir)});`, "");
   return lines.join("\n");
 }
 
@@ -316,8 +318,10 @@ export async function genProject(options: GenOptions): Promise<GenProject> {
 
   const entityNames: string[] = [];
   for (const ir of ents.entities) {
-    files[`entities/${ir.name}.ts`] = irToSource(ir, { withId: true });
-    entityNames.push(ir.name);
+    // Arquivo/barrel usam o nome LÓGICO (camelCase) — `backup_storages` → `backupStorages.ts`.
+    const logical = camelize(ir.name);
+    files[`entities/${logical}.ts`] = irToSource(ir, { withId: true });
+    entityNames.push(logical);
   }
   entityNames.sort();
   files["entities/index.ts"] = barrelSource(entityNames);
@@ -358,8 +362,9 @@ export async function pullEntities(options: PullOptions): Promise<{ files: Recor
   const files: Record<string, string> = {};
   const names: string[] = [];
   for (const ir of json.entities) {
-    files[`${ir.name}.ts`] = irToSource(ir);
-    names.push(ir.name);
+    const logical = camelize(ir.name);
+    files[`${logical}.ts`] = irToSource(ir);
+    names.push(logical);
   }
   return { files, names: names.sort() };
 }

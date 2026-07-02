@@ -1,5 +1,6 @@
 import { db } from "./db.js";
-import { validateIR, normalizeEntityIR, ensureFieldIds, resolveMirrors, fromIR, diffEntityIR, type EntityDiff, type EntityIR } from "@mauroandre/weave-core";
+import { validateIR, normalizeEntityIR, ensureFieldIds, resolveMirrors, fromIR, tableize, diffEntityIR, type EntityDiff, type EntityIR } from "@mauroandre/weave-core";
+import { collectTables } from "../ddl/emit.js";
 import { probePlan, applyMigration } from "./migrate.js";
 
 /** Lista as plantas (IR) guardadas no metastore. */
@@ -9,10 +10,11 @@ export async function listEntities(): Promise<EntityIR[]> {
   return rows.map((r) => parseIR(r.ir));
 }
 
-/** Lê a planta (IR) de uma entidade pelo nome (ou null se não existir). */
+/** Lê a planta (IR) de uma entidade pelo nome (ou null se não existir). O nome de
+ *  entrada é normalizado (`tableize`) — camelCase do SDK resolve pro nome guardado. */
 export async function getEntity(name: string): Promise<EntityIR | null> {
   const sql = db();
-  const rows = await sql<{ ir: EntityIR | string }[]>`SELECT ir FROM weave_entities WHERE name = ${name}`;
+  const rows = await sql<{ ir: EntityIR | string }[]>`SELECT ir FROM weave_entities WHERE name = ${tableize(name)}`;
   return rows[0] ? parseIR(rows[0].ir) : null;
 }
 
@@ -20,10 +22,26 @@ function parseIR(ir: EntityIR | string): EntityIR {
   return typeof ir === "string" ? (JSON.parse(ir) as EntityIR) : ir;
 }
 
-/** Remove a entidade do metastore. A tabela física fica (sync é aditivo). */
+/**
+ * Remove a entidade: **dropa as tabelas físicas** que ela criou (raiz + owned children
+ * + join N:N, via `collectTables`) e apaga o metastore. Ação destrutiva (a GUI confirma).
+ * `CASCADE` derruba FKs de quem a referenciava; owned/join caem juntos.
+ */
 export async function deleteEntity(name: string): Promise<void> {
+  const canonical = tableize(name);
   const sql = db();
-  await sql`DELETE FROM weave_entities WHERE name = ${name}`;
+  const irs = await listEntities();
+  const ir = irs.find((e) => e.name === canonical);
+  if (ir) {
+    const byName = new Map(irs.map((e) => [e.name, e] as const));
+    const entities = fromIR(irs.map((e) => resolveMirrors(e, byName)));
+    const specs = collectTables(entities[canonical]!);
+    // Ordem reversa (children/join antes da raiz); CASCADE cobre dependentes.
+    for (const spec of [...specs].reverse()) {
+      await sql`DROP TABLE IF EXISTS ${sql(spec.name)} CASCADE`;
+    }
+  }
+  await sql`DELETE FROM weave_entities WHERE name = ${canonical}`;
 }
 
 /**

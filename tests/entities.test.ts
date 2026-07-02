@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
-import { action_saveEntity, action_planEntity } from "../app/pages/Entities.js";
+import { action_saveEntity, action_planEntity, action_deleteEntity } from "../app/pages/Entities.js";
 
 const productsIR = {
   irVersion: 1,
@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack CASCADE`;
+        await sql`DROP TABLE IF EXISTS product__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -661,6 +661,47 @@ describe("entidades — criar e materializar", () => {
       // os campos do grupo aparecem como chips removíveis (`nome ✕`).
       expect(html).toContain("host ✕");
       expect(html).toContain("route ✕");
+    });
+  });
+
+  describe("delete de entity", () => {
+    const sqlH = async () => (await import("../app/engine/control-plane/db.js")).db();
+    const tablesLike = async (prefix: string): Promise<string[]> => {
+      const sql = await sqlH();
+      const rows = await sql<{ table_name: string }[]>`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name LIKE ${prefix + "%"}`;
+      return rows.map((r) => r.table_name);
+    };
+
+    it("dropa as tabelas (raiz + owned) e limpa o metastore", async () => {
+      await app.as({ user: master }).action(action_saveEntity, {
+        body: {
+          ir: {
+            irVersion: 1,
+            name: "delme",
+            fields: {
+              title: { kind: "column", type: "text" },
+              items: { kind: "owned", array: true, shape: { sku: { kind: "column", type: "text" } } },
+            },
+          },
+        },
+      });
+      expect((await tablesLike("delme")).length).toBeGreaterThanOrEqual(2); // delme + delme__items
+
+      const res = await app.as({ user: master }).action(action_deleteEntity, { body: { name: "delme" } });
+      expect((await res.json()).ok).toBe(true);
+
+      expect(await tablesLike("delme")).toEqual([]); // tabelas físicas foram-se
+      const { getEntity } = await import("../app/engine/control-plane/entities.js");
+      expect(await getEntity("delme")).toBeNull(); // metastore limpo
+    });
+
+    it("botão Delete: presente na entity existente, ausente na nova (SSR)", async () => {
+      const novo = await (await app.as({ user: master }).get("/entities/new")).text();
+      expect(novo).not.toContain(">Delete<");
+      const edit = await (await app.as({ user: master }).get("/entities/products")).text();
+      expect(edit).toContain(">Delete<");
     });
   });
 });
