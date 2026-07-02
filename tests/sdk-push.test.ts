@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { pushEntities, genProject, createClient, defineEntity, text, int4, reference } from "@mauroandre/weave-sdk";
+import { pushEntities, genProject, createClient, defineEntity, text, int4, reference, owned, array } from "@mauroandre/weave-sdk";
 
 // F3: entities.push — entities-as-code → /admin/entities (plan/apply), em ordem de
 // dependência, devolvendo applied / review (plano por risco). Via app.hono.fetch.
@@ -20,8 +20,8 @@ describe("SDK entities push (F3)", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys')`;
+        await sql`DROP TABLE IF EXISTS pushprod, pushcat, pushacct, pushreg, pushstack, backup_storages, static_deploys, push_preset__items, push_presets CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('pushprod','pushcat','pushacct','pushreg','pushstack','backup_storages','static_deploys','push_presets')`;
         await sql`DELETE FROM weave_api_keys`;
       },
       getSessionCookie: async ({ user }) => {
@@ -118,6 +118,59 @@ describe("SDK entities push (F3)", () => {
     expect(src).toContain('defineEntity("backupStorages"');
     expect(src).toContain("reference(staticDeploys)"); // alvo pelo nome lógico
     expect(src).toContain('from "./staticDeploys.js"'); // import pelo arquivo lógico
+  });
+
+  it("owned(array): push (SDK) → materializa raiz+child → cria com array aninhado → lê de volta → gen importa `array`", async () => {
+    const pushPresets = defineEntity("pushPresets", {
+      label: text().notNull(),
+      items: owned(array({ name: text().notNull(), port: int4().notNull() })),
+    });
+
+    // 1) PUSH via SDK (nome lógico camelCase → tabela snake)
+    const res = await pushEntities({ pushPresets }, opts());
+    expect(res.review).toEqual([]);
+    expect(res.applied).toEqual(["pushPresets"]); // reporta o nome lógico
+
+    // 2) tabelas materializadas: raiz + child do owned
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const tables = await sql<{ table_name: string }[]>`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema='public' AND table_name IN ('push_presets','push_preset__items')`;
+    expect(tables.map((t) => t.table_name).sort()).toEqual(["push_preset__items", "push_presets"]);
+
+    // 3) CRIAÇÃO via SDK, com o array aninhado (accessor camelCase resolve pra a tabela snake)
+    const weave = createClient({ ...opts(), entities: { pushPresets } });
+    const created = await weave.pushPresets.create({
+      label: "prod",
+      items: [
+        { name: "web", port: 80 },
+        { name: "db", port: 5432 },
+      ],
+    });
+    expect(created.id).toBeTruthy();
+    expect(created.label).toBe("prod");
+    expect(created.items).toHaveLength(2); // owned aninha automaticamente no retorno
+
+    // 4) as linhas do array chegaram no child table (na BASE), ligadas ao pai
+    const childRows = await sql<{ name: string; port: number }[]>`
+      SELECT name, port FROM push_preset__items ORDER BY port`;
+    expect(childRows).toEqual([
+      { name: "web", port: 80 },
+      { name: "db", port: 5432 },
+    ]);
+
+    // 5) leitura de volta pelo SDK, com o array reconstruído
+    const found = await weave.pushPresets.findOne({ label: "prod" });
+    expect(found?.items.map((i) => i.port).sort((a, b) => a - b)).toEqual([80, 5432]);
+
+    // 6) GEN: o arquivo gerado usa owned(array({…})) E importa `array` (o fix do bug)
+    const { files } = await genProject(opts());
+    const src = files["entities/pushPresets.ts"]!;
+    expect(src).toContain("owned(array({");
+    const importLine = src.split("\n").find((l) => l.startsWith("import {"))!;
+    expect(importLine).toContain("array");
+    expect(importLine).toContain("owned");
   });
 
   it("re-push idempotente (nada a mudar) → applied, zero review", async () => {
