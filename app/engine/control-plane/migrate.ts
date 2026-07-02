@@ -6,7 +6,7 @@
 import type postgres from "postgres";
 import { weave } from "../index.js";
 import { emitChanges } from "../ddl/diff.js";
-import { camelToSnake, ownedChildTable, indexName, compositeIndexName, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
+import { camelToSnake, ownedChildTable, joinTableName, indexName, compositeIndexName, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;
@@ -98,6 +98,12 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
       if (node?.kind === "owned") {
         const child = ownedChildTable(table, col, node.table);
         await tx.unsafe(`DROP TABLE IF EXISTS ${child} CASCADE`);
+      } else if (node?.kind === "reference" && node.cardinality === "many") {
+        // N:N — a ligação é uma TABELA de junção, não uma coluna no pai.
+        await tx.unsafe(`DROP TABLE IF EXISTS ${joinTableName(table, col)} CASCADE`);
+      } else if (node?.kind === "reference") {
+        // N:1 — a coluna FK é `<campo>_id`, não `<campo>`.
+        await tx.unsafe(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${col}_id`);
       } else {
         await tx.unsafe(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${col}`);
       }

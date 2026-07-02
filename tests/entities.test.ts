@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps CASCADE`;
+        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps, refdrop, refdrop_target, refdropn__tags, refdropn, refdrop_tag CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -466,6 +466,38 @@ describe("entidades — criar e materializar", () => {
       const ok = await save("rb", { a: { kind: "column", id: idA, type: "text" } }, { confirm: ["b"] });
       expect((await ok.json()).status).toBe("applied");
       expect((await columns("rb")).map((c) => c.column_name)).not.toContain("b");
+    });
+
+    it("🔴 remover um campo REFERENCE dropa a coluna `<campo>_id` (não `<campo>`)", async () => {
+      await save("refdrop_target", { name: { kind: "column", type: "text" } });
+      await save("refdrop", {
+        title: { kind: "column", type: "text" },
+        owner: { kind: "reference", target: "refdrop_target", cardinality: "one" },
+      });
+      const idTitle = await idOf("refdrop", "title");
+      expect((await columns("refdrop")).map((c) => c.column_name)).toContain("owner_id"); // a FK existe
+
+      // remove só `owner` (title mantém o id) — a coluna `owner_id` deve sumir.
+      const ok = await save("refdrop", { title: { kind: "column", id: idTitle, type: "text" } }, { confirm: ["owner"] });
+      expect((await ok.json()).status).toBe("applied");
+      expect((await columns("refdrop")).map((c) => c.column_name)).not.toContain("owner_id");
+    });
+
+    it("🔴 remover um campo N:N dropa a tabela de junção", async () => {
+      await save("refdrop_tag", { label: { kind: "column", type: "text" } });
+      await save("refdropn", {
+        title: { kind: "column", type: "text" },
+        tags: { kind: "reference", target: "refdrop_tag", cardinality: "many" },
+      });
+      const idTitle = await idOf("refdropn", "title");
+      const sql = await sqlH();
+      const before = await sql<{ t: string | null }[]>`SELECT to_regclass('public.refdropn__tags')::text AS t`;
+      expect(before[0]?.t).not.toBeNull(); // a join table existe
+
+      const ok = await save("refdropn", { title: { kind: "column", id: idTitle, type: "text" } }, { confirm: ["tags"] });
+      expect((await ok.json()).status).toBe("applied");
+      const after = await sql<{ t: string | null }[]>`SELECT to_regclass('public.refdropn__tags')::text AS t`;
+      expect(after[0]?.t).toBeNull(); // a join table foi dropada
     });
 
     it("🟡 obrigatório com vazios: trava sem valor, aplica com backfill", async () => {
