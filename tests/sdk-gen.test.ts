@@ -49,6 +49,22 @@ describe("SDK codegen — irToSource", () => {
     expect(src).toContain('category: reference(category).$id("fid-cat"),');
     expect(src).toContain('owned(array({ qty: int4().notNull().$id("fid-qty") })).$id("fid-items")');
   });
+
+  it("importa `array` quando SÓ um owned(array({…})) usa (sem scalar-array pra mascarar)", () => {
+    const ownedArrayIr = {
+      irVersion: 1,
+      name: "dbPresets",
+      fields: {
+        presets: { kind: "owned", array: true, shape: { label: { kind: "column", type: "text", notNull: true } } },
+      },
+    } as const;
+    const src = irToSource(ownedArrayIr as never);
+    expect(src).toContain("owned(array({");
+    // o import PRECISA ter `array` — senão o arquivo gerado quebra com ReferenceError.
+    const importLine = src.split("\n").find((l) => l.startsWith("import {"))!;
+    expect(importLine).toContain("array");
+    expect(importLine).toContain("owned");
+  });
 });
 
 describe("SDK codegen — scopeToSource", () => {

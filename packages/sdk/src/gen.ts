@@ -50,6 +50,7 @@ function baseExpr(node: FieldIR, ctx: GenCtx, self: string): string {
   // owned
   if (node.mirror) ctx.mirror = true; // sem builder de mirror — gera o shape concreto (vazio se só mirror)
   ctx.builders.add("owned");
+  if (node.array) ctx.builders.add("array"); // owned(array({…})) usa `array` — precisa importar
   const inner = shapeSource(node.shape ?? {}, ctx, self);
   return node.array ? `owned(array({ ${inner} }))` : `owned({ ${inner} })`;
 }
