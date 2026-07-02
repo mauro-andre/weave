@@ -69,6 +69,25 @@ export async function apiAggregate({ c, params }: EndpointHandlerArgs): Promise<
   }
 }
 
+// POST /api/:entity/accumulate — upsert mergeável do tier histórico. Body `{ key, ops }`.
+// É uma escrita keyed (create-or-merge), então exige o verbo `create`; o filtro de linhas
+// do scope não se aplica (não há where — o alvo é a `key`, o unique declarado).
+export async function apiAccumulate({ c, params }: EndpointHandlerArgs): Promise<Response> {
+  try {
+    const entity = params.entity ?? "";
+    await resolveAccess(c, entity, "create");
+    const { accumulateObject } = await import("../engine/control-plane/data.js");
+    const body = (await c.req.json()) as { key?: WNode; ops?: Record<string, unknown> };
+    if (!body || typeof body !== "object" || !body.key || !body.ops) {
+      return c.json({ error: "accumulate needs a { key, ops } body." }, 400);
+    }
+    const row = await accumulateObject(entity, body.key, body.ops as never);
+    return c.json(row);
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
 export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";

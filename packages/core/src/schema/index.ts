@@ -25,6 +25,7 @@ export {
   type ReferenceCardinality,
 } from "./reference.js";
 export { projection, type Projection, type AnyProjection } from "./projection.js";
+export { inc, setOnInsert, type AccumulateOp, type AccumulateInput } from "./accumulate.js";
 export {
   defineEntity,
   type Entity,

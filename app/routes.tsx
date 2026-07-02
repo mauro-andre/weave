@@ -35,6 +35,7 @@ export default [
           { path: "/:entity", method: "PATCH", handler: DataApi.apiUpdate },
           { path: "/:entity", method: "DELETE", handler: DataApi.apiDelete },
           { path: "/:entity/aggregate", method: "POST", handler: DataApi.apiAggregate },
+          { path: "/:entity/accumulate", method: "POST", handler: DataApi.apiAccumulate },
           { path: "/:entity/:id", method: "GET", handler: DataApi.apiGetOne },
         ],
       },

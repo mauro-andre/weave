@@ -9,6 +9,7 @@ import type {
   OrderByInput,
   AggregateInput,
   AggregateOutput,
+  AccumulateOp,
 } from "../../core/src/index.js";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
@@ -91,6 +92,14 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
    * retorno se auto-ajusta ao input (igual o `expand`).
    */
   aggregate<const I extends AggregateInput<E>>(input: I): Promise<AggregateOutput<I>>;
+
+  /**
+   * Acumula no tier histórico: um upsert mergeável na `key` (o unique declarado da
+   * entidade), aplicando `ops` (`inc`/`max`/`min`/`setOnInsert`) atomicamente no
+   * Postgres. Devolve a linha resultante (inc-and-return). A média se deriva na
+   * LEITURA (`sum/count`) — nunca se guarda média pronta.
+   */
+  accumulate(key: Partial<InferInsert<E>>, ops: Record<string, AccumulateOp>): Promise<InferEntity<E>>;
 }
 
 /** O client completo: uma propriedade por entidade do entities + `as` (scope). */
@@ -229,6 +238,9 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
       async deleteMany(where: unknown) {
         const r = (await request("DELETE", path, { query: mutQuery(where, {}, "many") })) as { count: number };
         return { count: r.count };
+      },
+      async accumulate(key: unknown, ops: unknown) {
+        return revive(await request("POST", `${path}/accumulate`, { body: { key, ops } }));
       },
       async aggregate(input: unknown) {
         const r = (await request("POST", `${path}/aggregate`, { body: input })) as {

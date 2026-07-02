@@ -115,6 +115,67 @@ facets.byCategory;            // [{ category, r }, ...]
 Each facet is its own aggregate under the parent `where`. The return type **follows
 your input**: with `facets`, you get `{ rows, facets }`; without, a plain array.
 
+## Rolling up over time — `accumulate`
+
+Everything above reads raw rows and aggregates **on read** — exact, but it keeps every
+row. When you can't keep every row forever (telemetry, metrics, counters), roll them up
+as they arrive with **`accumulate`**. One call folds a data point into a running rollup
+keyed by a **composite unique** — atomically, in Postgres:
+
+```ts
+import { inc, max, min, setOnInsert } from "@mauroandre/weave-sdk";
+
+await weave.metricRollup.accumulate(
+  { workerId, name, ts: bucket },                      // the key — a declared unique
+  {
+    sampleCount: inc(1),                               // running counter
+    cpuSum:      inc(cpu),      cpuMax: max(cpu),       // sum + peak
+    memSum:      inc(mem),      memMin: min(mem),       // sum + valley
+    firstSeen:   setOnInsert(bucket),                  // written once, kept forever
+  },
+); // → the resulting row
+```
+
+The **golden rule**: store what *merges*, derive the rest on read. Keep `sum` and
+`count`; compute the average when you read (`cpuSum / sampleCount`). Never store an
+average — two averages can't be merged, a sum and a count always can.
+
+### The ops
+
+```ts
+inc(n)          // col = col + n          — counters, sums (monotonic)
+max(v) · min(v) // col = greatest/least   — peaks and valleys
+setOnInsert(v)  // written on insert only — preserved on every later merge
+```
+
+`inc`/`max`/`min` merge in the database (`+`, `greatest`, `least`); `setOnInsert`
+writes on the first insert and is left untouched afterwards. There is no
+read-modify-write and no race — the whole thing is a single upsert.
+
+### The key must be a declared unique
+
+`accumulate` upserts on the key, so the key has to be a **unique** the entity declares —
+a composite group (the rollup key) or a single `.unique()` column:
+
+```ts
+export default defineEntity(
+  "metricRollup",
+  {
+    workerId: text().notNull(),
+    name:     text().notNull(),
+    ts:       timestamptz().notNull(),
+    sampleCount: int4().notNull().default(0),
+    cpuSum:      float8().notNull().default(0),
+    cpuMax:      float8().notNull().default(0),
+  },
+  { unique: [["workerId", "name", "ts"]] },   // ← the ON-CONFLICT key
+);
+```
+
+A key that doesn't match a declared unique is a clear error — nothing is written. Read
+the rollups back with the ordinary aggregators (`sum`, `avg` over the buckets), or plain
+`findMany` / `latestPer` for the raw rollup rows.
+
 ## Batch ingest — createMany
 
 Insert many rows in one transaction — the shape a batched producer wants:

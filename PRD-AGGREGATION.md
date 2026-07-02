@@ -112,9 +112,9 @@ facets: {
 
 - **Tier recente (crítico):** `createMany(inputs[])` — insert em lote (o agente é
   produtor batelado). Evento cru = uma linha com id próprio.
-- **Tier histórico (adiável):** `accumulate(key, { … })` — upsert atômico que **RETORNA
-  a linha resultante** (`RETURNING`), habilitando **inc-and-return** (ex.: contador
-  monotônico `getNextWorkerIndex` — incrementa e devolve o novo valor):
+- **Tier histórico (ops numéricas ✅, 2026-07-02):** `accumulate(key, { … })` — upsert
+  atômico que **RETORNA a linha resultante** (`RETURNING`), habilitando **inc-and-return**
+  (ex.: contador monotônico `getNextWorkerIndex` — incrementa e devolve o novo valor):
   ```ts
   const row = await weave.counter.accumulate({ name: "workerIndex" }, { seq: inc(1) });
   const idx = row.seq;
@@ -123,7 +123,7 @@ facets: {
     { host, route, method, ts: bucket },        // chave (único composto — §5)
     {
       count: inc(1),
-      durationSum: inc(dur),
+      durationSum: inc(dur),  durationMax: max(dur),  // sum + pico (sketch numérico)
       durationHistogram: addToHistogram(dur),    // incrementa o balde certo (fronteiras vêm do tipo)
       uniques: addToHll(ip),
       ts: setOnInsert(bucket),
@@ -131,8 +131,13 @@ facets: {
   );
   // → INSERT … ON CONFLICT (<chave>) DO UPDATE SET … RETURNING *  (atômico)
   ```
-  Ops: `inc` · `addToHistogram` · `addToHll` · `setOnInsert`. **Sem `runningAvg`**
-  (guarde `sum`+`count` — §0). **Sem `incKey`** (counterMap descartado — Decisão 2).
+  Ops **feitas** (a acumulação roda **no Postgres**, nunca em JS): `inc(n)` (`col = col +
+  excluded.col`) · `max(v)` / `min(v)` (`greatest` / `least` — o sketch numérico min/max do
+  §0) · `setOnInsert(v)` (grava só no INSERT, **fora do `SET`** → preservado no merge). Ops
+  **adiadas** (dependem dos tipos de sketch — §4, sem consumidor): `addToHistogram` ·
+  `addToHll`. **Sem `runningAvg`** (guarde `sum`+`count` — §0). **Sem `incKey`** (counterMap
+  descartado — Decisão 2). A chave tem que casar com um **unique declarado** (composto — §5 —
+  ou coluna `.unique()`), o árbitro do `ON CONFLICT`; senão erro claro, nada é escrito.
 
 ## §4. Tipos de campo (sketches mergeáveis)
 
@@ -169,9 +174,11 @@ facets: {
 `timeBucket` **+** retenção por partição **+** `createMany` (ingest) **+**
 `findMany.latestPer` (distinctOn).
 
-**Tier histórico — adiável:**
-`accumulate()` (com `RETURNING`) **+** único composto **+** tipo `histogram` **+** tipo
-`hll` / `approxDistinct` **+** `percentile` sobre campo histograma.
+**Tier histórico:**
+`accumulate()` (com `RETURNING`, ops `inc`/`max`/`min`/`setOnInsert`) **✅** **+** único
+composto **✅** **+** retenção por partição (§5) — **o que falta no caminho crítico da
+telemetria**. Adiável (sem consumidor de sketch): tipo `histogram` **+** tipo `hll` /
+`approxDistinct` **+** `percentile` sobre campo histograma.
 
 **Primeiro tijolo (fatia vertical mínima):** `count`/`sum` + `groupBy` + `orderBy` — o
 esqueleto do compilador de agregação. Teste de aceitação (a query real mais simples que
@@ -230,6 +237,10 @@ Sem a extensão, o Weave segue 100% menos esse campo.
 
 1. **`accumulate` retorna a linha** (`RETURNING`) — habilita inc-and-return (contadores
    monotônicos, sequências). Mesmo primitivo de escrita, sem fire-and-forget forçado.
+   **Implementado (2026-07-02)** com ops `inc`/`max`/`min`/`setOnInsert`; `max`/`min` são o
+   mesmo nome do acumulador de leitura, **overloaded pelo tipo do arg** (campo `string` →
+   read `percentile_cont`-style; valor `number` → write op). A chave = **unique declarado**
+   (composto ou coluna `.unique()`), o árbitro do `ON CONFLICT`.
 2. **`counterMap` descartado.** Breakdowns são **tier-recente** (`groupBy` de campo cru
    no evento). O tier histórico guarda só **3 sketches**: numérico (sum/count/min/max),
    `histogram` (percentis), `hll` (distinct). Motivo: breakdown por chave dinâmica de 30
@@ -276,7 +287,7 @@ Sem a extensão, o Weave segue 100% menos esse campo.
 - **Fora de escopo / futuro:** `t-digest` como alternativa ao `histogram` (percentil sem
   fronteiras fixas); continuous aggregates (rollup mantido pelo próprio Postgres).
 
-## Checklist de implementação (status: 2026-07-01)
+## Checklist de implementação (status: 2026-07-02)
 
 Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisão.
 
@@ -306,14 +317,16 @@ Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisã
 - [x] Índice composto — `{ index: [[...]] }` (mesmo maquinário)
 - [x] Membro reference N:1 → coluna `<campo>_id`; validação (owned/N:N/inexistente → erro)
 - [x] Migração: add unique composto = **blocked** se duplicata; drop/index = auto
-- [ ] Retenção por partição (`partitionBy: timeBucket(...)`, `retention`, drop de partição) — load-bearing no tier cru
+- [ ] Retenção por partição (`partitionBy: timeBucket(...)`, `retention`, drop de partição) — load-bearing no tier cru; **o último tijolo do caminho crítico da telemetria** (manutenção interna ao Weave, Postgres-nativa: `ensure-partition` lazy no write + drop das expiradas; zero cron/endpoint no app)
 
-### Tier histórico — escrita — §3 (adiável, sem consumidor)
-- [ ] `accumulate(key, { … })` — upsert atômico `ON CONFLICT … DO UPDATE … RETURNING *`
-- [ ] Op `inc(n)`
-- [ ] Op `setOnInsert(v)`
-- [ ] Op `addToHistogram(v)` (depende do tipo `histogram`)
-- [ ] Op `addToHll(v)` (depende do tipo `hll`)
+### Tier histórico — escrita — §3
+- [x] `accumulate(key, { … })` — upsert atômico `ON CONFLICT … DO UPDATE … RETURNING *` (2026-07-02; merge no Postgres, sem lógica JS)
+- [x] Op `inc(n)` — `col = col + excluded.col`
+- [x] Op `max(v)` / `min(v)` — `greatest` / `least` (sketch numérico min/max, §0)
+- [x] Op `setOnInsert(v)` — grava no INSERT, **fora do `SET`** (preservado no merge)
+- [x] Chave = unique declarado (composto ou coluna `.unique()`), árbitro do `ON CONFLICT`; erro claro se não casa
+- [ ] Op `addToHistogram(v)` (depende do tipo `histogram` — §4, adiável, sem consumidor)
+- [ ] Op `addToHll(v)` (depende do tipo `hll` — §4, adiável, sem consumidor)
 
 ### Tier histórico — tipos de campo (sketches mergeáveis) — §4
 - [ ] **Tipo** `histogram([bounds])` como campo mergeável (merge = soma elemento-a-elemento) — hoje só existe como acumulador de leitura
@@ -330,4 +343,4 @@ Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisã
 - [ ] ⛔ Window functions user-facing (running-total/rank/moving-avg) — **parked** por decisão
 - [ ] ⛔ Campo derivado (equivalente ao `.transform()` do Zod) — **fora de escopo**, é do consumidor
 
-**Resumo:** todo o **read do tier-recente + ingest** (§1, §2, §3-recente) e o **único/índice composto** (§5) estão ✅ — é o suficiente pro MVP do Analytics recente do PodCubo. Falta o **tier histórico** (`accumulate` + sketches + partição) e a **agregação relacional** (design-agora/impl-depois).
+**Resumo (2026-07-02):** todo o **read do tier-recente + ingest** (§1, §2, §3-recente), o **único/índice composto** (§5) e agora o **`accumulate` numérico** (§3-histórico: `inc`/`max`/`min`/`setOnInsert`, com `RETURNING`, merge no Postgres) estão ✅. Pro caminho crítico da **telemetria** falta **só a retenção por partição** (§5). Adiável, sem consumidor: os **sketches** (tipos `histogram`/`hll`, `addToHistogram`/`addToHll`, `approxDistinct`, percentile-sobre-histograma) e a **agregação relacional** (design-agora/impl-depois).

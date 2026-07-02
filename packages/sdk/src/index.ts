@@ -72,6 +72,11 @@ export {
   add,
   sub,
   timeBucket,
+  // accumulate (escrita do tier histórico)
+  inc,
+  setOnInsert,
+  type AccumulateOp,
+  type AccumulateInput,
   type Entity,
   type InferEntity,
   type InferRead,

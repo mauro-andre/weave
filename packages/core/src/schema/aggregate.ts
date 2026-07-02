@@ -1,5 +1,6 @@
 import type { Entity, ShapeRecord } from "./entity.js";
 import type { WhereInput, SortDir } from "./where.js";
+import type { AccumulateOp } from "./accumulate.js";
 
 // Linguagem de AGREGAÇÃO em idioma de objeto (irmã do WhereInput). O dev monta
 // `groupBy` + acumuladores no `select` + `orderBy`; o engine (compileAggregate)
@@ -27,8 +28,20 @@ const withWhere = <A extends Accumulator>(base: A, opts?: AggOpts): A =>
 export const count = (opts?: AggOpts): Accumulator => withWhere({ agg: "count" }, opts);
 export const sum = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "sum", field }, opts);
 export const avg = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "avg", field }, opts);
-export const min = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "min", field }, opts);
-export const max = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "max", field }, opts);
+// `min`/`max` são DUPLOS: com um campo (string) são acumuladores de LEITURA
+// (`min("durationMs")`); com um valor (number) são ops de ESCRITA do accumulate
+// (`min(cpu)` → sketch numérico min/max, §0). O arg desambigua — read usa nome de
+// campo, write usa valor numérico; nunca se cruzam num mesmo call-site.
+export function min(field: string, opts?: AggOpts): Accumulator;
+export function min(value: number): AccumulateOp;
+export function min(arg: string | number, opts?: AggOpts): Accumulator | AccumulateOp {
+  return typeof arg === "number" ? { op: "min", value: arg } : withWhere({ agg: "min", field: arg }, opts);
+}
+export function max(field: string, opts?: AggOpts): Accumulator;
+export function max(value: number): AccumulateOp;
+export function max(arg: string | number, opts?: AggOpts): Accumulator | AccumulateOp {
+  return typeof arg === "number" ? { op: "max", value: arg } : withWhere({ agg: "max", field: arg }, opts);
+}
 /** Distintos EXATOS (`count(distinct …)`) — tier recente. */
 export const distinct = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "distinct", field }, opts);
 /** Percentil EXATO (`percentile_cont`) sobre escalar cru. `p` é fração 0..1 (p95 → 0.95). */

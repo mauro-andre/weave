@@ -11,3 +11,4 @@ export {
 export { rehydrate } from "./rehydrate.js";
 export type { ExpandMap, SelectMap } from "./read.js";
 export { shred, renderInsert, renderUpsert, type Executor } from "./write.js";
+export { compileAccumulate, type CompiledAccumulate } from "./accumulate.js";

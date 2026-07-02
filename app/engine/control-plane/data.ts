@@ -1,7 +1,7 @@
-import { weave, compileCount, compileAggregate } from "../index.js";
+import { weave, compileCount, compileAggregate, compileAccumulate } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
-import { resolveMirrors, fromIR, tableize, type FieldIR } from "@mauroandre/weave-core";
+import { resolveMirrors, fromIR, tableize, camelize, type FieldIR, type AccumulateOp } from "@mauroandre/weave-core";
 
 // `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API/GUI;
 // aqui tratamos como mapas frouxos e repassamos pro engine (compileFind/compileCount).
@@ -198,6 +198,41 @@ export async function createManyObjects(
   try {
     const loose = client as unknown as { createMany(e: unknown, i: unknown[]): Promise<unknown[]> };
     return jsonSafe(await loose.createMany(entities[name], inputs)) as Record<string, unknown>[];
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Accumulate (tier histórico): faz um upsert mergeável na `key` (o unique declarado),
+ * aplicando `ops` (inc/max/min/setOnInsert) NO POSTGRES, e devolve a linha resultante
+ * (Decisão 1 — inc-and-return). Não passa pelo `save` do engine (nada de shred/owned):
+ * é uma tabela de rollup plana, então compila direto no upsert e roda numa query.
+ */
+export async function accumulateObject(
+  name: string,
+  key: Record<string, unknown>,
+  ops: Record<string, AccumulateOp>,
+): Promise<Record<string, unknown>> {
+  name = tableize(name);
+  const irs = await listEntities();
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
+  const byName = new Map(irs.map((e) => [e.name, e] as const));
+  const resolved = irs.map((e) => resolveMirrors(e, byName));
+  const entities = fromIR(resolved);
+
+  const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) throw new Error("weave: DATABASE_URL is not set.");
+  const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
+  try {
+    const q = compileAccumulate(entities[name]!, key, ops);
+    const rows = (await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
+    // `RETURNING *` volta com chaves snake_case (colunas cruas); o resto da API fala
+    // camelCase (o SDK revive por lá). Remapeia pra alinhar (rollup é plano: sem owned).
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rows[0] ?? {})) out[camelize(k)] = v;
+    return jsonSafe(out);
   } finally {
     await client.close();
   }
