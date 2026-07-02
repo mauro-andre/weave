@@ -11,6 +11,7 @@ import {
   reference,
   text,
   timestamptz,
+  timeBucket,
 } from "../../app/engine/index.js";
 
 describe("emitCreateTable", () => {
@@ -132,5 +133,22 @@ describe("duplicate-column guard (scalar *Id vs link column)", () => {
   it("scalar *Id sem link homônimo passa (caso normal de entity raiz)", () => {
     const e = defineEntity("dns", { zoneId: text().notNull(), accountId: text().notNull() });
     expect(() => emitEntity(e)).not.toThrow();
+  });
+});
+
+describe("emitCreateTable — partição por tempo", () => {
+  it("particiona por RANGE (ts) e move a PK pra (id, ts)", () => {
+    const req = defineEntity(
+      "app_request",
+      { host: text().notNull(), ts: timestamptz().notNull(), status: int4().notNull() },
+      { partitionBy: timeBucket("ts", "1d"), retention: "30d" },
+    );
+    const sql = emitCreateTable(req);
+    // id perde o PRIMARY KEY inline (a PK vira composta com a coluna de partição).
+    expect(sql).toContain("  id uuid NOT NULL DEFAULT gen_random_uuid(),");
+    expect(sql).not.toContain("id uuid PRIMARY KEY");
+    expect(sql).toContain("  PRIMARY KEY (id, ts)");
+    // o sufixo PARTITION BY fica FORA dos parênteses das colunas, antes do `;`.
+    expect(sql.trimEnd()).toMatch(/\) PARTITION BY RANGE \(ts\);$/);
   });
 });

@@ -86,6 +86,7 @@ export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): strin
     .map(([k, n]) => `  ${k}: ${fieldSource(n, ctx, ir.name)},`)
     .join("\n");
 
+  if (ir.partitionBy) ctx.builders.add("timeBucket"); // partitionBy: timeBucket(...) precisa importar
   const builders = ["defineEntity", ...[...ctx.builders].sort()];
   const lines = [`import { ${builders.join(", ")} } from "@mauroandre/weave-sdk";`];
   for (const t of [...ctx.imports].sort()) lines.push(`import ${t} from "./${t}.js";`);
@@ -93,11 +94,15 @@ export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): strin
   return lines.join("\n");
 }
 
-/** O 3º arg de `defineEntity` (unique/index compostos), ou "" quando não houver. */
+/** O 3º arg de `defineEntity` (unique/index compostos + partição), ou "" quando não houver. */
 function optsSource(ir: EntityIR): string {
   const parts: string[] = [];
   if (ir.unique?.length) parts.push(`unique: ${JSON.stringify(ir.unique)}`);
   if (ir.index?.length) parts.push(`index: ${JSON.stringify(ir.index)}`);
+  if (ir.partitionBy) {
+    parts.push(`partitionBy: timeBucket(${JSON.stringify(ir.partitionBy.field)}, ${JSON.stringify(ir.partitionBy.interval)})`);
+  }
+  if (ir.retention) parts.push(`retention: ${JSON.stringify(ir.retention)}`);
   return parts.length ? `, { ${parts.join(", ")} }` : "";
 }
 

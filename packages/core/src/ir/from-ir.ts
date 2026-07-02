@@ -21,11 +21,14 @@ export function fromIR(irs: EntityIR[]): Record<string, AnyEntity> {
   }
   for (const ir of irs) {
     (map[ir.name] as { columns: ShapeRecord }).columns = buildShape(ir.fields, map) as unknown as ShapeRecord;
-    // Reconstrói as options (unique/index compostos) pro DDL e o client embutido as verem.
-    if (ir.unique?.length || ir.index?.length) {
+    // Reconstrói as options (unique/index compostos + partição) pro DDL e o client
+    // embutido as verem. partitionBy volta pra forma de GroupExpr (`timeBucket`).
+    if (ir.unique?.length || ir.index?.length || ir.partitionBy || ir.retention) {
       (map[ir.name] as { options?: unknown }).options = {
         ...(ir.unique?.length ? { unique: ir.unique.map((g) => [...g]) } : {}),
         ...(ir.index?.length ? { index: ir.index.map((g) => [...g]) } : {}),
+        ...(ir.partitionBy ? { partitionBy: { timeBucket: { ...ir.partitionBy } } } : {}),
+        ...(ir.retention ? { retention: ir.retention } : {}),
       };
     }
   }

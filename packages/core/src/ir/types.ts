@@ -52,4 +52,8 @@ export interface EntityIR {
   unique?: string[][];
   /** Grupos de índice composto (não-único). */
   index?: string[][];
+  /** Partição RANGE por tempo: `field` (nome lógico) + `interval` (ex.: "1d"). */
+  partitionBy?: { field: string; interval: string };
+  /** Retenção da partição (ex.: "30d") — dropa partições cujo topo já passou. */
+  retention?: string;
 }

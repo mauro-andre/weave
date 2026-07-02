@@ -13,6 +13,8 @@ export function normalizeEntityIR(ir: EntityIR): EntityIR {
   else delete out.unique;
   if (ir.index?.length) out.index = ir.index.map((g) => g.map(camelize));
   else delete out.index;
+  // partitionBy referencia um campo → camelize o nome (alinha com os campos canônicos).
+  if (ir.partitionBy) out.partitionBy = { ...ir.partitionBy, field: camelize(ir.partitionBy.field) };
   return out;
 }
 

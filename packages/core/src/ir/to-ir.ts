@@ -24,6 +24,10 @@ export function toIR(entity: Entity<string, ShapeRecord>): EntityIR {
   // junto com os campos. Omitidos quando ausentes (IR canônico/mínimo).
   if (entity.options?.unique?.length) ir.unique = entity.options.unique.map((g) => [...g]);
   if (entity.options?.index?.length) ir.index = entity.options.index.map((g) => [...g]);
+  // partitionBy é um GroupExpr (`timeBucket(field, interval)`) → achata pro IR.
+  const pb = entity.options?.partitionBy;
+  if (pb) ir.partitionBy = { field: pb.timeBucket.field, interval: pb.timeBucket.interval };
+  if (entity.options?.retention) ir.retention = entity.options.retention;
   return ir;
 }
 

@@ -59,6 +59,8 @@ export interface TableSpec {
   primaryKey?: string[];
   /** Unique/index compostos (entity-level) — só na tabela raiz. */
   composites?: CompositeSpec[];
+  /** Partição RANGE por tempo (raiz). Força a PK a incluir a coluna de partição. */
+  partitionBy?: { column: string; interval: string };
 }
 
 // ── Default rendering ────────────────────────────────────────────────────────
@@ -222,6 +224,20 @@ export function collectTables(entity: Entity<string, ShapeRecord>): TableSpec[] 
     });
   const composites = [...groups(true, entity.options?.unique), ...groups(false, entity.options?.index)];
   if (composites.length) specs[0]!.composites = composites;
+
+  // Partição por tempo (raiz): a regra do Postgres exige a coluna de partição DENTRO
+  // da PK → o `id` deixa de ser PK sozinho e a PK vira `(id, <ts>)`. Consequência: o
+  // tier particionado é append-only (sem upsert-by-id) — exatamente o que um tier de
+  // evento cru quer.
+  const pb = entity.options?.partitionBy;
+  if (pb) {
+    const column = compositeColumn(entity.columns, pb.timeBucket.field);
+    const root = specs[0]!;
+    const idCol = root.columns.find((c) => c.name === "id");
+    if (idCol) delete idCol.primaryKey;
+    root.primaryKey = ["id", column];
+    root.partitionBy = { column, interval: pb.timeBucket.interval };
+  }
   return specs;
 }
 
@@ -251,7 +267,8 @@ function renderColumnSpec(c: ColumnSpec): string {
 export function renderCreateTable(spec: TableSpec): string {
   const lines = spec.columns.map((c) => `  ${renderColumnSpec(c)}`);
   if (spec.primaryKey) lines.push(`  PRIMARY KEY (${spec.primaryKey.join(", ")})`);
-  return `CREATE TABLE ${spec.name} (\n${lines.join(",\n")}\n);`;
+  const partition = spec.partitionBy ? ` PARTITION BY RANGE (${spec.partitionBy.column})` : "";
+  return `CREATE TABLE ${spec.name} (\n${lines.join(",\n")}\n)${partition};`;
 }
 
 /** Render a single column definition (for `CREATE TABLE` / `ALTER TABLE ADD COLUMN`). */

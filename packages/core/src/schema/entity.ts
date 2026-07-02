@@ -16,6 +16,7 @@
 import type { Column, InferColumn } from "./column.js";
 import type { AnyOwned, OwnedShape, Owned, OwnedCardinality } from "./owned.js";
 import type { AnyReference } from "./reference.js";
+import type { GroupExpr } from "./aggregate.js";
 
 /** A record of named fields — columns, owned relationships, and/or references. */
 export type ShapeRecord = Record<
@@ -43,6 +44,14 @@ export interface EntityOptions {
   readonly unique?: string[][];
   /** Grupos de índice composto (não-único). */
   readonly index?: string[][];
+  /**
+   * Particiona a tabela por tempo (RANGE nativo). `timeBucket(field, interval)` — o
+   * campo tem que ser um `timestamptz().notNull()`. Torna a tabela **append-only**
+   * (a PK passa a ser `(id, <field>)`). Genérico: qualquer série-temporal de volume.
+   */
+  readonly partitionBy?: GroupExpr;
+  /** Retenção da partição (ex.: `"30d"`): partições cujo topo já passou são **dropadas**. */
+  readonly retention?: string;
 }
 
 /** A declared entity: a table name plus its shape (+ constraints de entidade). */
@@ -74,6 +83,30 @@ function validateEntityOptions(columns: ShapeRecord, options: EntityOptions): vo
         throw new Error(`weave: a composite group can't include the many-reference '${field}'.`);
       }
     }
+  }
+
+  // Partição por tempo: o campo tem que ser um `timestamptz().notNull()` (a chave de
+  // RANGE não pode ser nula e precisa ser temporal). Duck-typing pelo `config` da Column.
+  if (options.partitionBy) {
+    const field = options.partitionBy.timeBucket?.field;
+    if (!field) throw new Error("weave: partitionBy needs timeBucket(field, interval).");
+    const f = (columns as Record<string, unknown>)[field] as
+      | { config?: { pgType?: { name?: string }; notNull?: boolean } }
+      | undefined;
+    if (!f?.config) throw new Error(`weave: partitionBy field '${field}' must be a column.`);
+    if (f.config.pgType?.name !== "timestamptz") {
+      throw new Error(`weave: partitionBy field '${field}' must be a timestamptz column.`);
+    }
+    if (!f.config.notNull) throw new Error(`weave: partitionBy field '${field}' must be .notNull().`);
+    if (!/^\d+(s|min|h|d)$/.test(options.partitionBy.timeBucket.interval)) {
+      throw new Error(`weave: invalid partition interval '${options.partitionBy.timeBucket.interval}'.`);
+    }
+  }
+  if (options.retention !== undefined && !/^\d+(s|min|h|d)$/.test(options.retention)) {
+    throw new Error(`weave: invalid retention '${options.retention}' (use 7d, 30d, 12h, …).`);
+  }
+  if (options.retention !== undefined && !options.partitionBy) {
+    throw new Error("weave: retention needs partitionBy (retention drops whole partitions).");
   }
 }
 

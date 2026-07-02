@@ -1,7 +1,11 @@
 import { weave, compileCount, compileAggregate, compileAccumulate } from "../index.js";
 import { db } from "./db.js";
 import { listEntities } from "./entities.js";
-import { resolveMirrors, fromIR, tableize, camelize, type FieldIR, type AccumulateOp } from "@mauroandre/weave-core";
+import { maintainPartitions } from "./partition.js";
+import { parseDuration } from "../ddl/partition.js";
+import { resolveMirrors, fromIR, tableize, camelize, type EntityIR, type FieldIR, type AccumulateOp } from "@mauroandre/weave-core";
+
+type SqlUnsafe = { unsafe(q: string, p?: unknown[]): Promise<unknown[]> };
 
 // `where`/`orderBy` chegam como JSON tipado (WhereInput/OrderByInput) do SDK/API/GUI;
 // aqui tratamos como mapas frouxos e repassamos pro engine (compileFind/compileCount).
@@ -165,7 +169,21 @@ export async function saveObject(name: string, object: Record<string, unknown>):
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
   const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: SqlUnsafe }).sql;
   try {
+    // Create único numa entity particionada: garante a partição da `ts` da linha. Ao
+    // contrário do ingest em lote (pula silencioso + loga), um create explícito além da
+    // retenção é um erro claro — a partição já não existe.
+    if (root.partitionBy) {
+      const { field, interval } = root.partitionBy;
+      const retentionSec = root.retention ? parseDuration(root.retention) : null;
+      const { keep } = await maintainPartitions(sql, name, parseDuration(interval), retentionSec, [
+        tsEpoch(object[field], field, name),
+      ]);
+      if (!keep[0]) {
+        throw new Error(`weave: this row's '${field}' is older than the retention window (${root.retention}).`);
+      }
+    }
     const loose = client as unknown as { save(e: unknown, i: unknown): Promise<unknown> };
     return jsonSafe(await loose.save(entities[name], object));
   } finally {
@@ -195,9 +213,12 @@ export async function createManyObjects(
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
   const client = weave({ url, entities });
+  const sql = (client as unknown as { sql: SqlUnsafe }).sql;
   try {
+    const toInsert = await applyPartitioning(sql, root, name, inputs);
+    if (toInsert.length === 0) return [];
     const loose = client as unknown as { createMany(e: unknown, i: unknown[]): Promise<unknown[]> };
-    return jsonSafe(await loose.createMany(entities[name], inputs)) as Record<string, unknown>[];
+    return jsonSafe(await loose.createMany(entities[name], toInsert)) as Record<string, unknown>[];
   } finally {
     await client.close();
   }
@@ -236,6 +257,42 @@ export async function accumulateObject(
   } finally {
     await client.close();
   }
+}
+
+/**
+ * Manutenção de partição no ingest em lote de uma entity particionada: garante as
+ * partições das linhas que chegam, dropa expiradas e PULA as que caem além da retenção
+ * (a partição já não existe; guardá-las seria criar-pra-dropar). Devolve o que inserir
+ * e loga o nº pulado — observável (diagnóstico de relógio de worker torto).
+ */
+async function applyPartitioning(
+  sql: SqlUnsafe,
+  root: EntityIR,
+  table: string,
+  inputs: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (!root.partitionBy) return inputs;
+  const { field, interval } = root.partitionBy;
+  const intervalSec = parseDuration(interval);
+  const retentionSec = root.retention ? parseDuration(root.retention) : null;
+  const tsEpochs = inputs.map((i) => tsEpoch(i[field], field, table));
+  const { keep, skipped } = await maintainPartitions(sql, table, intervalSec, retentionSec, tsEpochs);
+  if (skipped > 0) {
+    console.warn(
+      `weave: partition retention on '${table}' skipped ${skipped} row(s) with '${field}' older than ${root.retention}.`,
+    );
+  }
+  return inputs.filter((_, i) => keep[i]);
+}
+
+/** Epoch (seg) do campo de partição de um input; erro claro se ausente/inválido. */
+function tsEpoch(v: unknown, field: string, table: string): number {
+  const ms =
+    v instanceof Date ? v.getTime() : typeof v === "string" || typeof v === "number" ? new Date(v).getTime() : NaN;
+  if (!Number.isFinite(ms)) {
+    throw new Error(`weave: '${table}' is partitioned by '${field}' — every row needs a valid timestamp there.`);
+  }
+  return ms / 1000;
 }
 
 /** Converte references expandidas (objeto/array do read) de volta pra id-form, recursivo. */

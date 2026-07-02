@@ -162,9 +162,15 @@ facets: {
 
 - **Único/índice composto:** `unique: [["host","route","method","ts"]]` — a chave de
   rollup / alvo do `ON CONFLICT`.
-- **Retenção por partição:** particiona por tempo + **drop de partição** (não sweeper de
-  `DELETE`, que incha no volume). Ex.: `partitionBy: timeBucket("ts","1d")`,
-  `retention: "7d"`. **Load-bearing** no tier cru.
+- **Retenção por partição (✅ 2026-07-02):** particiona por tempo (RANGE nativo) + **drop
+  de partição** (não sweeper de `DELETE`, que incha no volume). Ex.:
+  `partitionBy: timeBucket("ts","1d")`, `retention: "30d"`. **Manutenção 100% interna ao
+  Weave** — o app só declara. Lazy no write: garante a partição da `ts` que CHEGA (cobre
+  backlog atrasado) e, ao abrir um bucket novo, dropa as expiradas (self-clocking pelo
+  tráfego, sem cron/endpoint). A chave de partição entra na PK (`(id, <ts>)`) → o tier vira
+  **append-only** (o que um evento cru quer). Linha com `ts` além da retenção é **pulada no
+  ingest** (createMany) + logada, ou erro claro no create único. Genérico (qualquer
+  série-temporal), não específico de telemetria.
 
 ## §6. Ordem de implementação
 
@@ -176,8 +182,8 @@ facets: {
 
 **Tier histórico:**
 `accumulate()` (com `RETURNING`, ops `inc`/`max`/`min`/`setOnInsert`) **✅** **+** único
-composto **✅** **+** retenção por partição (§5) — **o que falta no caminho crítico da
-telemetria**. Adiável (sem consumidor de sketch): tipo `histogram` **+** tipo `hll` /
+composto **✅** **+** retenção por partição (§5) **✅** — **caminho crítico da telemetria
+COMPLETO**. Adiável (sem consumidor de sketch): tipo `histogram` **+** tipo `hll` /
 `approxDistinct` **+** `percentile` sobre campo histograma.
 
 **Primeiro tijolo (fatia vertical mínima):** `count`/`sum` + `groupBy` + `orderBy` — o
@@ -317,7 +323,7 @@ Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisã
 - [x] Índice composto — `{ index: [[...]] }` (mesmo maquinário)
 - [x] Membro reference N:1 → coluna `<campo>_id`; validação (owned/N:N/inexistente → erro)
 - [x] Migração: add unique composto = **blocked** se duplicata; drop/index = auto
-- [ ] Retenção por partição (`partitionBy: timeBucket(...)`, `retention`, drop de partição) — load-bearing no tier cru; **o último tijolo do caminho crítico da telemetria** (manutenção interna ao Weave, Postgres-nativa: `ensure-partition` lazy no write + drop das expiradas; zero cron/endpoint no app)
+- [x] Retenção por partição (`partitionBy: timeBucket(...)`, `retention`, drop de partição) — RANGE nativo, PK `(id, ts)` (append-only), `ensure-partition` lazy pela ts do evento + drop das expiradas no rollover, **interno ao Weave** (zero cron/endpoint), skip+log além da retenção (2026-07-02)
 
 ### Tier histórico — escrita — §3
 - [x] `accumulate(key, { … })` — upsert atômico `ON CONFLICT … DO UPDATE … RETURNING *` (2026-07-02; merge no Postgres, sem lógica JS)
@@ -343,4 +349,4 @@ Legenda: ✅ feito · ⬜ não feito · 🎨 desenhado, impl. adiada por decisã
 - [ ] ⛔ Window functions user-facing (running-total/rank/moving-avg) — **parked** por decisão
 - [ ] ⛔ Campo derivado (equivalente ao `.transform()` do Zod) — **fora de escopo**, é do consumidor
 
-**Resumo (2026-07-02):** todo o **read do tier-recente + ingest** (§1, §2, §3-recente), o **único/índice composto** (§5) e agora o **`accumulate` numérico** (§3-histórico: `inc`/`max`/`min`/`setOnInsert`, com `RETURNING`, merge no Postgres) estão ✅. Pro caminho crítico da **telemetria** falta **só a retenção por partição** (§5). Adiável, sem consumidor: os **sketches** (tipos `histogram`/`hll`, `addToHistogram`/`addToHll`, `approxDistinct`, percentile-sobre-histograma) e a **agregação relacional** (design-agora/impl-depois).
+**Resumo (2026-07-02):** o **caminho crítico da telemetria está COMPLETO** — read do tier-recente + ingest (§1, §2, §3-recente), único/índice composto (§5), **`accumulate` numérico** (§3-histórico: `inc`/`max`/`min`/`setOnInsert`, `RETURNING`, merge no Postgres) e **retenção por partição** (§5: RANGE nativo, append-only, manutenção interna) — tudo ✅. O PodCubo pode fiar a telemetria inteira. Adiável, sem consumidor: os **sketches** (tipos `histogram`/`hll`, `addToHistogram`/`addToHll`, `approxDistinct`, percentile-sobre-histograma) e a **agregação relacional** (design-agora/impl-depois).

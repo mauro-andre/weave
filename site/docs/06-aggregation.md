@@ -187,6 +187,39 @@ await weave.appRequest.createMany([
 ]); // → the created rows, in input order
 ```
 
+## Retention — partition by time
+
+A high-volume event table (requests, logs, audit trails) can't grow forever. Declare
+`partitionBy` + `retention` and Weave keeps a **rolling window** for you — natively, with
+zero maintenance on your side:
+
+```ts
+export default defineEntity(
+  "appRequest",
+  { host: text().notNull(), route: text().notNull(), ts: timestamptz().notNull(), status: int4().notNull() },
+  { partitionBy: timeBucket("ts", "1d"), retention: "30d" },   // daily partitions, keep 30 days
+);
+```
+
+Under the hood the table is **RANGE-partitioned** by `ts`. On each write Weave lazily
+creates the partition the incoming row falls into (so a late/backfilled batch still lands
+correctly), and once a new day opens it **drops** whole partitions past the retention
+window — a `DROP TABLE`, not a row-by-row `DELETE` that would bloat under load. You never
+run a cron or a cleanup job; it's internal to Weave. Reads (`findMany`, `aggregate`) span
+all partitions transparently — Postgres prunes by the `ts` predicate.
+
+Two things to know:
+
+- **Append-only.** The partition key rides in the primary key (`(id, ts)`), so a
+  partitioned entity is insert-only — ingest with `createMany`, never `updateOne`. That's
+  exactly what a raw event tier wants.
+- **Past the window is skipped.** A row whose `ts` is already older than `retention` is
+  dropped on ingest (its partition is gone) — `createMany` skips it and logs the count;
+  a single `create` of such a row is a clear error.
+
+The partition field must be a `timestamptz().notNull()`. This is a general time-series
+capability — logs, metrics, events — not tied to any one domain.
+
 ## Latest per group — `latestPer`
 
 Greatest-n-per-group: one row per key, the latest wins. It feeds live-metrics widgets

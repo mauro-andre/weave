@@ -77,6 +77,24 @@ describe("SDK codegen — irToSource", () => {
     expect(src).toContain("owned(mirror(products))");
   });
 
+  it("partitionBy/retention → emite timeBucket no 3º arg + importa timeBucket", () => {
+    const ir = {
+      irVersion: 1,
+      name: "appRequest",
+      fields: {
+        host: { kind: "column", type: "text", notNull: true },
+        ts: { kind: "column", type: "timestamptz", notNull: true },
+      },
+      partitionBy: { field: "ts", interval: "1d" },
+      retention: "30d",
+    } as const;
+    const src = irToSource(ir as never);
+    expect(src).toContain('partitionBy: timeBucket("ts", "1d")');
+    expect(src).toContain('retention: "30d"');
+    const importLine = src.split("\n").find((l) => l.startsWith("import {"))!;
+    expect(importLine).toContain("timeBucket"); // senão o arquivo gerado quebra
+  });
+
   it("importa `array` quando SÓ um owned(array({…})) usa (sem scalar-array pra mascarar)", () => {
     const ownedArrayIr = {
       irVersion: 1,
