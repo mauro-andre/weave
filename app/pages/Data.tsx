@@ -480,6 +480,12 @@ function Value({ value, array }: { value: unknown; array?: boolean }) {
   }
   if (typeof value === "boolean") return <span class={css.valueBool}>{value ? "true" : "false"}</span>;
   if (typeof value === "number" || typeof value === "bigint") return <span class={css.valueNum}>{String(value)}</span>;
+  // jsonb (objeto/array): bloco indentado + colorido — não o "[object Object]" do String(obj).
+  if (typeof value === "object" && !(value instanceof Date)) {
+    return (
+      <pre class={css.jsonView} dangerouslySetInnerHTML={{ __html: highlightJson(JSON.stringify(value, null, 2)) }} />
+    );
+  }
   return <span class={css.valueStr}>{String(value)}</span>;
 }
 
@@ -699,6 +705,20 @@ function EditInput({
     );
   }
 
+  // jsonb/json: edita o JSON num textarea; só grava quando parseia (senão marca inválido
+  // e mantém o último válido no objeto — não corrompe com a string "[object Object]").
+  if (node.type === "jsonb" || node.type === "json") {
+    return (
+      <JsonEditInput
+        value={v}
+        onChange={(val) => {
+          obj[name] = val;
+          bump();
+        }}
+      />
+    );
+  }
+
   const numeric = NUMERIC.has(node.type);
   return (
     <input
@@ -711,5 +731,59 @@ function EditInput({
         bump();
       }}
     />
+  );
+}
+
+// Colore JSON cru (mesmo enquanto inválido, durante a digitação): escapa o HTML e
+// envolve os tokens em spans. String seguida de `:` = chave. Puramente cosmético.
+const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function highlightJson(text: string): string {
+  return escHtml(text).replace(
+    /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],:])/g,
+    (m, str, colon, num, kw, punct) => {
+      if (str !== undefined)
+        return colon
+          ? `<span class="${css.jKey}">${str}</span><span class="${css.jPunct}">${colon}</span>`
+          : `<span class="${css.jStr}">${str}</span>`;
+      if (num !== undefined) return `<span class="${css.jNum}">${num}</span>`;
+      if (kw !== undefined) return `<span class="${css.jKw}">${kw}</span>`;
+      if (punct !== undefined) return `<span class="${css.jPunct}">${punct}</span>`;
+      return m;
+    },
+  );
+}
+
+// Editor de um valor jsonb: highlight layered (textarea transparente sobre um <pre>
+// colorido, alinhados). Parseia a cada tecla; grava só quando é JSON válido, senão marca
+// a borda vermelha e mantém o último valor bom (não corrompe). Vazio = null.
+function JsonEditInput({ value, onChange }: { value: unknown; onChange: (val: unknown) => void }) {
+  const [text, setText] = useState(value === null || value === undefined ? "" : JSON.stringify(value, null, 2));
+  const [invalid, setInvalid] = useState(false);
+  // O `<pre>` precisa de um char no fim se o texto termina em \n, senão a última linha some.
+  const html = highlightJson(text) + (text.endsWith("\n") ? "​" : "");
+  return (
+    <div class={`${css.jsonEditor}${invalid ? ` ${css.jsonInvalid}` : ""}`}>
+      <pre class={css.jsonPre} aria-hidden="true" dangerouslySetInnerHTML={{ __html: html }} />
+      <textarea
+        class={css.jsonArea}
+        spellcheck={false}
+        value={text}
+        onInput={(e) => {
+          const raw = (e.currentTarget as HTMLTextAreaElement).value;
+          setText(raw);
+          if (raw.trim() === "") {
+            setInvalid(false);
+            onChange(null);
+            return;
+          }
+          try {
+            onChange(JSON.parse(raw));
+            setInvalid(false);
+          } catch {
+            setInvalid(true);
+          }
+        }}
+      />
+    </div>
   );
 }

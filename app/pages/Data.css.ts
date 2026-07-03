@@ -155,6 +155,67 @@ export const editInput = style({
   selectors: { "&:focus": { borderColor: vars.color.teal } },
 });
 
+// ── Editor de jsonb (highlight layered: textarea transparente sobre um <pre> colorido) ──
+// As duas camadas COMPARTILHAM métricas idênticas (fonte/tamanho/entrelinha/padding/wrap)
+// pra o texto invisível do textarea cair exatamente sobre o texto colorido do <pre>.
+const jsonBox = {
+  margin: 0,
+  padding: "7px 10px",
+  fontFamily: vars.font.mono,
+  fontSize: "12px",
+  lineHeight: 1.55,
+  boxSizing: "border-box",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  tabSize: 2,
+} as const;
+
+export const jsonEditor = style({
+  position: "relative",
+  flex: 1,
+  minWidth: "160px",
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "6px",
+  background: vars.color.bg,
+  selectors: { "&:focus-within": { borderColor: vars.color.teal } },
+});
+export const jsonInvalid = style({ borderColor: `${vars.color.danger} !important` });
+
+// Bloco read-only (display de um jsonb): JSON indentado + colorido, como um code block.
+export const jsonView = style({
+  ...jsonBox,
+  maxWidth: "100%",
+  color: vars.color.text,
+  background: vars.color.bg,
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "6px",
+  overflowX: "auto",
+});
+
+// <pre> em fluxo: define a altura (cresce com o conteúdo). Texto visível, sem eventos.
+export const jsonPre = style({ ...jsonBox, minHeight: "5.5em", color: vars.color.text, pointerEvents: "none" });
+
+// textarea absoluto por cima: texto transparente (só o caret aparece), fundo transparente.
+export const jsonArea = style({
+  ...jsonBox,
+  position: "absolute",
+  inset: 0,
+  border: "none",
+  outline: "none",
+  resize: "none",
+  overflow: "hidden",
+  background: "transparent",
+  color: "transparent",
+  caretColor: vars.color.text,
+});
+
+// Tokens do JSON (paleta estilo GitHub-dark, harmoniza com os fios azul/verde da marca).
+export const jKey = style({ color: "#d2a8ff" }); // chaves
+export const jStr = style({ color: "#7ee787" }); // strings
+export const jNum = style({ color: "#79c0ff" }); // números
+export const jKw = style({ color: "#ffa657" }); // true/false/null
+export const jPunct = style({ color: vars.color.muted }); // { } [ ] , :
+
 export const idInput = style({
   width: "100%",
   marginBottom: "6px",
