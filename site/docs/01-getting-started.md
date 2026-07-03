@@ -27,6 +27,10 @@ docker run -p 3000:3000 \
 Open `http://localhost:3000`, sign in with the master credentials, and you're in
 the dashboard. Create an API key from the API page — you'll need it as `WEAVE_KEY`.
 
+For automated or CI use you can also set `WEAVE_API_KEY` on the server — a fixed
+god-mode key it accepts straight from the environment, no dashboard round-trip. It's
+what a test suite authenticates with; see **[Testing](/docs/testing)**.
+
 ## Install the SDK
 
 In your application:
