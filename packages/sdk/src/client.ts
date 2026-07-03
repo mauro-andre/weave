@@ -108,6 +108,12 @@ export type WeaveClient<S extends Record<string, Entity<string, ShapeRecord>>> =
 } & {
   /** Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. */
   as(scope: string, params?: Record<string, unknown>): WeaveClient<S>;
+  /**
+   * Factory reset — **dev/test only**. Zera o banco pra estado virgem (apaga dados,
+   * tabelas de entity e o schema todo); um `push` em seguida reconstrói. Só funciona
+   * se o servidor tiver `WEAVE_DEV_MODE` setada — senão responde 403 e não faz nada.
+   */
+  reset(): Promise<void>;
 };
 
 interface ListResponse {
@@ -259,6 +265,11 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
   // `weave.as(scope, params)` → novo client com os headers de scope em toda req.
   client["as"] = (scope: string, params?: Record<string, unknown>) =>
     createClient({ ...options, scope, ...(params ? { params } : {}) });
+
+  // `weave.reset()` → factory reset (dev/test only; gated por WEAVE_DEV_MODE no server).
+  client["reset"] = async () => {
+    await request("POST", "/admin/reset");
+  };
 
   return client as unknown as WeaveClient<S>;
 }

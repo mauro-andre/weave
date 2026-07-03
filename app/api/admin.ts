@@ -14,6 +14,23 @@ function fail(c: Context, e: unknown): Response {
   return c.json({ error: m }, statusFor(m) as 400 | 404);
 }
 
+// ── Factory reset (dev/test only) ─────────────────────────────────────────────
+// Trava PRIMÁRIA por env: sem `WEAVE_DEV_MODE` truthy, o reset NUNCA executa (403).
+// Produção simplesmente nunca seta a env; dev/test seta. A god-key continua exigida
+// pelo apiKeyMiddleware, mas "pode ou não resetar" é 100% da env.
+const devModeOn = (): boolean => /^(1|true|yes|on)$/i.test(process.env.WEAVE_DEV_MODE ?? "");
+
+export async function adminReset({ c }: EndpointHandlerArgs): Promise<Response> {
+  if (!devModeOn()) return c.json({ error: "Reset is disabled (WEAVE_DEV_MODE is not set)." }, 403);
+  try {
+    const { factoryReset } = await import("../engine/control-plane/reset.js");
+    await factoryReset();
+    return c.json({ ok: true });
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
 // ── Entities ──────────────────────────────────────────────────────────────────
 export async function adminListEntities({ c }: EndpointHandlerArgs): Promise<Response> {
   try {
