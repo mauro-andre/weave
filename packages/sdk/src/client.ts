@@ -160,7 +160,9 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
     const init: RequestInit = { method, headers };
     if (opts.body !== undefined) {
       headers["content-type"] = "application/json";
-      init.body = JSON.stringify(opts.body);
+      // `bigint` (valores de int8) não serializa em JSON — coage p/ number no fio (o
+      // idioma de escrita do int8 aceita number|bigint; ver `WriteData`/`.default()`).
+      init.body = JSON.stringify(opts.body, (_k, v) => (typeof v === "bigint" ? Number(v) : v));
     }
 
     const res = await transport(new Request(url, init));

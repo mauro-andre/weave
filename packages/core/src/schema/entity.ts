@@ -206,12 +206,17 @@ export type ExpandInput<E> = E extends Entity<string, infer TShape>
 
 // ── Insert inference ─────────────────────────────────────────────────────────
 
+/** Tipo de ESCRITA de uma coluna: o data-type, mais `number` p/ colunas `bigint` (int8).
+ *  Motivo: JSON não carrega `bigint`, então o valor de escrita trafega como `number`
+ *  (o SDK coage `bigint→number` antes de serializar). Espelha o `.default()` do int8. */
+type WriteData<TData> = TData extends bigint ? number | bigint : TData;
+
 type InsertField<V> =
   IsColumn<V> extends true
     ? V extends Column<infer TData, infer NN, boolean>
       ? NN extends true
-        ? TData
-        : TData | null
+        ? WriteData<TData>
+        : WriteData<TData> | null
       : never
     : IsOwned<V> extends true
       ? V extends Owned<infer S, infer C>

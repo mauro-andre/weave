@@ -61,8 +61,12 @@ export class Column<
   }
 
   /** Declare a default value — makes the column optional on insert. */
-  default(value: TData): Column<TData, TNotNull, true> {
-    return new Column({ ...this.config, hasDefault: true, default: value });
+  default(value: DefaultArg<TData>): Column<TData, TNotNull, true> {
+    // int8 é backed por `bigint`, mas o default é um literal pequeno: aceitamos `number`
+    // (ergonomia igual int2/int4) e guardamos como number — o default vive no IR (jsonb),
+    // e `bigint` não serializa em JSON. `default(0)` e `default(0n)` convergem em `0`.
+    const stored = typeof value === "bigint" ? Number(value) : value;
+    return new Column({ ...this.config, hasDefault: true, default: stored });
   }
 
   /** Add a single-column `UNIQUE`. */
@@ -83,6 +87,10 @@ export class Column<
 
 /** A column of any shape — for constraints where the data type is irrelevant. */
 export type AnyColumn = Column<unknown, boolean, boolean>;
+
+/** Arg de `.default()`: o tipo da coluna — mais `number` p/ colunas backed por `bigint`
+ *  (int8), pra `int8().default(0)` funcionar como int2/int4 (sem exigir `0n`). */
+type DefaultArg<TData> = TData extends bigint ? number | bigint : TData;
 
 /** The TS type a column reads as, accounting for nullability. */
 export type InferColumn<C> =
