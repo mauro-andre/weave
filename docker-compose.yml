@@ -7,29 +7,9 @@
 # v7 no lado da lib, então roda igual nos dois — o PG 17 prova essa compat.
 # Rodar a suíte contra o 17:  DATABASE_URL=postgres://weave:weave@localhost:5433/weave npm test
 services:
-  # postgres:
-  #   image: postgres:18-alpine
-  #   container_name: weave-postgres
-  #   restart: unless-stopped
-  #   environment:
-  #     POSTGRES_USER: weave
-  #     POSTGRES_PASSWORD: weave
-  #     POSTGRES_DB: weave
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     # PG 18+ quer o mount na raiz (cria subdir por versão lá dentro),
-  #     # não mais em /var/lib/postgresql/data.
-  #     - weave-pgdata:/var/lib/postgresql
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-
-  postgres17:
-    image: postgres:17-alpine
-    container_name: weave-postgres17
+  postgres18:
+    image: postgres:18-alpine
+    container_name: weave-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: weave
@@ -38,13 +18,33 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - weave-pgdata17:/var/lib/postgresql/data
+      # PG 18+ quer o mount na raiz (cria subdir por versão lá dentro),
+      # não mais em /var/lib/postgresql/data.
+      - weave-pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # postgres17:
+  #   image: postgres:17-alpine
+  #   container_name: weave-postgres17
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: weave
+  #     POSTGRES_PASSWORD: weave
+  #     POSTGRES_DB: weave
+  #   ports:
+  #     - "5433:5432"
+  #   volumes:
+  #     - weave-pgdata17:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U weave -d weave"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
 volumes:
-  # weave-pgdata:
-  weave-pgdata17:
+  weave-pgdata18:
+  # weave-pgdata17:
