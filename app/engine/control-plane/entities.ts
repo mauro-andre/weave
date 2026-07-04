@@ -2,6 +2,7 @@ import { db } from "./db.js";
 import { validateIR, normalizeEntityIR, ensureFieldIds, resolveMirrors, fromIR, tableize, diffEntityIR, type EntityDiff, type EntityIR } from "@mauroandre/weave-core";
 import { collectTables } from "../ddl/emit.js";
 import { probePlan, applyMigration } from "./migrate.js";
+import { setPending, clearPending, type PendingEntry } from "./pending.js";
 
 /** Lista as plantas (IR) guardadas no metastore. */
 export async function listEntities(): Promise<EntityIR[]> {
@@ -110,4 +111,46 @@ export async function applyEntity(input: unknown, opts: ApplyOptions = {}): Prom
   });
 
   return { status: "applied", name: next.name, plan };
+}
+
+export interface ProjectOptions {
+  /** Drops confirmados, por nome de entidade. */
+  confirm?: Record<string, string[]>;
+  /** Backfill (path → valor), por nome de entidade. */
+  fill?: Record<string, Record<string, unknown>>;
+  /** De onde veio: "boot" | "cli" | "gui". Só informativo, vai pro pending. */
+  source?: string;
+}
+export interface ProjectOutcome {
+  applied: string[];
+  review: { name: string; plan: EntityDiff }[];
+}
+
+/**
+ * Aplica um CONJUNTO de entidades (um push de projeto) e **persiste o pending** com o
+ * que ficou retido. Cada entity é atômica (via `applyEntity`); as convergidas entram em
+ * `applied`, as retidas viram `review` + são guardadas no slot único (com o IR desejado,
+ * pra a GUI resolver depois). Se nada reteve, limpa o pending. É o motor por trás do
+ * `pushAll` (boot/CLI) e da resolução na GUI — mesmo apply, fontes diferentes.
+ *
+ * Ordem: aplica na ordem recebida (o chamador topo-ordena por dependência).
+ */
+export async function applyProject(inputs: unknown[], opts: ProjectOptions = {}): Promise<ProjectOutcome> {
+  const applied: string[] = [];
+  const entries: PendingEntry[] = [];
+  for (const input of inputs) {
+    const name = ((input as { name?: string })?.name ?? "").toString();
+    const out = await applyEntity(input, {
+      ...(opts.confirm?.[name] ? { confirm: opts.confirm[name] } : {}),
+      ...(opts.fill?.[name] ? { fill: opts.fill[name] } : {}),
+    });
+    if (out.status === "applied") applied.push(name);
+    else entries.push({ name, ir: input as EntityIR, plan: out.plan });
+  }
+  if (entries.length) {
+    await setPending({ createdAt: new Date().toISOString(), source: opts.source ?? "cli", entries });
+  } else {
+    await clearPending();
+  }
+  return { applied, review: entries.map((e) => ({ name: e.name, plan: e.plan })) };
 }

@@ -50,7 +50,7 @@ async function fetchIR(transport: FetchLike, base: string, key: string, name: st
 }
 
 /** Dependências de uma entidade (alvos de reference + mirror), pra ordenar o apply. */
-function depsOf(ir: EntityIR): Set<string> {
+export function depsOf(ir: EntityIR): Set<string> {
   const deps = new Set<string>();
   const walk = (fields: Record<string, FieldIR>): void => {
     for (const node of Object.values(fields)) {

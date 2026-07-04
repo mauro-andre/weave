@@ -51,6 +51,17 @@ export async function setup(): Promise<void> {
     )
   `;
 
+  // Pending de migração: UM slot só (id=1). Um `applyProject` que retém guarda aqui o
+  // desejado + os held; a resolução na GUI lê e aplica. Last-writer-wins (o próximo
+  // push sobrescreve). Ver control-plane/pending.ts.
+  await sql`
+    CREATE TABLE IF NOT EXISTS weave_pending (
+      id          int PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      data        jsonb NOT NULL,
+      updated_at  timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+
   const [row] = await sql<{ count: number }[]>`SELECT count(*)::int AS count FROM weave_users`;
   if (row && row.count === 0) {
     const username = process.env.MASTER_USERNAME;

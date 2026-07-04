@@ -31,6 +31,39 @@ export async function adminReset({ c }: EndpointHandlerArgs): Promise<Response> 
   }
 }
 
+// ── Push de projeto + pending ──────────────────────────────────────────────────
+// `POST /admin/push` aplica um CONJUNTO de entidades (o `pushAll` do boot/CLI e a
+// resolução da GUI batem aqui) e persiste o pending com o que reteve. `GET /admin/pending`
+// é o que a GUI lê pra mostrar/resolver. Mesmo motor (`applyProject`), fontes diferentes.
+export async function adminPush({ c }: EndpointHandlerArgs): Promise<Response> {
+  try {
+    const { applyProject } = await import("../engine/control-plane/entities.js");
+    const body = (await c.req.json()) as {
+      entities?: unknown[];
+      confirm?: Record<string, string[]>;
+      fill?: Record<string, Record<string, unknown>>;
+      source?: string;
+    };
+    const out = await applyProject(Array.isArray(body.entities) ? body.entities : [], {
+      ...(body.confirm ? { confirm: body.confirm } : {}),
+      ...(body.fill ? { fill: body.fill } : {}),
+      ...(body.source ? { source: body.source } : {}),
+    });
+    return c.json(out);
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
+export async function adminGetPending({ c }: EndpointHandlerArgs): Promise<Response> {
+  try {
+    const { getPending } = await import("../engine/control-plane/pending.js");
+    return c.json({ pending: await getPending() });
+  } catch (e) {
+    return fail(c, e);
+  }
+}
+
 // ── Entities ──────────────────────────────────────────────────────────────────
 export async function adminListEntities({ c }: EndpointHandlerArgs): Promise<Response> {
   try {

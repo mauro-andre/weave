@@ -45,6 +45,8 @@ export default [
         middlewares: [apiKeyMiddleware],
         children: [
           { path: "/reset", method: "POST", handler: Admin.adminReset },
+          { path: "/push", method: "POST", handler: Admin.adminPush },
+          { path: "/pending", method: "GET", handler: Admin.adminGetPending },
           { path: "/entities", method: "GET", handler: Admin.adminListEntities },
           { path: "/entities/:name", method: "GET", handler: Admin.adminGetEntity },
           { path: "/entities/:name", method: "PUT", handler: Admin.adminPutEntity },
