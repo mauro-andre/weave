@@ -12,7 +12,8 @@ import { DEFAULT_DIR, type WeaveConfig } from "./config.js";
 // Barrel node-only (`@mauroandre/weave-sdk/cli`): a descoberta usa `node:fs`, então
 // fica fora do barrel principal (que é portável p/ browser).
 export { discoverEntities, discoverScopes, type ModuleLoader } from "./discover.js";
-export { pushAll, type PushAllOptions, type PushAllResult } from "./push-all.js";
+// `pushAll` mora no barrel PRINCIPAL (`@mauroandre/weave-sdk`) — é puro (modo objeto, sem
+// discovery de disco) e chamado do servidor no boot. Importe de lá, não daqui.
 
 /** Escreve um arquivo (criando dirs). Injetável pra teste. */
 async function defaultWrite(file: string, content: string): Promise<void> {

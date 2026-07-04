@@ -15,6 +15,11 @@ export type {
 export type { Infer, InferWhere, InferPatch, InferOrderBy, InferUpdate } from "./types.js";
 export { pushEntities } from "./push.js";
 export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";
+// `pushAll` — push de PROJETO (entities + scopes) a partir de objetos em memória. É puro
+// (só Request/fetch, sem `node:fs`), então mora aqui, ao lado de pushEntities/pushScopes:
+// é chamado do servidor no boot loop, sem arrastar o CLI (runCli/argv/gen).
+export { pushAll } from "./push-all.js";
+export type { PushAllOptions, PushAllResult } from "./push-all.js";
 export { defineConfig } from "./config.js";
 export type { WeaveConfig } from "./config.js";
 export { defineScope, pushScopes } from "./scope.js";

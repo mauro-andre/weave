@@ -1,26 +1,19 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import routes from "../app/routes.js";
-import { pushAll } from "@mauroandre/weave-sdk/cli";
+import { pushAll } from "@mauroandre/weave-sdk";
 import category from "./fixtures/cli/entities/category.js";
 import product from "./fixtures/cli/entities/product.js";
 import staff from "./fixtures/cli/scopes/staff.js";
 
-// pushAll (Node): descobre entities + scopes da pasta, empurra via POST /admin/push
-// (o applyProject, que persiste pending), depois scopes se convergir. É o que o boot
-// chama. Reusa as fixtures do CLI (clicat/cliprod/clistaff).
+// pushAll (modo objeto): empurra entities + scopes JÁ EM MEMÓRIA via POST /admin/push
+// (o applyProject, que persiste pending), depois scopes se convergir. É o que o app server
+// chama no boot loop — sem discovery de disco. Fixtures clicat/cliprod/clistaff.
 
-const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/cli");
-const load = async (p: string) => {
-  if (p.endsWith("category.ts")) return { default: category };
-  if (p.endsWith("product.ts")) return { default: product };
-  if (p.endsWith("staff.ts")) return { default: staff };
-  return {};
-};
+const entities = { category, product };
+const scopes = { staff };
 
-describe("pushAll — push de projeto (entities + scopes)", () => {
+describe("pushAll — push de projeto (entities + scopes) em modo objeto", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
 
   beforeAll(async () => {
@@ -45,12 +38,12 @@ describe("pushAll — push de projeto (entities + scopes)", () => {
     await closeDb();
   });
 
-  it("descobre, topo-ordena, empurra entities e scopes, devolve estruturado", async () => {
+  it("empurra entities (topo-ordenadas) e scopes, devolve estruturado", async () => {
     const r = await pushAll({
       url: "http://localhost",
       key: process.env.WEAVE_API_KEY!, // god-key de env
-      dir: fixturesDir,
-      load,
+      entities,
+      scopes,
       fetch: (req) => app.hono.fetch(req),
     });
 
@@ -66,16 +59,26 @@ describe("pushAll — push de projeto (entities + scopes)", () => {
     expect(await getPending()).toBeNull();
   });
 
-  it("re-push idempotente: mesmo código → nada a fazer, sem review", async () => {
+  it("re-push idempotente: mesmos objetos → nada a fazer, sem review", async () => {
     const r = await pushAll({
       url: "http://localhost",
       key: process.env.WEAVE_API_KEY!,
-      dir: fixturesDir,
-      load,
+      entities,
+      scopes,
       fetch: (req) => app.hono.fetch(req),
     });
     expect(r.review).toEqual([]);
-    // applied ainda lista as entities (aplicar um diff vazio = "applied", idempotente)
     expect(r.applied).toContain("cliprod");
+  });
+
+  it("scopes ausente → pula o push de scopes (no-op)", async () => {
+    const r = await pushAll({
+      url: "http://localhost",
+      key: process.env.WEAVE_API_KEY!,
+      entities, // sem `scopes`
+      fetch: (req) => app.hono.fetch(req),
+    });
+    expect(r.review).toEqual([]);
+    expect(r.scopes).toEqual([]); // não tentou empurrar nenhum scope
   });
 });
