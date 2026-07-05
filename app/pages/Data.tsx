@@ -18,6 +18,8 @@ type WNode = Record<string, unknown>;
 
 const SHOW_LIMIT = 6; // campos visíveis antes do "show all fields"
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
+// Tipos textuais livres: editam num textarea multilinha (o resto — uuid, datas, etc. — em input de 1 linha).
+const TEXTUAL = new Set(["text", "varchar", "bpchar"]);
 
 interface DataLoaded {
   entities: string[];
@@ -719,6 +721,11 @@ function EditInput({
     );
   }
 
+  // Textual livre: textarea multilinha auto-crescente (aceita quebras de linha).
+  if (TEXTUAL.has(node.type)) {
+    return <TextEditInput obj={obj} name={name} bump={bump} />;
+  }
+
   const numeric = NUMERIC.has(node.type);
   return (
     <input
@@ -728,6 +735,33 @@ function EditInput({
       onInput={(e) => {
         const s = (e.currentTarget as HTMLInputElement).value;
         obj[name] = s === "" ? null : numeric ? Number(s) : s;
+        bump();
+      }}
+    />
+  );
+}
+
+// Textarea de coluna textual: começa com 1 linha e cresce com o conteúdo (altura =
+// scrollHeight). Ajusta na montagem (pra valores já multilinha) e a cada tecla.
+function TextEditInput({ obj, name, bump }: { obj: Record<string, unknown>; name: string; bump: () => void }) {
+  const v = obj[name];
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const grow = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useEffect(() => grow(ref.current), []);
+  return (
+    <textarea
+      ref={ref}
+      class={css.editTextarea}
+      rows={1}
+      value={v === null || v === undefined ? "" : String(v)}
+      onInput={(e) => {
+        const el = e.currentTarget as HTMLTextAreaElement;
+        obj[name] = el.value === "" ? null : el.value;
+        grow(el);
         bump();
       }}
     />

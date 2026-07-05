@@ -66,7 +66,8 @@ export const value = style({ fontSize: "13px", color: vars.color.text, wordBreak
 export const valueNull = style({ fontSize: "13px", color: vars.color.muted, fontStyle: "italic" });
 export const valueNum = style({ fontSize: "13px", color: vars.color.blue, fontFamily: vars.font.mono });
 export const valueBool = style({ fontSize: "13px", color: vars.color.green, fontFamily: vars.font.mono });
-export const valueStr = style({ fontSize: "13px", color: vars.color.text });
+// pre-wrap: respeita as quebras de linha do texto no modo leitura (e ainda quebra linha longa).
+export const valueStr = style({ fontSize: "13px", color: vars.color.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere" });
 
 export const showAll = style({
   marginTop: "6px",
@@ -152,6 +153,28 @@ export const editInput = style({
   color: vars.color.text,
   fontSize: "13px",
   outline: "none",
+  selectors: { "&:focus": { borderColor: vars.color.teal } },
+});
+
+// Editor de coluna textual (text/varchar/bpchar): textarea multilinha (aceita \n). Começa
+// com UMA linha e auto-cresce conforme as quebras (altura via JS = scrollHeight) — nunca
+// vira um campo gigante pra uma linha só. Mesmo visual do editInput.
+export const editTextarea = style({
+  flex: 1,
+  minWidth: "120px",
+  padding: "5px 9px",
+  background: vars.color.bg,
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "6px",
+  color: vars.color.text,
+  fontSize: "13px",
+  lineHeight: 1.5,
+  fontFamily: "inherit",
+  outline: "none",
+  resize: "none",
+  overflow: "hidden",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
   selectors: { "&:focus": { borderColor: vars.color.teal } },
 });
 
