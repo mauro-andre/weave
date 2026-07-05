@@ -97,6 +97,16 @@ export const action_deleteObject = async ({ body }: ActionArgs<{ name: string; i
   }
 };
 
+// Apaga TODOS os objetos da entidade (esvazia a tabela). Destrutivo — a GUI gateia com modal.
+export const action_deleteAllObjects = async ({ body }: ActionArgs<{ name: string }>) => {
+  const { deleteAllObjects } = await import("../engine/control-plane/data.js");
+  try {
+    return { deleted: await deleteAllObjects(body.name) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to delete all objects." };
+  }
+};
+
 type Shapes = Record<string, Record<string, FieldIR>>;
 
 export const Component = () => {
@@ -112,6 +122,9 @@ export const Component = () => {
   const orderBy = useSignal<WNode | null>(loaded?.orderBy ?? null);
   const loading = useSignal(false);
   const creating = useSignal(false);
+  const confirmingDeleteAll = useSignal(false);
+  const deletingAll = useSignal(false);
+  const deleteAllErr = useSignal<string | null>(null);
   const inited = useRef(false);
 
   // Sincroniza uma vez quando o loader chega (navegação SPA pra cá, hydrate).
@@ -141,6 +154,21 @@ export const Component = () => {
   const reload = () => {
     creating.value = false;
     if (selected.value) void load(selected.value, page.value?.currentPage ?? 1, where.value, orderBy.value);
+  };
+
+  const doDeleteAll = async () => {
+    const name = selected.value;
+    if (!name) return;
+    deletingAll.value = true;
+    deleteAllErr.value = null;
+    const res = (await action_deleteAllObjects({ body: { name } })) as { deleted?: number; error?: string };
+    deletingAll.value = false;
+    confirmingDeleteAll.value = false;
+    if (res.error) {
+      deleteAllErr.value = res.error;
+      return;
+    }
+    void load(name, 1, null, null); // recarrega limpo (agora vazio)
   };
 
   const sel = selected.value;
@@ -174,8 +202,27 @@ export const Component = () => {
               {where.value ? "matching" : cur.docsQuantity === 1 ? "object" : "objects"}
             </span>
           ) : null}
+          {sel && cur && cur.docsQuantity > 0 ? (
+            <button class={css.deleteAllBtn} onClick={() => (confirmingDeleteAll.value = true)}>
+              Delete all
+            </button>
+          ) : null}
         </div>
       )}
+
+      {deleteAllErr.value ? <p class={css.errorMsg}>{deleteAllErr.value}</p> : null}
+
+      {confirmingDeleteAll.value && sel && cur ? (
+        <ConfirmModal
+          title={`Delete all ${camelize(sel)} objects?`}
+          message={`This permanently deletes all ${cur.docsQuantity.toLocaleString()} ${cur.docsQuantity === 1 ? "object" : "objects"} in ${camelize(sel)} and their nested data. This can't be undone.`}
+          confirmLabel="Delete all"
+          danger
+          busy={deletingAll.value}
+          onConfirm={doDeleteAll}
+          onCancel={() => (confirmingDeleteAll.value = false)}
+        />
+      ) : null}
 
       {sel && cur ? (
         <FilterBar

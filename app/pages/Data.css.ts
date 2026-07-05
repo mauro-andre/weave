@@ -19,8 +19,23 @@ globalStyle(`${customScroll}::-webkit-scrollbar-thumb:hover`, { background: vars
 export const picker = style({
   display: "flex",
   flexWrap: "wrap",
+  alignItems: "center",
   gap: "8px",
   marginBottom: vars.space.lg,
+});
+
+// "Delete all" — no lado OPOSTO do seletor (margin-left auto). Sóbrio até o hover (vira vermelho).
+export const deleteAllBtn = style({
+  marginLeft: "auto",
+  background: "transparent",
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "6px",
+  color: vars.color.muted,
+  fontSize: "12px",
+  padding: "6px 12px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  selectors: { "&:hover": { borderColor: vars.color.danger, color: vars.color.danger } },
 });
 
 export const countBadge = style({

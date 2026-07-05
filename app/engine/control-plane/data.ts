@@ -346,6 +346,27 @@ export async function deleteObject(name: string, id: string): Promise<void> {
   }
 }
 
+/**
+ * Apaga TODOS os objetos de uma entidade (esvazia a tabela). Owned/links N:N
+ * cascateiam via FK; se algum objeto for **referenciado** por outra entidade (N:1),
+ * o Postgres barra e devolvemos mensagem amigável. Devolve quantos foram apagados.
+ */
+export async function deleteAllObjects(name: string): Promise<number> {
+  name = tableize(name);
+  const irs = await listEntities();
+  if (!irs.some((e) => e.name === name)) throw new Error(`Unknown entity: ${name}`);
+  const sql = db();
+  try {
+    const res = await sql`DELETE FROM ${sql(name)}`;
+    return res.count ?? 0;
+  } catch (e) {
+    if ((e as { code?: string }).code === "23503") {
+      throw new Error("Can't delete all: some objects are referenced by other entities.");
+    }
+    throw e;
+  }
+}
+
 /** Mapa de expand recursivo: references em TODO nível (topo e dentro de owned). */
 export type ExpandSpec = { [field: string]: true | ExpandSpec };
 
