@@ -21,6 +21,14 @@ const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"])
 // Tipos textuais livres: editam num textarea multilinha (o resto — uuid, datas, etc. — em input de 1 linha).
 const TEXTUAL = new Set(["text", "varchar", "bpchar"]);
 
+// Formata um timestamp de sistema (vem como string ISO após cruzar a action) pro padrão
+// local legível. null se ausente/inválido — daí a linha nem aparece.
+const fmtTs = (v: unknown): string | null => {
+  if (v === null || v === undefined) return null;
+  const d = new Date(v as string);
+  return isNaN(d.getTime()) ? null : d.toLocaleString();
+};
+
 interface DataLoaded {
   entities: string[];
   /** Entidade da URL (`?entity=`), ou null se nenhuma/ inválida. */
@@ -361,7 +369,28 @@ function RootCard({
   return (
     <div class={css.card}>
       <div class={css.cardHead}>
-        {!isNew && doc?.id ? <span class={css.cardId}>{String(doc.id)}</span> : <span />}
+        {!isNew && doc?.id ? (
+          <div class={css.metaRows}>
+            <div class={css.row}>
+              <span class={css.fieldLabel}>id</span>
+              <span class={css.metaValue}>{String(doc.id)}</span>
+            </div>
+            {fmtTs(doc.createdAt) ? (
+              <div class={css.row}>
+                <span class={css.fieldLabel}>created</span>
+                <span class={css.metaValue}>{fmtTs(doc.createdAt)}</span>
+              </div>
+            ) : null}
+            {fmtTs(doc.updatedAt) ? (
+              <div class={css.row}>
+                <span class={css.fieldLabel}>updated</span>
+                <span class={css.metaValue}>{fmtTs(doc.updatedAt)}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <span />
+        )}
         <div class={css.actions}>
           {editing.value ? (
             <>

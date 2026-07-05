@@ -69,6 +69,16 @@ export const card = style({
   padding: "12px 14px",
 });
 
+// Metadados do objeto (id + timestamps de sistema): linhas label→valor no MESMO layout dos
+// campos, mas o VALOR em `muted` (recessivo) — é dado de sistema, chama menos atenção que
+// os valores do usuário.
+export const metaRows = style({ minWidth: 0 });
+export const metaValue = style({
+  minWidth: 0,
+  fontSize: "13px",
+  color: vars.color.muted,
+  wordBreak: "break-all",
+});
 export const cardId = style({
   fontFamily: vars.font.mono,
   fontSize: "11px",
@@ -239,7 +249,7 @@ export const pager = style({
 // ── Edição inline ──────────────────────────────────────────────────────────
 export const cardHead = style({
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "space-between",
   gap: "8px",
   marginBottom: "8px",
