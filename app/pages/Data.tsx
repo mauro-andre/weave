@@ -477,8 +477,20 @@ function NestedBlock({
 
 function Value({ value, array }: { value: unknown; array?: boolean }) {
   if (value === null || value === undefined) return <span class={css.valueNull}>null</span>;
+  // Lista: itens empilhados (um por linha, cada um com bullet + pre-wrap) — sem o join(", ")
+  // que era ambíguo quando um valor contém vírgula/quebra de linha. Vazio = "empty".
   if (array && Array.isArray(value)) {
-    return <span class={css.valueStr}>{value.map((v) => String(v)).join(", ") || "—"}</span>;
+    if (value.length === 0) return <span class={css.valueNull}>empty</span>;
+    return (
+      <div class={css.valueList}>
+        {value.map((v, i) => (
+          <div class={css.valueListItem} key={i}>
+            <span class={css.valueBullet}>•</span>
+            <span class={css.valueListText}>{v === null || v === undefined ? "" : String(v)}</span>
+          </div>
+        ))}
+      </div>
+    );
   }
   if (typeof value === "boolean") return <span class={css.valueBool}>{value ? "true" : "false"}</span>;
   if (typeof value === "number" || typeof value === "bigint") return <span class={css.valueNum}>{String(value)}</span>;
@@ -672,21 +684,10 @@ function EditInput({
 }) {
   const v = obj[name];
 
+  // Lista: um item por campo (sem delimitador) — cada campo é UM elemento do `type[]`, então
+  // vírgula e quebra de linha ficam livres dentro do valor, sem ambiguidade.
   if (node.array) {
-    const text = Array.isArray(v) ? v.map((x) => String(x)).join(", ") : "";
-    return (
-      <input
-        class={css.editInput}
-        placeholder="comma, separated"
-        value={text}
-        onInput={(e) => {
-          const raw = (e.currentTarget as HTMLInputElement).value;
-          const parts = raw.split(",").map((s) => s.trim()).filter((s) => s !== "");
-          obj[name] = NUMERIC.has(node.type) ? parts.map(Number) : parts;
-          bump();
-        }}
-      />
-    );
+    return <ListEditInput node={node} obj={obj} name={name} bump={bump} />;
   }
 
   if (node.type === "bool") {
@@ -741,30 +742,98 @@ function EditInput({
   );
 }
 
-// Textarea de coluna textual: começa com 1 linha e cresce com o conteúdo (altura =
-// scrollHeight). Ajusta na montagem (pra valores já multilinha) e a cada tecla.
-function TextEditInput({ obj, name, bump }: { obj: Record<string, unknown>; name: string; bump: () => void }) {
-  const v = obj[name];
+// Textarea auto-crescente reusável: começa com 1 linha e cresce com o conteúdo (altura =
+// scrollHeight), até o teto (css.editTextarea) — daí trava e rola. Reajusta a cada mudança
+// de valor (montagem, digitação, e quando some/entra item numa lista).
+function GrowTextarea({ value, onChange }: { value: string; onChange: (s: string) => void }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const grow = (el: HTMLTextAreaElement | null) => {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   };
-  useEffect(() => grow(ref.current), []);
+  useEffect(() => grow(ref.current), [value]);
   return (
     <textarea
       ref={ref}
       class={css.editTextarea}
       rows={1}
-      value={v === null || v === undefined ? "" : String(v)}
+      value={value}
       onInput={(e) => {
         const el = e.currentTarget as HTMLTextAreaElement;
-        obj[name] = el.value === "" ? null : el.value;
         grow(el);
+        onChange(el.value);
+      }}
+    />
+  );
+}
+
+// Coluna textual escalar: um textarea multilinha. Vazio = null.
+function TextEditInput({ obj, name, bump }: { obj: Record<string, unknown>; name: string; bump: () => void }) {
+  const v = obj[name];
+  return (
+    <GrowTextarea
+      value={v === null || v === undefined ? "" : String(v)}
+      onChange={(s) => {
+        obj[name] = s === "" ? null : s;
         bump();
       }}
     />
+  );
+}
+
+// Coluna de lista (`type[]`): um campo por elemento, com adicionar/remover. Sem delimitador.
+// O array escalar é NOT NULL DEFAULT '{}', então vazio = `[]` (nunca null). Textual usa o
+// textarea multilinha; numérico/uuid usam input de 1 linha.
+function ListEditInput({ node, obj, name, bump }: { node: ColumnIR; obj: Record<string, unknown>; name: string; bump: () => void }) {
+  const arr: unknown[] = Array.isArray(obj[name]) ? (obj[name] as unknown[]) : [];
+  const numeric = NUMERIC.has(node.type);
+  const textual = TEXTUAL.has(node.type);
+  const write = (next: unknown[]) => {
+    obj[name] = next; // vazio vira [], coerente com o DEFAULT '{}'
+    bump();
+  };
+  const setAt = (i: number, val: unknown) => {
+    const next = arr.slice();
+    next[i] = val;
+    write(next);
+  };
+  const removeAt = (i: number) => {
+    const next = arr.slice();
+    next.splice(i, 1);
+    write(next);
+  };
+  const add = () => write([...arr, numeric ? null : ""]);
+
+  return (
+    <div class={css.listEdit}>
+      {arr.map((item, i) => {
+        const s = item === null || item === undefined ? "" : String(item);
+        return (
+          <div class={css.listItem} key={i}>
+            {textual ? (
+              <GrowTextarea value={s} onChange={(val) => setAt(i, val)} />
+            ) : (
+              <input
+                class={css.editInput}
+                type={numeric ? "number" : "text"}
+                value={s}
+                onInput={(e) => {
+                  const val = (e.currentTarget as HTMLInputElement).value;
+                  setAt(i, numeric ? (val === "" ? null : Number(val)) : val);
+                }}
+              />
+            )}
+            <button type="button" class={css.listRemove} title="remove" onClick={() => removeAt(i)}>
+              ✕
+            </button>
+          </div>
+        );
+      })}
+      <button type="button" class={css.listAdd} onClick={add}>
+        ＋ add item
+      </button>
+    </div>
   );
 }
 

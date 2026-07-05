@@ -1,5 +1,20 @@
-import { style } from "@vanilla-extract/css";
+import { style, globalStyle } from "@vanilla-extract/css";
 import { vars } from "../styles/theme.css.js";
+
+// Scroll custom (mesmo visual do Page/Select): fino, arredondado, discreto. Composto nos
+// campos de texto (leitura e edição) que passam do teto de altura.
+export const customScroll = style({
+  scrollbarWidth: "thin",
+  scrollbarColor: `${vars.color.border} transparent`,
+});
+globalStyle(`${customScroll}::-webkit-scrollbar`, { width: "10px", height: "10px" });
+globalStyle(`${customScroll}::-webkit-scrollbar-track`, { background: "transparent" });
+globalStyle(`${customScroll}::-webkit-scrollbar-thumb`, {
+  background: vars.color.border,
+  borderRadius: "999px",
+  border: `2px solid ${vars.color.bg}`,
+});
+globalStyle(`${customScroll}::-webkit-scrollbar-thumb:hover`, { background: vars.color.muted });
 
 export const picker = style({
   display: "flex",
@@ -66,8 +81,82 @@ export const value = style({ fontSize: "13px", color: vars.color.text, wordBreak
 export const valueNull = style({ fontSize: "13px", color: vars.color.muted, fontStyle: "italic" });
 export const valueNum = style({ fontSize: "13px", color: vars.color.blue, fontFamily: vars.font.mono });
 export const valueBool = style({ fontSize: "13px", color: vars.color.green, fontFamily: vars.font.mono });
-// pre-wrap: respeita as quebras de linha do texto no modo leitura (e ainda quebra linha longa).
-export const valueStr = style({ fontSize: "13px", color: vars.color.text, whiteSpace: "pre-wrap", overflowWrap: "anywhere" });
+// Leitura de texto: pre-wrap respeita as quebras (e quebra linha longa); teto de ~10 linhas
+// com o scroll custom quando o texto é grande demais.
+export const valueStr = style([
+  customScroll,
+  {
+    minWidth: 0,
+    fontSize: "13px",
+    lineHeight: 1.5,
+    color: vars.color.text,
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    maxHeight: "15em", // ~10 linhas (lineHeight 1.5)
+    overflowY: "auto",
+  },
+]);
+
+// ── Editor de lista (type[]): um item por campo, empilhados ──
+export const listEdit = style({
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "6px",
+});
+export const listItem = style({
+  display: "flex",
+  gap: "6px",
+  alignItems: "flex-start",
+});
+export const listRemove = style({
+  flexShrink: 0,
+  width: "30px",
+  height: "30px",
+  padding: 0,
+  background: "transparent",
+  border: `1px solid ${vars.color.border}`,
+  borderRadius: "6px",
+  color: vars.color.muted,
+  fontSize: "12px",
+  cursor: "pointer",
+  selectors: { "&:hover": { borderColor: vars.color.danger, color: vars.color.danger } },
+});
+export const listAdd = style({
+  alignSelf: "flex-start",
+  background: "transparent",
+  border: `1px dashed ${vars.color.border}`,
+  borderRadius: "6px",
+  color: vars.color.teal,
+  fontSize: "12px",
+  padding: "4px 10px",
+  cursor: "pointer",
+  selectors: { "&:hover": { borderColor: vars.color.teal } },
+});
+
+// ── Leitura de lista: itens empilhados (bullet + texto pre-wrap), teto ~10 linhas + scroll ──
+export const valueList = style([
+  customScroll,
+  {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "3px",
+    maxHeight: "15em",
+    overflowY: "auto",
+  },
+]);
+export const valueListItem = style({ display: "flex", gap: "8px", alignItems: "baseline" });
+export const valueBullet = style({ flexShrink: 0, color: vars.color.muted, fontSize: "11px" });
+export const valueListText = style({
+  minWidth: 0,
+  fontSize: "13px",
+  lineHeight: 1.5,
+  color: vars.color.text,
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+});
 
 export const showAll = style({
   marginTop: "6px",
@@ -157,26 +246,31 @@ export const editInput = style({
 });
 
 // Editor de coluna textual (text/varchar/bpchar): textarea multilinha (aceita \n). Começa
-// com UMA linha e auto-cresce conforme as quebras (altura via JS = scrollHeight) — nunca
-// vira um campo gigante pra uma linha só. Mesmo visual do editInput.
-export const editTextarea = style({
-  flex: 1,
-  minWidth: "120px",
-  padding: "5px 9px",
-  background: vars.color.bg,
-  border: `1px solid ${vars.color.border}`,
-  borderRadius: "6px",
-  color: vars.color.text,
-  fontSize: "13px",
-  lineHeight: 1.5,
-  fontFamily: "inherit",
-  outline: "none",
-  resize: "none",
-  overflow: "hidden",
-  whiteSpace: "pre-wrap",
-  overflowWrap: "anywhere",
-  selectors: { "&:focus": { borderColor: vars.color.teal } },
-});
+// com UMA linha e auto-cresce conforme as quebras (altura via JS = scrollHeight), até um
+// teto de ~10 linhas — daí trava e aparece o scroll custom. Mesmo visual do editInput.
+export const editTextarea = style([
+  customScroll,
+  {
+    flex: 1,
+    minWidth: "120px",
+    padding: "5px 9px",
+    background: vars.color.bg,
+    border: `1px solid ${vars.color.border}`,
+    borderRadius: "6px",
+    color: vars.color.text,
+    fontSize: "13px",
+    lineHeight: 1.5,
+    fontFamily: "inherit",
+    outline: "none",
+    resize: "none",
+    maxHeight: "15em", // ~10 linhas (lineHeight 1.5)
+    overflowY: "auto",
+    overflowX: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    selectors: { "&:focus": { borderColor: vars.color.teal } },
+  },
+]);
 
 // ── Editor de jsonb (highlight layered: textarea transparente sobre um <pre> colorido) ──
 // As duas camadas COMPARTILHAM métricas idênticas (fonte/tamanho/entrelinha/padding/wrap)
