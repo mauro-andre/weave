@@ -65,6 +65,31 @@ Scalar operators: `eq` · `ne` · `gt` · `gte` · `lt` · `lte` · `in` · `not
 }
 ```
 
+## What comes back by default
+
+A read hydrates what you **own** and hands you a pointer to what you **reference** —
+the split follows composition, not a flag you set.
+
+| Field | In a plain read? | To populate |
+|---|---|---|
+| Scalar columns | ✅ yes | — |
+| `owned` object / list | ✅ **yes — fully nested** | automatic |
+| `reference` (N:1) | just the `…Id` (e.g. `categoryId`) | `expand: { category: true }` |
+| `reference` (N:N) | nothing | `expand: { tags: true }` |
+| `id` · `createdAt` · `updatedAt` | ✅ yes | — |
+
+```ts
+const orders = await weave.order.findMany();
+
+orders[0].items;         // owned list — already here, nested
+orders[0].customerId;    // N:1 reference — the pointer is here
+orders[0].customer;      // undefined — you didn't expand it
+```
+
+**owned is part of you, so it comes hydrated; a reference is someone else, so you get
+the pointer and `expand` to pull the object.** Expand nests to any depth — the owned
+comes for free at every level, references you name.
+
 ## orderBy & expand — the opts
 
 ```ts
