@@ -108,6 +108,24 @@ await updateUser({ emailVerifyCode: token }, { emailVerified: true, emailVerifyC
 The family: `Infer` (read object) · `InferInsert` (create) · `InferPatch` (update) ·
 `InferWhere` · `InferOrderBy`. The raw `WhereInput` / `OrderByInput` are exported too.
 
+## Querying under a scope
+
+Every verb above also runs under a **scope** — a named access policy. Derive a scoped
+client with `.as(scope, params?)` and call the *same* methods:
+
+```ts
+const tenant = weave.as("storefront", { customerId: ctx.user.id });
+
+await tenant.product.findMany({ price: { gte: 50 } }); // only rows the scope allows
+await tenant.product.findOne({ id });                  // same shape, one row
+await tenant.order.paginate({}, { page: 1 });          // rows already constrained
+```
+
+The find API is identical — the scoped client just sends the scope with every request,
+and the **server** narrows which rows, fields and verbs come back. Your `where` is
+intersected with the scope's, never widened. Define the policies in
+**[scopes](/docs/scopes)**.
+
 ## Bulk updates and deletes
 
 ```ts

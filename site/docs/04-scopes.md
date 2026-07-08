@@ -40,9 +40,11 @@ derive a scoped client:
 ```ts
 const tenant = weave.as("storefront", { customerId: ctx.user.id });
 
-await tenant.product.find();  // only active products, no `cost` field
-await tenant.order.create(o); // allowed; rows still constrained to this customer
+await tenant.product.findMany();  // only active products, no `cost` field
+await tenant.order.create(o);     // allowed; rows still constrained to this customer
 ```
 
-The server enforces the scope's verbs, rows and fields — the client can't widen
-them. Push scopes to the server with **[the CLI](/docs/the-cli)**.
+The verbs stay the same — `findOne` · `findMany` · `paginate` · `create` · … — you
+just call them on the scoped client. The API doesn't change under a scope; the server
+enforces the scope's verbs, rows and fields, and the client can't widen them. Push
+scopes to the server with **[the CLI](/docs/the-cli)**.
