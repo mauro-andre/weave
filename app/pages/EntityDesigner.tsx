@@ -61,6 +61,12 @@ interface LoaderData {
 
 const TYPES = Object.keys(catalog);
 
+// Sentinela de auto-referência (`reference(self())` / `reference(array(self()))`). Vale
+// como `target` de um Field na GUI; é resolvido pro NOME atual da entity no `toIR` (então
+// é rename-safe e funciona numa entity nova, ainda sem estar na lista de alvos). O `$` o
+// torna impossível de colidir: nome real de entity é normalizado pra só alfanumérico.
+export const SELF_TARGET = "$self";
+
 const newField = (): Field => ({
   id: crypto.randomUUID(),
   name: "",
@@ -121,7 +127,7 @@ export const loader = async ({ params }: LoaderArgs): Promise<LoaderData> => {
 
 // ── IR ↔ modelo ───────────────────────────────────────────────────────────────
 export function toIR(m: EntityModel): EntityIR {
-  const ir: EntityIR = { irVersion: 1, name: m.name, fields: shapeOf(m.fields) };
+  const ir: EntityIR = { irVersion: 1, name: m.name, fields: shapeOf(m.fields, m.name) };
   // Grupos: id→nome do campo atual, só elegíveis, sem grupo vazio. Omitidos quando não há.
   const eligible = new Set(eligibleFields(m.fields).map((f) => f.id));
   const nameOf = new Map(m.fields.map((f) => [f.id, f.name] as const));
@@ -148,38 +154,43 @@ export function toIR(m: EntityModel): EntityIR {
   return ir;
 }
 
-function shapeOf(fields: Field[]): Record<string, FieldIR> {
+// `selfName` = nome da entity-RAIZ. Desce intacto pelos owned: `$self` sempre resolve
+// pra raiz, em qualquer profundidade (igual ao `self()` do core no `toIR`).
+function shapeOf(fields: Field[], selfName: string): Record<string, FieldIR> {
   const out: Record<string, FieldIR> = {};
-  for (const f of fields) if (f.name) out[f.name] = fieldToIR(f);
+  for (const f of fields) if (f.name) out[f.name] = fieldToIR(f, selfName);
   return out;
 }
 
-function fieldToIR(f: Field): FieldIR {
+function fieldToIR(f: Field, selfName: string): FieldIR {
+  // `$self` (sentinela) → nome atual da entity. Assim self-ref vale numa entity nova
+  // (ainda sem estar na lista) e sobrevive a rename.
+  const target = f.target === SELF_TARGET ? selfName : f.target;
   switch (f.family) {
     case "scalar":
       return col(f, false);
     case "scalarList":
       return col(f, true);
     case "ownedOne":
-      return ownedIR(f, false);
+      return ownedIR(f, false, selfName);
     case "ownedMany":
-      return ownedIR(f, true);
+      return ownedIR(f, true, selfName);
     case "refOne":
-      return { kind: "reference", id: f.id, target: f.target, cardinality: "one" };
+      return { kind: "reference", id: f.id, target, cardinality: "one" };
     case "refMany":
-      return { kind: "reference", id: f.id, target: f.target, cardinality: "many" };
+      return { kind: "reference", id: f.id, target, cardinality: "many" };
   }
 }
 
 // Com mirror, `shape` carrega só os campos locais (extras); omitido se vazio.
-function ownedIR(f: Field, array: boolean): OwnedIR {
+function ownedIR(f: Field, array: boolean, selfName: string): OwnedIR {
   if (f.mirror) {
-    const local = shapeOf(f.fields);
+    const local = shapeOf(f.fields, selfName);
     const node: OwnedIR = { kind: "owned", id: f.id, array, mirror: f.mirror };
     if (Object.keys(local).length) node.shape = local;
     return node;
   }
-  return { kind: "owned", id: f.id, array, shape: shapeOf(f.fields) };
+  return { kind: "owned", id: f.id, array, shape: shapeOf(f.fields, selfName) };
 }
 
 function col(f: Field, array: boolean): ColumnIR {
@@ -194,7 +205,7 @@ function col(f: Field, array: boolean): ColumnIR {
 }
 
 export function irToModel(ir: EntityIR): EntityModel {
-  const fields = fieldsFromIR(ir.fields);
+  const fields = fieldsFromIR(ir.fields, ir.name);
   const idOf = new Map(fields.map((f) => [f.name, f.id] as const));
   const from = (groups: string[][] | undefined, kind: "unique" | "index"): Composite[] =>
     (groups ?? []).map((g) => ({
@@ -214,7 +225,7 @@ export function irToModel(ir: EntityIR): EntityModel {
   return { name: ir.name, fields, composites: [...from(ir.unique, "unique"), ...from(ir.index, "index")], partition };
 }
 
-function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
+function fieldsFromIR(fields: Record<string, FieldIR>, selfName: string): Field[] {
   return Object.entries(fields).map(([name, node]) => {
     const f = newField();
     f.name = name;
@@ -228,12 +239,13 @@ function fieldsFromIR(fields: Record<string, FieldIR>): Field[] {
       if (node.default !== undefined) f.default = String(node.default);
     } else if (node.kind === "reference") {
       f.family = node.cardinality === "many" ? "refMany" : "refOne";
-      f.target = node.target;
+      // Alvo == a própria entity → sentinela `$self` (o picker abre em "self").
+      f.target = node.target === selfName ? SELF_TARGET : node.target;
     } else {
       f.family = node.array ? "ownedMany" : "ownedOne";
       if (node.mirror) f.mirror = node.mirror;
       // Sem mirror: shape = forma inline. Com mirror: shape = campos locais.
-      f.fields = fieldsFromIR(node.shape ?? {});
+      f.fields = fieldsFromIR(node.shape ?? {}, selfName);
     }
     return f;
   });
@@ -367,11 +379,14 @@ function DefaultInput({ field, onChange }: { field: Field; onChange: () => void 
 function FieldRow({
   field,
   entities,
+  selfName,
   onChange,
   onRemove,
 }: {
   field: Field;
   entities: EntityIR[];
+  /** Nome da entity sendo editada — pra oferecer "self" e tirá-la da lista de alvos. */
+  selfName: string;
   onChange: () => void;
   onRemove: () => void;
 }) {
@@ -467,11 +482,14 @@ function FieldRow({
             }}
           >
             <option value="">— choose entity —</option>
-            {entities.map((ent) => (
-              <option key={ent.name} value={ent.name}>
-                {camelize(ent.name)}
-              </option>
-            ))}
+            <option value={SELF_TARGET}>↺ self (this entity)</option>
+            {entities
+              .filter((ent) => ent.name !== selfName) // a própria entity vira "self", não entra 2x
+              .map((ent) => (
+                <option key={ent.name} value={ent.name}>
+                  {camelize(ent.name)}
+                </option>
+              ))}
           </select>
         ) : null}
 
@@ -482,7 +500,7 @@ function FieldRow({
 
       {isOwned && !field.mirror ? (
         <div class={css.nested}>
-          <FieldList fields={field.fields} entities={entities} onChange={onChange} />
+          <FieldList fields={field.fields} entities={entities} selfName={selfName} onChange={onChange} />
         </div>
       ) : null}
 
@@ -490,7 +508,7 @@ function FieldRow({
         <div class={css.nested}>
           <MirrorPreview entity={entities.find((ent) => ent.name === field.mirror)} />
           <p class={css.localLabel}>＋ Additional fields (local to this list)</p>
-          <FieldList fields={field.fields} entities={entities} onChange={onChange} />
+          <FieldList fields={field.fields} entities={entities} selfName={selfName} onChange={onChange} />
         </div>
       ) : null}
     </div>
@@ -500,10 +518,12 @@ function FieldRow({
 function FieldList({
   fields,
   entities,
+  selfName,
   onChange,
 }: {
   fields: Field[];
   entities: EntityIR[];
+  selfName: string;
   onChange: () => void;
 }) {
   return (
@@ -513,6 +533,7 @@ function FieldList({
           key={f.id}
           field={f}
           entities={entities}
+          selfName={selfName}
           onChange={onChange}
           onRemove={() => {
             fields.splice(i, 1);
@@ -883,7 +904,7 @@ export const Component = () => {
       </p>
 
       <h2 class={css.section}>Fields</h2>
-      <FieldList fields={model.value.fields} entities={entities} onChange={bump} />
+      <FieldList fields={model.value.fields} entities={entities} selfName={model.value.name} onChange={bump} />
 
       <h2 class={css.section}>Index</h2>
       <p class={css.managed}>

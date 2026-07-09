@@ -109,6 +109,57 @@ export default defineEntity("product", {
 The difference in one line: **owned** is part of you and cascades; a **reference**
 is someone else you point at.
 
+## References to self, or in a cycle
+
+An entity can point at **itself**, and two entities can point at **each other**. Both
+need the target resolved *lazily* — the plain `reference(x)` form needs `x` to already
+exist when the file loads, which neither a self-reference nor a cycle can guarantee.
+
+**Self-reference** — use `self()`:
+
+```ts
+import { defineEntity, reference, array, self, text } from "@mauroandre/weave-sdk";
+
+export default defineEntity("employee", {
+  name: text().notNull(),
+  manager: reference(self()),         // N:1 — a manager, who is another employee
+  reports: reference(array(self())),  // N:N — this employee's direct reports
+});
+```
+
+**Circular reference** between two entities — defer the target with a thunk, `() => other`:
+
+```ts
+// company.ts
+import users from "./users.js";
+export default defineEntity("company", {
+  name: text().notNull(),
+  lead: reference(() => users),            // company → users
+});
+
+// users.ts
+import company from "./company.js";
+export default defineEntity("users", {
+  email: text().notNull(),
+  company: reference(() => company).notNull(), // users → company
+});
+```
+
+The thunk defers resolving the target until push time, so the circular `import` between
+the two files is harmless. A plain `reference(users)` here would read `undefined` for
+whichever file loads second.
+
+The rule: `reference(x)` by default; `self()` only for self-references; `() => x` only
+for cycles. **[`weave gen`](/docs/the-cli)** writes these forms for you, and the visual
+designer offers a **self** option in the reference picker — so a schema built either way
+round-trips.
+
+One trade-off, TypeScript only: when you `expand` a `self()` or `() => x` reference, the
+nested object comes back **loosely typed** (a precise type would form a cycle the compiler
+can't resolve). The *data* is exactly the same — `expand`, `where`, and the `…Id` fields
+all work; only the static shape of that one expanded field is wider. Plain
+`reference(x)` keeps its precise expand type.
+
 ## Composite unique & index
 
 `text().unique()` covers a single column. For a **multi-column** constraint — the kind

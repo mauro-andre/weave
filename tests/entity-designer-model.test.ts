@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EntityIR } from "@mauroandre/weave-core";
-import { toIR, irToModel } from "../app/pages/EntityDesigner.js";
+import { toIR, irToModel, SELF_TARGET } from "../app/pages/EntityDesigner.js";
 
 // A GUI do designer edita um `EntityModel` e serializa pro IR. Os compostos (unique/
 // index de entidade) referenciam campos por ID (rename-proof) e o `toIR` resolve pro
@@ -120,5 +120,62 @@ describe("EntityDesigner — partição IR ↔ model", () => {
     const back = toIR(m);
     expect(back.partitionBy).toBeUndefined();
     expect(back.retention).toBeUndefined();
+  });
+});
+
+// ── Self-ref (`reference(self())` / `reference(array(self()))`) ─────────────────
+// A GUI usa o sentinela `$self` como `target`, resolvido pro NOME atual da entity no
+// `toIR` (rename-safe + vale numa entity nova, ainda fora da lista de alvos). Vindo do
+// IR, `target == nome da própria entity` volta como `$self` (o picker abre em "self").
+
+describe("EntityDesigner — self-ref (sentinela $self)", () => {
+  const selfN1: EntityIR = {
+    irVersion: 1,
+    name: "member",
+    fields: { manager: { kind: "reference", id: "f1", target: "member", cardinality: "one" } },
+  };
+  const selfNN: EntityIR = {
+    irVersion: 1,
+    name: "member",
+    fields: { directManagers: { kind: "reference", id: "f1", target: "member", cardinality: "many" } },
+  };
+
+  it("irToModel: target == nome próprio → $self (N:1 e N:N)", () => {
+    expect(irToModel(selfN1).fields[0]!.target).toBe(SELF_TARGET);
+    expect(irToModel(selfNN).fields[0]!.target).toBe(SELF_TARGET);
+  });
+
+  it("toIR: $self → nome atual da entity", () => {
+    const m = irToModel(selfNN);
+    expect(m.fields[0]!.target).toBe(SELF_TARGET);
+    expect(toIR(m).fields.directManagers).toEqual({
+      kind: "reference",
+      id: "f1",
+      target: "member",
+      cardinality: "many",
+    });
+  });
+
+  it("round-trip estável: toIR(irToModel(ir)) reproduz o self-ref", () => {
+    expect(toIR(irToModel(selfN1))).toEqual(selfN1);
+    expect(toIR(irToModel(selfNN))).toEqual(selfNN);
+  });
+
+  it("cross-ref (alvo != próprio) NÃO vira $self", () => {
+    const cross: EntityIR = {
+      irVersion: 1,
+      name: "member",
+      fields: { team: { kind: "reference", id: "f1", target: "team", cardinality: "one" } },
+    };
+    expect(irToModel(cross).fields[0]!.target).toBe("team");
+    expect(toIR(irToModel(cross))).toEqual(cross);
+  });
+
+  it("rename-safe: renomear a entity re-resolve o $self pro novo nome", () => {
+    const m = irToModel(selfNN); // target = $self
+    m.name = "person";
+    const back = toIR(m);
+    expect(back.name).toBe("person");
+    expect(back.fields.directManagers).toMatchObject({ target: "person" }); // segue o rename
   });
 });
