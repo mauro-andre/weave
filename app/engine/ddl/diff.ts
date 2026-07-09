@@ -16,6 +16,7 @@ import {
   renderColumnDef,
   renderCreateTable,
   renderComposites,
+  renderForeignKey,
   renderIndexStmt,
   renderIndexes,
   type ColumnSpec,
@@ -37,6 +38,8 @@ export interface ActualTable {
   name: string;
   columns: Map<string, ActualColumn>;
   indexes: Set<string>;
+  /** Colunas que já têm uma constraint de FK no banco (pra não re-adicionar). */
+  foreignKeys: Set<string>;
 }
 
 /** The live `public` schema, keyed by table name. */
@@ -47,6 +50,13 @@ export interface ChangeSet {
   createTables: TableSpec[];
   addColumns: { table: string; column: ColumnSpec }[];
   addIndexes: { table: string; index: IndexSpec }[];
+  /**
+   * FKs a adicionar (como `ALTER … ADD CONSTRAINT`, emitidas por último). Rastreadas
+   * à parte porque uma FK só é adicionável quando os DOIS lados existem — no ciclo
+   * mútuo, a FK que aponta pra tabela ainda-não-criada é adiada e reconciliada quando
+   * a outra entity é aplicada (a tabela-alvo passa a existir).
+   */
+  addForeignKeys: { table: string; column: ColumnSpec }[];
   /** Destructive/altering drift — reported, not applied. */
   warnings: string[];
 }
@@ -60,13 +70,27 @@ function actualSqlType(col: ActualColumn): string | null {
 
 /** Diff desired table specs against the live schema (pure). */
 export function diffSchema(desired: TableSpec[], actual: ActualSchema): ChangeSet {
-  const cs: ChangeSet = { createTables: [], addColumns: [], addIndexes: [], warnings: [] };
+  const cs: ChangeSet = { createTables: [], addColumns: [], addIndexes: [], addForeignKeys: [], warnings: [] };
+
+  // Uma FK só entra se a tabela-alvo VAI existir ao aplicar: já no banco, ou sendo
+  // criada nesta mesma transação. Senão é adiada (reconciliada quando o alvo surgir).
+  const creating = new Set(desired.filter((s) => !actual.has(s.name)).map((s) => s.name));
+  const willExist = (t: string): boolean => actual.has(t) || creating.has(t);
+  const wantFk = (table: string, col: ColumnSpec): void => {
+    if (col.references && willExist(col.references.table)) cs.addForeignKeys.push({ table, column: col });
+  };
 
   for (const spec of desired) {
     const act = actual.get(spec.name);
     if (!act) {
       cs.createTables.push(spec);
+      for (const col of spec.columns) wantFk(spec.name, col); // FKs da tabela nova
       continue;
+    }
+    // Tabela existente: reconcilia FKs que faltam (ex.: adiadas num ciclo, agora
+    // com o alvo já criado). `foreignKeys` = colunas que já têm constraint.
+    for (const col of spec.columns) {
+      if (col.references && !act.foreignKeys.has(col.name)) wantFk(spec.name, col);
     }
 
     const desiredCols = new Set<string>();
@@ -124,6 +148,11 @@ export function emitChanges(cs: ChangeSet): { statements: string[]; warnings: st
   }
   for (const { table, index } of cs.addIndexes) {
     statements.push(renderIndexStmt(table, index));
+  }
+  // FKs por ÚLTIMO: todas as tabelas/colunas já existem, então ordem entre elas some.
+  for (const { table, column } of cs.addForeignKeys) {
+    const fk = renderForeignKey(table, column);
+    if (fk) statements.push(fk);
   }
   return { statements, warnings: cs.warnings };
 }

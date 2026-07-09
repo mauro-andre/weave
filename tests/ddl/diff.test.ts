@@ -25,6 +25,7 @@ function actual(cols: [string, { udtName: string; notNull: boolean }][], indexes
         name: "users",
         columns: new Map(cols.map(([n, c]) => [n, { name: n, isArray: false, ...c }])),
         indexes: new Set(indexes),
+        foreignKeys: new Set(),
       },
     ],
   ]);

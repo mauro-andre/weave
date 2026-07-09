@@ -256,11 +256,34 @@ function renderColumnSpec(c: ColumnSpec): string {
   else if (c.notNull) parts.push("NOT NULL");
   if (c.default !== undefined) parts.push(`DEFAULT ${c.default}`);
   if (c.unique) parts.push("UNIQUE");
-  if (c.references) {
-    parts.push(`REFERENCES ${c.references.table}(id)`);
-    if (c.references.cascade) parts.push("ON DELETE CASCADE");
-  }
+  // NB: a FK NÃO é inline. Vai como `ALTER TABLE … ADD CONSTRAINT` DEPOIS de todos os
+  // CREATE (ver `renderForeignKey`), pra ordem de criação nunca importar — é o que
+  // deixa ciclo mútuo e self-ref possíveis, sem topo-sort.
   return parts.join(" ");
+}
+
+/** Nome determinístico da constraint de FK (convenção do Postgres: `<tabela>_<col>_fkey`). */
+function fkConstraintName(table: string, column: string): string {
+  return `${table}_${column}_fkey`;
+}
+
+/**
+ * FK de uma coluna como `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY`, ou `null` se a
+ * coluna não for FK. Emitida SEMPRE separada do CREATE (forma canônica, tipo pg_dump):
+ * assim a ordem de criação de tabela é irrelevante e ciclos resolvem naturalmente.
+ */
+export function renderForeignKey(table: string, c: ColumnSpec): string | null {
+  if (!c.references) return null;
+  const cascade = c.references.cascade ? " ON DELETE CASCADE" : "";
+  return (
+    `ALTER TABLE ${table} ADD CONSTRAINT ${fkConstraintName(table, c.name)} ` +
+    `FOREIGN KEY (${c.name}) REFERENCES ${c.references.table}(id)${cascade};`
+  );
+}
+
+/** Todas as FKs de um spec (as colunas com `references`), como statements ALTER. */
+export function renderForeignKeys(spec: TableSpec): string[] {
+  return spec.columns.map((c) => renderForeignKey(spec.name, c)).filter((s): s is string => s !== null);
 }
 
 /** Render the `CREATE TABLE` for a single spec. */
@@ -298,42 +321,14 @@ export function emitIndexes(entity: Entity<string, ShapeRecord>): string[] {
   return renderIndexes(collectTables(entity)[0]!);
 }
 
-/** Emit the full DDL for an entity: every table (root + owned), then indexes. */
-export function emitEntity(entity: Entity<string, ShapeRecord>): string {
-  return collectTables(entity)
-    .flatMap((spec) => [renderCreateTable(spec), ...renderIndexes(spec), ...renderComposites(spec)])
-    .join("\n");
-}
-
 /**
- * Order specs so a table is created after every table it references (within the
- * set). Self-references are ignored (Postgres allows them in `CREATE TABLE`).
- * On a true multi-table FK cycle, the unresolved specs are appended in their
- * original order (best effort) and the CREATE may fail. Such cycles aren't even
- * constructible today (references are eager), so this is defensive; proper
- * deferred-FK handling is a future item (see the PRD roadmap).
+ * Emit the full DDL for an entity: every table (root + owned), then indexes, then
+ * as FKs (`ALTER … ADD CONSTRAINT`) por último — assim a ordem entre tabelas não
+ * importa (ciclo mútuo e self-ref inclusos).
  */
-export function planTables(specs: TableSpec[]): TableSpec[] {
-  const present = new Set(specs.map((s) => s.name));
-  const deps = (s: TableSpec): Set<string> => {
-    const out = new Set<string>();
-    for (const c of s.columns) {
-      const t = c.references?.table;
-      if (t && t !== s.name && present.has(t)) out.add(t);
-    }
-    return out;
-  };
-
-  const remaining = [...specs];
-  const ordered: TableSpec[] = [];
-  const done = new Set<string>();
-
-  while (remaining.length) {
-    const i = remaining.findIndex((s) => [...deps(s)].every((d) => done.has(d)));
-    if (i === -1) break; // cycle — append the rest as-is below
-    const [spec] = remaining.splice(i, 1);
-    ordered.push(spec!);
-    done.add(spec!.name);
-  }
-  return [...ordered, ...remaining];
+export function emitEntity(entity: Entity<string, ShapeRecord>): string {
+  const specs = collectTables(entity);
+  const create = specs.flatMap((spec) => [renderCreateTable(spec), ...renderIndexes(spec), ...renderComposites(spec)]);
+  const fks = specs.flatMap((spec) => renderForeignKeys(spec));
+  return [...create, ...fks].join("\n");
 }

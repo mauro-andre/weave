@@ -15,7 +15,7 @@
 
 import process from "node:process";
 import postgres from "postgres";
-import { collectTables, planTables } from "../ddl/emit.js";
+import { collectTables } from "../ddl/emit.js";
 import {
   diffSchema,
   emitChanges,
@@ -105,9 +105,13 @@ export class Weave {
     return this.sql.begin(fn) as Promise<T>;
   }
 
-  /** The desired schema across all entities, ordered for creation. */
+  /**
+   * The desired schema across all entities. Sem ordenação: as FKs saem como
+   * `ALTER … ADD CONSTRAINT` por último (ver `emitChanges`), então a ordem de criação
+   * de tabela é irrelevante — ciclo mútuo e self-ref inclusos.
+   */
   private desiredSpecs() {
-    return planTables(this.entities.flatMap((entity) => collectTables(entity)));
+    return this.entities.flatMap((entity) => collectTables(entity));
   }
 
   /** Introspect the live `public` schema (tables, columns, indexes). */
@@ -128,12 +132,21 @@ export class Weave {
     const idx = await q<{ tablename: string; indexname: string }[]>`
       select tablename, indexname from pg_indexes where schemaname = 'public'
     `;
+    // Colunas com FK (constraint já existente) — pra não re-adicionar e pra reconciliar
+    // FKs adiadas de ciclo. Uma linha por (tabela, coluna) de cada constraint FOREIGN KEY.
+    const fks = await q<{ table_name: string; column_name: string }[]>`
+      select tc.table_name, kcu.column_name
+      from information_schema.table_constraints tc
+      join information_schema.key_column_usage kcu
+        on tc.constraint_name = kcu.constraint_name and tc.table_schema = kcu.table_schema
+      where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = 'public'
+    `;
 
     const schema: ActualSchema = new Map();
     const table = (name: string) => {
       let t = schema.get(name);
       if (!t) {
-        t = { name, columns: new Map(), indexes: new Set() };
+        t = { name, columns: new Map(), indexes: new Set(), foreignKeys: new Set() };
         schema.set(name, t);
       }
       return t;
@@ -148,6 +161,7 @@ export class Weave {
       });
     }
     for (const i of idx) table(i.tablename).indexes.add(i.indexname);
+    for (const f of fks) table(f.table_name).foreignKeys.add(f.column_name);
     return schema;
   }
 

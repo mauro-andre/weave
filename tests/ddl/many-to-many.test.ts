@@ -4,9 +4,9 @@ import {
   collectTables,
   compileFind,
   defineEntity,
-  planTables,
   reference,
   renderCreateTable,
+  renderForeignKeys,
   text,
 } from "../../app/engine/index.js";
 
@@ -39,26 +39,25 @@ describe("N:N DDL", () => {
     expect(join.indexes).toEqual([{ name: "posts__tags_tags_id_idx", column: "tags_id" }]);
   });
 
-  it("renders the composite primary key", () => {
+  it("renders the composite primary key (FK NÃO inline — vai como ALTER)", () => {
     expect(renderCreateTable(specs[1]!)).toBe(
       [
         "CREATE TABLE posts__tags (",
-        "  posts_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,",
-        "  tags_id uuid NOT NULL REFERENCES tags(id) ON DELETE CASCADE,",
+        "  posts_id uuid NOT NULL,",
+        "  tags_id uuid NOT NULL,",
         "  PRIMARY KEY (posts_id, tags_id)",
         ");",
       ].join("\n"),
     );
   });
-});
 
-describe("planTables (topological order)", () => {
-  it("orders referenced tables before the tables referencing them", () => {
-    // posts references tags (via join); declared in the 'wrong' order.
-    const specs = [...collectTables(post), ...collectTables(tag)];
-    const ordered = planTables(specs).map((s) => s.name);
-    expect(ordered.indexOf("tags")).toBeLessThan(ordered.indexOf("posts__tags"));
-    expect(ordered.indexOf("posts")).toBeLessThan(ordered.indexOf("posts__tags"));
+  it("as FKs da join saem como ALTER … ADD CONSTRAINT (ambas cascade)", () => {
+    expect(renderForeignKeys(specs[1]!)).toEqual([
+      "ALTER TABLE posts__tags ADD CONSTRAINT posts__tags_posts_id_fkey " +
+        "FOREIGN KEY (posts_id) REFERENCES posts(id) ON DELETE CASCADE;",
+      "ALTER TABLE posts__tags ADD CONSTRAINT posts__tags_tags_id_fkey " +
+        "FOREIGN KEY (tags_id) REFERENCES tags(id) ON DELETE CASCADE;",
+    ]);
   });
 });
 
