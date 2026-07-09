@@ -51,9 +51,9 @@ describe("reference read compile", () => {
     const sql = compileFind(user, { expand: { city: true } }).text;
     expect(sql).toContain("'cityId', users.city_id");
     expect(sql).toContain(
-      "'city', (SELECT json_build_object('id', cities.id, 'name', cities.name, " +
-        "'createdAt', cities.created_at, 'updatedAt', cities.updated_at) " +
-        "FROM cities WHERE cities.id = users.city_id LIMIT 1)",
+      "'city', (SELECT json_build_object('id', _r0.id, 'name', _r0.name, " +
+        "'createdAt', _r0.created_at, 'updatedAt', _r0.updated_at) " +
+        "FROM cities AS _r0 WHERE _r0.id = users.city_id LIMIT 1)",
     );
   });
 
@@ -63,6 +63,6 @@ describe("reference read compile", () => {
     });
     const sql = compileFind(u, { expand: { addresses: { city: true } } }).text;
     expect(sql).toContain("'cityId', users__addresses.city_id");
-    expect(sql).toContain("FROM cities WHERE cities.id = users__addresses.city_id LIMIT 1");
+    expect(sql).toContain("FROM cities AS _r0 WHERE _r0.id = users__addresses.city_id LIMIT 1");
   });
 });

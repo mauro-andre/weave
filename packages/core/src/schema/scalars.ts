@@ -8,7 +8,7 @@
 import { catalog } from "../types/registry.js";
 import { Column, scalarColumn, type AnyColumn } from "./column.js";
 import { OwnedArray, Mirror, type OwnedShape } from "./owned.js";
-import { ReferenceArray } from "./reference.js";
+import { ReferenceArray, SelfMarker } from "./reference.js";
 import type { Entity, ShapeRecord } from "./entity.js";
 
 // ── Numeric ──────────────────────────────────────────────────────────────────
@@ -47,9 +47,11 @@ export const bytea = () => scalarColumn(catalog.bytea);
 /**
  * `array(...)` is overloaded by what it wraps:
  *
- *   - `array(text())`    → a **scalar array column** (`text[]`).
- *   - `array(cityEntity)`→ an **N:N reference marker** for `reference(array(city))`.
- *   - `array({ ... })`   → an **owned 1:N marker** for `owned(array({...}))`.
+ *   - `array(text())`     → a **scalar array column** (`text[]`).
+ *   - `array(cityEntity)` → an **N:N reference marker** for `reference(array(city))`.
+ *   - `array(() => city)` → **N:N lazy** (import circular / ciclo entre entities).
+ *   - `array(self())`     → **N:N self-ref** (`reference(array(self()))`).
+ *   - `array({ ... })`    → an **owned 1:N marker** for `owned(array({...}))`.
  *
  * Scalar arrays default to **`NOT NULL DEFAULT '{}'`** (you always get `[]`,
  * never `null`); opt out with `array(text()).nullable()`.
@@ -58,10 +60,19 @@ export function array<TData>(
   inner: Column<TData, boolean, boolean>,
 ): Column<TData[], true, true>;
 export function array<T extends Entity<string, ShapeRecord>>(target: T): ReferenceArray<T>;
+// Thunk/self N:N: alvo FROUXO (quebra o ciclo de inferência do const, igual reference()).
+export function array(thunk: () => Entity<string, ShapeRecord>): ReferenceArray<Entity<string, ShapeRecord>>;
+export function array(marker: SelfMarker): ReferenceArray<Entity<string, ShapeRecord>>;
 export function array<TShape extends OwnedShape>(m: Mirror<TShape>): OwnedArray<TShape>;
 export function array<TShape extends OwnedShape>(shape: TShape): OwnedArray<TShape>;
 export function array(
-  arg: Column<unknown, boolean, boolean> | Entity<string, ShapeRecord> | Mirror<OwnedShape> | OwnedShape,
+  arg:
+    | Column<unknown, boolean, boolean>
+    | Entity<string, ShapeRecord>
+    | (() => Entity<string, ShapeRecord>)
+    | SelfMarker
+    | Mirror<OwnedShape>
+    | OwnedShape,
 ): Column<unknown[], true, true> | ReferenceArray<Entity<string, ShapeRecord>> | OwnedArray<OwnedShape> {
   if (arg instanceof Column) {
     return new Column<unknown[], true, true>({
@@ -77,6 +88,10 @@ export function array(
   // `array(mirror(base, { extras }))` → 1:N mirror set (carries the base's name).
   if (arg instanceof Mirror) {
     return new OwnedArray(arg.extra, arg.mirrorName);
+  }
+  // N:N lazy/self: thunk (`() => entity`) ou `self()` → ReferenceArray com alvo cru.
+  if (typeof arg === "function" || arg instanceof SelfMarker) {
+    return new ReferenceArray(arg);
   }
   // An Entity has a string `name` and an object `columns`; a shape does not.
   const candidate = arg as { name?: unknown; columns?: unknown };

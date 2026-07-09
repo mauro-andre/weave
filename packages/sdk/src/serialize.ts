@@ -1,4 +1,4 @@
-import { Column, Owned, Reference, type ShapeRecord } from "../../core/src/index.js";
+import { Column, Owned, Reference, resolveRefTargetColumns, type RefTargetRaw, type ShapeRecord } from "../../core/src/index.js";
 
 // json → obj: a API devolve datas como string ISO. Aqui revivemos pra `Date`,
 // dirigidos pela FORMA da entidade (mesma ideia do read do engine): colunas de
@@ -22,10 +22,13 @@ export function reviveShape(shape: ShapeRecord, value: unknown): unknown {
       else if (v) reviveShape(node.shape, v);
     } else if (node instanceof Reference) {
       // Só age se a reference veio EXPANDIDA (objeto/array); id-form é string, ignora.
+      // Resolve thunk/self: no client a reference pode não estar resolvida (`self()` →
+      // a forma corrente; `() => other` → chama o thunk).
+      const cols = resolveRefTargetColumns(node.target as unknown as RefTargetRaw, shape);
       if (node.cardinality === "many" && Array.isArray(v)) {
-        v.forEach((x) => reviveShape(node.target.columns, x));
+        v.forEach((x) => reviveShape(cols, x));
       } else if (v && typeof v === "object") {
-        reviveShape(node.target.columns, v);
+        reviveShape(cols, v);
       }
     }
   }

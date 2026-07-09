@@ -19,10 +19,15 @@ export {
 } from "./owned.js";
 export {
   reference,
+  self,
   Reference,
   ReferenceArray,
+  SelfMarker,
+  resolveRefTargetName,
+  resolveRefTargetColumns,
   type AnyReference,
   type ReferenceCardinality,
+  type RefTargetRaw,
 } from "./reference.js";
 export { projection, type Projection, type AnyProjection } from "./projection.js";
 export { inc, setOnInsert, type AccumulateOp, type AccumulateInput } from "./accumulate.js";

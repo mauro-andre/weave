@@ -65,6 +65,7 @@ function buildObject(
   shape: ShapeRecord | OwnedShape,
   expand: ExpandMap | undefined,
   select: SelectMap | undefined,
+  uid: { n: number },
 ): string {
   const parts: string[] = [`'id', ${table}.id`]; // id always present
   const wants = (key: string): boolean => select === undefined || Boolean(select[key]);
@@ -78,7 +79,7 @@ function buildObject(
       if (!wants(field)) continue;
       const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
       const fk = ownedFkColumn(prefix);
-      const childObj = buildObject(childTable, childTable, value.shape, childExpand, childSelect);
+      const childObj = buildObject(childTable, childTable, value.shape, childExpand, childSelect, uid);
       const correlate = `${childTable}.${fk} = ${table}.id`;
       const sub =
         value.cardinality === "many"
@@ -94,22 +95,30 @@ function buildObject(
       }
       const wantObj = select ? select[field] : expand?.[field];
       if (wantObj) {
-        const t = value.target.name;
-        const targetObj = buildObject(t, t, value.target.columns, childExpand, childSelect);
-        parts.push(`'${field}', (SELECT ${targetObj} FROM ${t} WHERE ${t}.id = ${table}.${fkCol} LIMIT 1)`);
+        // Alias ÚNICO pra tabela-alvo: sem isso, um self-ref (alvo == raiz) colide o
+        // nome da tabela consigo mesmo e a correlação vira ambígua. `prefix` fica o nome
+        // REAL (pra nomear owned/join internos); o alias `a` só rotula as colunas.
+        const real = value.target.name;
+        const a = `_r${uid.n++}`;
+        const targetObj = buildObject(a, real, value.target.columns, childExpand, childSelect, uid);
+        parts.push(`'${field}', (SELECT ${targetObj} FROM ${real} AS ${a} WHERE ${a}.id = ${table}.${fkCol} LIMIT 1)`);
       }
     } else if (value instanceof Reference) {
       // N:N — aggregate linked targets via the join table, on expand/select.
       const wantObj = select ? select[field] : expand?.[field];
       if (wantObj) {
-        const t = value.target.name;
+        // Aliases únicos pra tabela-alvo E pra join — imprescindível no self-ref N:N, onde
+        // alvo e raiz são a MESMA tabela (`member` ↔ `member`).
+        const real = value.target.name;
+        const a = `_r${uid.n++}`;
+        const j = `_r${uid.n++}`;
         const join = joinTableName(prefix, camelToSnake(field));
         const owningFk = ownedFkColumn(prefix);
         const targetFk = joinTargetFk(camelToSnake(field));
-        const targetObj = buildObject(t, t, value.target.columns, childExpand, childSelect);
+        const targetObj = buildObject(a, real, value.target.columns, childExpand, childSelect, uid);
         parts.push(
-          `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${t}.created_at), '[]'::json) ` +
-            `FROM ${t} JOIN ${join} ON ${join}.${targetFk} = ${t}.id WHERE ${join}.${owningFk} = ${table}.id)`,
+          `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${a}.created_at), '[]'::json) ` +
+            `FROM ${real} AS ${a} JOIN ${join} AS ${j} ON ${j}.${targetFk} = ${a}.id WHERE ${j}.${owningFk} = ${table}.id)`,
         );
       }
     } else if (value instanceof Column) {
@@ -353,7 +362,7 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   options: FindOptions<E> = {},
 ): CompiledQuery {
   const table = entity.name;
-  const obj = buildObject(table, table, entity.columns, options.expand, options.select);
+  const obj = buildObject(table, table, entity.columns, options.expand, options.select, { n: 0 });
 
   const params: unknown[] = [];
   const whereSql = compileWhere(

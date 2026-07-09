@@ -72,9 +72,9 @@ describe("N:N read compile", () => {
   it("aggregates linked targets via the join table on expand", () => {
     const sql = compileFind(post, { expand: { tags: true } }).text;
     expect(sql).toContain(
-      "'tags', (SELECT coalesce(json_agg(json_build_object('id', tags.id, 'label', tags.label, " +
-        "'createdAt', tags.created_at, 'updatedAt', tags.updated_at) ORDER BY tags.created_at), '[]'::json) " +
-        "FROM tags JOIN posts__tags ON posts__tags.tags_id = tags.id WHERE posts__tags.posts_id = posts.id)",
+      "'tags', (SELECT coalesce(json_agg(json_build_object('id', _r0.id, 'label', _r0.label, " +
+        "'createdAt', _r0.created_at, 'updatedAt', _r0.updated_at) ORDER BY _r0.created_at), '[]'::json) " +
+        "FROM tags AS _r0 JOIN posts__tags AS _r1 ON _r1.tags_id = _r0.id WHERE _r1.posts_id = posts.id)",
     );
   });
 });

@@ -38,7 +38,7 @@ describe("select projection", () => {
   it("select on a reference brings the pruned target (no FK unless selected)", () => {
     expect(objOf({ select: { author: { name: true } } })).toBe(
       "json_build_object('id', posts.id, 'author', (SELECT json_build_object(" +
-        "'id', authors.id, 'name', authors.name) FROM authors WHERE authors.id = posts.author_id LIMIT 1))",
+        "'id', _r0.id, 'name', _r0.name) FROM authors AS _r0 WHERE _r0.id = posts.author_id LIMIT 1))",
     );
   });
 

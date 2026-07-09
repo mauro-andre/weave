@@ -19,7 +19,7 @@ import type { ColumnIR, EntityIR, FieldIR, OwnedIR, ReferenceIR } from "./types.
  * `notNull:false`, …), pra `toIR(fromIR(ir))` reproduzir o IR mínimo de origem.
  */
 export function toIR(entity: Entity<string, ShapeRecord>): EntityIR {
-  const ir: EntityIR = { irVersion: 1, name: entity.name, fields: shapeToIR(entity.columns) };
+  const ir: EntityIR = { irVersion: 1, name: entity.name, fields: shapeToIR(entity.columns, entity.name) };
   // Grupos compostos passam crus (nomes lógicos); o `normalizeEntityIR` os cameliza
   // junto com os campos. Omitidos quando ausentes (IR canônico/mínimo).
   if (entity.options?.unique?.length) ir.unique = entity.options.unique.map((g) => [...g]);
@@ -31,13 +31,15 @@ export function toIR(entity: Entity<string, ShapeRecord>): EntityIR {
   return ir;
 }
 
-function shapeToIR(shape: ShapeRecord | OwnedShape): Record<string, FieldIR> {
+function shapeToIR(shape: ShapeRecord | OwnedShape, selfName: string): Record<string, FieldIR> {
   const out: Record<string, FieldIR> = {};
-  for (const [key, node] of Object.entries(shape)) out[key] = nodeToIR(node);
+  for (const [key, node] of Object.entries(shape)) out[key] = nodeToIR(node, selfName);
   return out;
 }
 
-function nodeToIR(node: ShapeRecord[string]): FieldIR {
+// `selfName` = nome da entity-RAIZ que está sendo serializada. Desce pelos owned
+// intacto: `self()` sempre aponta pra raiz, em qualquer profundidade.
+function nodeToIR(node: ShapeRecord[string], selfName: string): FieldIR {
   if (node instanceof Column) {
     const c = node.config;
     const ir: ColumnIR = { kind: "column", type: c.pgType.name };
@@ -52,7 +54,7 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
   if (node instanceof Reference) {
     const ir: ReferenceIR = {
       kind: "reference",
-      target: node.target.name,
+      target: node.targetName(selfName), // resolve eager/thunk/self → nome
       cardinality: node.cardinality,
     };
     if (node.id) ir.id = node.id;
@@ -65,10 +67,10 @@ function nodeToIR(node: ShapeRecord[string]): FieldIR {
     if (node.mirrorName) {
       // Mirror: emite o alvo + só os campos LOCAIS (extras); a base é resolvida no sync.
       ir.mirror = node.mirrorName;
-      const extras = shapeToIR(node.shape);
+      const extras = shapeToIR(node.shape, selfName);
       if (Object.keys(extras).length) ir.shape = extras;
     } else {
-      ir.shape = shapeToIR(node.shape);
+      ir.shape = shapeToIR(node.shape, selfName);
     }
     if (node.options.table !== undefined) ir.table = node.options.table;
     return ir;

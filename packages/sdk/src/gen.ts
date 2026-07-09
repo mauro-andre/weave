@@ -15,6 +15,8 @@ interface GenCtx {
   builders: Set<string>; // construtores/helpers usados (text, owned, reference, array…)
   imports: Set<string>; // entidades-alvo de reference (pra importar)
   withId: boolean; // emitir `.$id(...)` (rename-safe) — ligado pelo `weave gen`
+  /** A aresta `from → to` está num ciclo? (→ thunk lazy). Ausente = nunca (só eager). */
+  isLazyRef?: (from: string, to: string) => boolean;
 }
 
 /** Expressão-base do campo (sem o `.$id`). */
@@ -38,13 +40,26 @@ function baseExpr(node: FieldIR, ctx: GenCtx, self: string): string {
   }
   if (node.kind === "reference") {
     ctx.builders.add("reference");
+    // Self-ref → `self()` (não importa a própria entity, evita o muro de inferência do const).
+    if (node.target === self) {
+      ctx.builders.add("self");
+      if (node.cardinality === "many") {
+        ctx.builders.add("array");
+        return `reference(array(self()))`;
+      }
+      return `reference(self())${node.notNull ? ".notNull()" : ""}`;
+    }
+    // Cross-ref: thunk lazy (`() => other`) SÓ se a aresta está num ciclo — senão eager,
+    // pra não dar churn em schemas acíclicos. A alcançabilidade é decidida no genProject.
     const target = camelize(node.target); // nome lógico do alvo (arquivo/var no SDK)
-    if (node.target !== self) ctx.imports.add(target);
+    ctx.imports.add(target);
+    const lazy = ctx.isLazyRef?.(self, node.target) ?? false;
+    const t = lazy ? `() => ${target}` : target;
     if (node.cardinality === "many") {
       ctx.builders.add("array");
-      return `reference(array(${target}))`;
+      return `reference(array(${t}))`;
     }
-    return `reference(${target})${node.notNull ? ".notNull()" : ""}`;
+    return `reference(${t})${node.notNull ? ".notNull()" : ""}`;
   }
   // owned
   ctx.builders.add("owned");
@@ -77,11 +92,22 @@ function shapeSource(fields: Record<string, FieldIR>, ctx: GenCtx, self: string)
 export interface IrToSourceOptions {
   /** Emitir `.$id(...)` em cada campo (estável, rename-safe). Default: false. */
   withId?: boolean;
+  /**
+   * Predicado de ciclo `(from, to) → boolean`: a reference dessa entity (`from`) pro
+   * alvo `to` está num ciclo e deve sair como thunk lazy (`() => to`). Ausente = tudo
+   * eager (o `genProject` passa o predicado real; chamadas avulsas ficam eager).
+   */
+  isLazyRef?: (from: string, to: string) => boolean;
 }
 
 /** Gera o source `export default defineEntity(...)` de UMA entidade (com imports). */
 export function irToSource(ir: EntityIR, options: IrToSourceOptions = {}): string {
-  const ctx: GenCtx = { builders: new Set(), imports: new Set(), withId: options.withId ?? false };
+  const ctx: GenCtx = {
+    builders: new Set(),
+    imports: new Set(),
+    withId: options.withId ?? false,
+    ...(options.isLazyRef ? { isLazyRef: options.isLazyRef } : {}),
+  };
   const body = Object.entries(ir.fields)
     .map(([k, n]) => `  ${k}: ${fieldSource(n, ctx, ir.name)},`)
     .join("\n");
@@ -306,6 +332,46 @@ export interface GenProject {
   scopes: string[];
 }
 
+/** Alvos de reference de uma entity (recursivo pelos owned — a FK do owned também conta). */
+function collectRefTargets(fields: Record<string, FieldIR>, out: Set<string>): void {
+  for (const node of Object.values(fields)) {
+    if (node.kind === "reference") out.add(node.target);
+    else if (node.kind === "owned") collectRefTargets(node.shape ?? {}, out);
+  }
+}
+
+/**
+ * Predicado `(from, to) → está num ciclo?`: a aresta `from → to` é cíclica sse `to`
+ * consegue voltar em `from` por qualquer cadeia de references. Self-loops (`A → A`)
+ * são tratados pelo `self()` à parte, então saem da adjacência. Alcançabilidade
+ * memoizada por nó (schemas são pequenos).
+ */
+export function buildLazyRefPredicate(irs: EntityIR[]): (from: string, to: string) => boolean {
+  const adj = new Map<string, Set<string>>();
+  for (const ir of irs) {
+    const targets = new Set<string>();
+    collectRefTargets(ir.fields, targets);
+    targets.delete(ir.name); // self-loop → self(), não entra no grafo de ciclo
+    adj.set(ir.name, targets);
+  }
+  const cache = new Map<string, Set<string>>();
+  const reachOf = (start: string): Set<string> => {
+    const hit = cache.get(start);
+    if (hit) return hit;
+    const seen = new Set<string>();
+    const stack = [...(adj.get(start) ?? [])];
+    while (stack.length) {
+      const n = stack.pop()!;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      for (const m of adj.get(n) ?? []) if (!seen.has(m)) stack.push(m);
+    }
+    cache.set(start, seen);
+    return seen;
+  };
+  return (from, to) => from !== to && reachOf(to).has(from);
+}
+
 async function fetchJson<T>(transport: FetchLike, url: string, key: string, what: string): Promise<T> {
   const res = await transport(new Request(url, { method: "GET", headers: { "x-api-key": key } }));
   const json = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
@@ -328,11 +394,14 @@ export async function genProject(options: GenOptions): Promise<GenProject> {
   const byName = new Map(ents.entities.map((e) => [e.name, e] as const));
   const files: Record<string, string> = {};
 
+  // Ciclo-aware: só references em ciclo viram thunk lazy; acíclico fica eager (zero churn).
+  const isLazyRef = buildLazyRefPredicate(ents.entities);
+
   const entityNames: string[] = [];
   for (const ir of ents.entities) {
     // Arquivo/barrel usam o nome LÓGICO (camelCase) — `backup_storages` → `backupStorages.ts`.
     const logical = camelize(ir.name);
-    files[`entities/${logical}.ts`] = irToSource(ir, { withId: true });
+    files[`entities/${logical}.ts`] = irToSource(ir, { withId: true, isLazyRef });
     entityNames.push(logical);
   }
   entityNames.sort();
