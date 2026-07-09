@@ -307,7 +307,11 @@ function normalizeRefs(fields: Record<string, FieldIR>, obj: Record<string, unkn
         // edição). Derivar dele só quando NÃO há `<field>Id`; senão trocar/limpar um FK que
         // já tem valor virava no-op silencioso (o objeto antigo re-derivava o id velho).
         if (v && typeof v === "object" && obj[`${name}Id`] === undefined) obj[`${name}Id`] = (v as { id?: unknown }).id;
-      } else if (Array.isArray(v)) {
+      } else if (Array.isArray(v) && obj[`${name}Ids`] === undefined) {
+        // Mesma precedência do N:1: `<field>Ids` EXPLÍCITO (patch de updateOne) vence a
+        // reference expandida. Só derivar do array quando o patch NÃO passou `<field>Ids`
+        // — senão trocar/limpar o set N:N virava no-op (o array antigo re-derivava os ids
+        // velhos, sobrescrevendo o patch). `[]` explícito é respeitado → limpa a junção.
         obj[`${name}Ids`] = v.map((x) => (x as { id?: unknown })?.id).filter(Boolean);
       }
       delete obj[name];
