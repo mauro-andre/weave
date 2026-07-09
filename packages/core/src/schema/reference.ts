@@ -31,11 +31,22 @@ export class SelfMarker {
 /** Alvo de uma reference em runtime: entity eager, thunk lazy (ciclo/self), ou `self()`. */
 export type RefTargetRaw = AnyEntity | (() => AnyEntity) | SelfMarker;
 
+/**
+ * Desembrulha o `default` de um namespace de módulo. Num CICLO mútuo carregado por
+ * loader de `.ts` (jiti, usado no `weave push`), o thunk `() => other` do módulo lido
+ * por SEGUNDO devolve o NAMESPACE do primeiro (`{ default: entity }`), não a entity —
+ * a interop ESM/CJS não desembrulha em import circular. Sem isso, `.name` vinha
+ * `undefined` → o `JSON.stringify` do push descartava o campo → o server acusava
+ * "target must be a string". Uma Entity real não tem `default`, então é seguro.
+ */
+function interopDefault<T>(m: T): T {
+  return m && typeof m === "object" && "default" in m ? (m as unknown as { default: T }).default : m;
+}
+
 /** Resolve o alvo cru pro NOME da entity-alvo, dado o nome da entity que o contém. */
 export function resolveRefTargetName(target: RefTargetRaw, selfName: string): string {
   if (target instanceof SelfMarker) return selfName;
-  if (typeof target === "function") return target().name;
-  return target.name;
+  return interopDefault(typeof target === "function" ? target() : target).name;
 }
 
 /**
@@ -45,8 +56,7 @@ export function resolveRefTargetName(target: RefTargetRaw, selfName: string): st
  */
 export function resolveRefTargetColumns(target: RefTargetRaw, selfColumns: ShapeRecord): ShapeRecord {
   if (target instanceof SelfMarker) return selfColumns;
-  if (typeof target === "function") return target().columns;
-  return target.columns;
+  return interopDefault(typeof target === "function" ? target() : target).columns;
 }
 
 export class Reference<

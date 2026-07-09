@@ -41,6 +41,16 @@ describe("toIR — resolução de reference eager / thunk / self", () => {
     const users = defineEntity("users2", { company: reference(() => category).notNull() });
     expect(toIR(users).fields.company).toEqual({ kind: "reference", target: "category", cardinality: "one", notNull: true });
   });
+
+  it("thunk que devolve o NAMESPACE do módulo (import circular via jiti) desembrulha o default", () => {
+    // Regressão do bug 0.0.29: no `weave push` (discovery de disco com jiti), o módulo
+    // lido por SEGUNDO num ciclo recebe do thunk o NAMESPACE do primeiro (`{ default:
+    // entity }`), não a entity. Sem desembrulhar, `target.name` é undefined → o
+    // JSON.stringify do push descarta o campo → o server acusa "target must be a string".
+    const ns = { default: category } as unknown as typeof category; // o que o jiti entrega no ciclo
+    const owner = defineEntity("nsprod", { category: reference(() => ns) });
+    expect(toIR(owner).fields.category).toEqual({ kind: "reference", target: "category", cardinality: "one" });
+  });
 });
 
 describe("gen — detecção de ciclo (buildLazyRefPredicate)", () => {
