@@ -489,15 +489,25 @@ function safeAlias(alias: string): string {
   return alias;
 }
 
-/** Coluna de um campo (managed ou escalar), validada contra o shape (barreira anti-injection). */
+/** Coluna de um campo (managed, escalar ou FK de reference N:1), validada contra o shape
+ *  (barreira anti-injection). Reference N:1 agrupa pela coluna FK `<campo>_id` — mesma
+ *  resolução do `where` (aceita `respondent` OU `respondentId`). */
 function aggCol(table: string, shape: ShapeRecord | OwnedShape, key: string): string {
   if (key === "id") return `${table}.id`;
   if (key === "createdAt") return `${table}.created_at`;
   if (key === "updatedAt") return `${table}.updated_at`;
-  if (!((shape as Record<string, unknown>)[key] instanceof Column)) {
-    throw new Error(`weave: unknown field '${key}' in aggregate.`);
+  const node = (shape as Record<string, unknown>)[key];
+  if (node instanceof Column) return `${table}.${camelToSnake(key)}`;
+  // Reference N:1 → agrupa/ordena pela FK `<campo>_id` (uuid). groupBy/latestPer/distinct
+  // por reference (department, company, respondent) — o hotspot de stats do consumidor.
+  if (node instanceof Reference && node.cardinality === "one") return `${table}.${camelToSnake(key)}_id`;
+  // Forma `<campo>Id` — o FK direto, como o `where` aceita.
+  if (key.endsWith("Id")) {
+    const base = key.slice(0, -2);
+    const ref = (shape as Record<string, unknown>)[base];
+    if (ref instanceof Reference && ref.cardinality === "one") return `${table}.${camelToSnake(base)}_id`;
   }
-  return `${table}.${camelToSnake(key)}`;
+  throw new Error(`weave: unknown field '${key}' in aggregate.`);
 }
 
 /** "5min" → 300s. Uniforme (epoch-floor) pra qualquer intervalo. */
