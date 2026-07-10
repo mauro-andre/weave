@@ -4,7 +4,9 @@ import type {
   InferEntity,
   InferInsert,
   InferRead,
+  InferSelect,
   ExpandInput,
+  SelectInput,
   WhereInput,
   OrderByInput,
   AggregateInput,
@@ -34,13 +36,24 @@ export interface ClientOptions<S> {
 }
 
 /**
- * Modificadores de leitura, **tipados pela entidade**: `orderBy` (`OrderByInput`) e
- * `expand` (`ExpandInput`), que ainda **dirige o tipo do retorno** (`InferRead<E, X>`).
- * O `where` NÃO vem aqui — é o 1º argumento cru do método.
+ * Modificadores de leitura, **tipados pela entidade**: `orderBy` (`OrderByInput`),
+ * `expand` (`ExpandInput`, dirige o tipo → `InferRead<E, X>`) e `select` (`SelectInput`,
+ * whitelist de leitura ENXUTA — dirige o tipo → `InferSelect<E, S>`). O `where` NÃO vem
+ * aqui — é o 1º argumento cru do método.
  */
-export interface ReadOpts<E extends Entity<string, ShapeRecord>, X> {
+export interface ReadOpts<E extends Entity<string, ShapeRecord>, X, S> {
   orderBy?: OrderByInput<E>;
   expand?: X & ExpandInput<E>;
+  /**
+   * `select` — whitelist de leitura enxuta (subsume o `expand`): só hidrata o nomeado,
+   * `id` sempre (timestamps se selecionados). Aninhado (espelha a árvore): `true` =
+   * subárvore inteira, `{ … }` = parcial, omitido = pula. Pro caso de LISTA de entity
+   * profunda (não puxa os owned que a tela não mostra). Ausente = leitura cheia de sempre
+   * (owned + auto-expand). A forma é validada pela constraint `S extends SelectInput<E>`
+   * nos métodos — `select?: S` puro aqui pra o `S` inferir EXATAMENTE o argumento (a
+   * intersecção `S & SelectInput` vazava o SelectInput pro S e alargava o InferSelect).
+   */
+  select?: S;
   /**
    * Greatest-n-per-group: uma linha por combinação destes campos (`DISTINCT ON`).
    * O `orderBy` decide qual sobrevive (ex.: `{ ts: "desc" }` → a mais recente).
@@ -49,10 +62,13 @@ export interface ReadOpts<E extends Entity<string, ShapeRecord>, X> {
   latestPer?: (keyof E["columns"] & string)[];
 }
 
-export interface PageOpts<E extends Entity<string, ShapeRecord>, X> extends ReadOpts<E, X> {
+export interface PageOpts<E extends Entity<string, ShapeRecord>, X, S> extends ReadOpts<E, X, S> {
   page?: number;
   perPage?: number;
 }
+
+/** Tipo do doc lido: `InferSelect` quando há `select` (whitelist), senão `InferRead` (expand). */
+export type ReadResult<E, X, S> = [S] extends [never] ? InferRead<E, X> : InferSelect<E, S>;
 
 export interface PageResult<T> {
   docs: T[];
@@ -72,9 +88,9 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
   /** Cria em lote (ingest — uma transação). Devolve as linhas na ordem de entrada. */
   createMany(inputs: InferInsert<E>[]): Promise<InferEntity<E>[]>;
 
-  findOne<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X> | null>;
-  findMany<const X = {}>(where?: WhereInput<E>, opts?: ReadOpts<E, X>): Promise<InferRead<E, X>[]>;
-  paginate<const X = {}>(where?: WhereInput<E>, opts?: PageOpts<E, X>): Promise<PageResult<InferRead<E, X>>>;
+  findOne<const X = {}, const S extends SelectInput<E> = never>(where?: WhereInput<E>, opts?: ReadOpts<E, X, S>): Promise<ReadResult<E, X, S> | null>;
+  findMany<const X = {}, const S extends SelectInput<E> = never>(where?: WhereInput<E>, opts?: ReadOpts<E, X, S>): Promise<ReadResult<E, X, S>[]>;
+  paginate<const X = {}, const S extends SelectInput<E> = never>(where?: WhereInput<E>, opts?: PageOpts<E, X, S>): Promise<PageResult<ReadResult<E, X, S>>>;
 
   updateOne(
     where: WhereInput<E>,
@@ -124,7 +140,7 @@ interface ListResponse {
 }
 
 // Formas frouxas usadas SÓ na implementação (a interface dá os tipos).
-type AnyOpts = { orderBy?: unknown; expand?: unknown; page?: number; perPage?: number; latestPer?: unknown };
+type AnyOpts = { orderBy?: unknown; expand?: unknown; select?: unknown; page?: number; perPage?: number; latestPer?: unknown };
 
 /**
  * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
@@ -183,6 +199,9 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
   const readQuery = (where: unknown, o: AnyOpts): Record<string, string | undefined> => ({
     where: JSON.stringify(where ?? {}),
     expand: JSON.stringify(o.expand ?? {}),
+    // `select` só vai quando presente (whitelist enxuta); o servidor, ao recebê-lo,
+    // ignora o `expand` e não faz auto-expand.
+    select: o.select !== undefined ? JSON.stringify(o.select) : undefined,
     orderBy: o.orderBy !== undefined ? JSON.stringify(o.orderBy) : undefined,
     latestPer: o.latestPer !== undefined ? JSON.stringify(o.latestPer) : undefined,
     page: o.page !== undefined ? String(o.page) : undefined,

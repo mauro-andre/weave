@@ -7,6 +7,7 @@ import {
   text,
   type InferSelect,
 } from "../../app/engine/index.js";
+import { createClient } from "@mauroandre/weave-sdk";
 
 const author = defineEntity("authors", { name: text().notNull(), email: text().notNull() });
 const post = defineEntity("posts", {
@@ -48,5 +49,34 @@ describe("InferSelect prunes the type", () => {
     type R = InferSelect<typeof post, { title: true }>;
     // @ts-expect-error — body was not selected
     type _ = R["body"];
+  });
+});
+
+describe("client findMany/findOne — select dirige o retorno (ReadResult)", () => {
+  const weave = createClient({
+    url: "http://x",
+    key: "k",
+    entities: { authors: author, posts: post },
+    fetch: () => new Response("{}"),
+  });
+
+  it("com select → InferSelect (só o nomeado + id)", async () => {
+    const rows = await weave.posts.findMany({}, { select: { title: true } });
+    expectTypeOf<(typeof rows)[number]>().toEqualTypeOf<InferSelect<typeof post, { title: true }>>();
+  });
+
+  it("com select aninhado → estreita owned + reference", async () => {
+    const one = await weave.posts.findOne({}, { select: { title: true, comments: { body: true } } });
+    // NonNullable pra evitar o engasgo do expectTypeOf com `| null`
+    expectTypeOf<NonNullable<typeof one>>().toEqualTypeOf<
+      InferSelect<typeof post, { title: true; comments: { body: true } }>
+    >();
+  });
+
+  it("SEM select → InferRead cheio (owned automático, timestamps sempre)", async () => {
+    const rows = await weave.posts.findMany({});
+    expectTypeOf<(typeof rows)[number]["comments"]>().toEqualTypeOf<
+      { id: string; body: string; createdAt: Date; updatedAt: Date }[]
+    >();
   });
 });

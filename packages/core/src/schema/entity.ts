@@ -335,8 +335,10 @@ type SelectFieldType<TShape, K, Sel> = K extends "id"
           : never
         : never;
 
+// `-readonly` normaliza o resultado: um `select` vindo com `const` (ex.: o `const S` do
+// client SDK) chega como `{ readonly … }`, e sem o strip o `readonly` vazaria pro tipo lido.
 type SelectResultShape<TShape, S> = Prettify<
-  { id: string } & { [K in keyof S]: SelectFieldType<TShape, K, S[K]> }
+  { id: string } & { -readonly [K in keyof S]: SelectFieldType<TShape, K, S[K]> }
 >;
 
 /** The pruned read object for an entity, given a `select` map `S`. */

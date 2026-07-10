@@ -36,6 +36,7 @@ export async function listObjects(
   orderBy?: OrderArg | null,
   expand?: ExpandSpec | null,
   latestPer?: string[] | null,
+  select?: SelectSpec | null,
 ): Promise<ObjectPage> {
   name = tableize(name); // camelCase do SDK → nome de tabela guardado
   const irs = await listEntities();
@@ -63,8 +64,6 @@ export async function listObjects(
     const p = Math.max(1, Math.floor(page));
     const pp = Math.max(1, Math.floor(perPage));
     const offset = (p - 1) * pp;
-    // expand explícito (SDK/API) tem precedência; ausente (GUI sem param) = auto 1 nível.
-    const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
     const entity = entities[name];
     const w = where ?? {};
     const lp = latestPer && latestPer.length ? latestPer : undefined;
@@ -75,7 +74,16 @@ export async function listObjects(
 
     const ob = { ...(orderBy ?? {}), id: "asc" }; // `id` desempate estável da paginação
     const opts: Record<string, unknown> = { where: w, orderBy: ob, limit: pp, offset };
-    if (Object.keys(expandMap).length) opts.expand = expandMap;
+    if (select && Object.keys(select).length) {
+      // `select` = whitelist de leitura enxuta (subsume o expand): só hidrata o nomeado,
+      // sem auto-expand. Pro caso de lista de entity profunda (não puxa os owned que a
+      // tela não mostra). Ausente = comportamento de sempre (owned cheio + auto-expand).
+      opts.select = select;
+    } else {
+      // expand explícito (SDK/API) tem precedência; ausente (GUI sem param) = auto 1 nível.
+      const expandMap = expand == null ? buildExpand(rootIr.fields) : expand;
+      if (Object.keys(expandMap).length) opts.expand = expandMap;
+    }
     if (lp) opts.latestPer = lp;
     const docs = await find(entity, opts);
 
@@ -373,6 +381,9 @@ export async function deleteAllObjects(name: string): Promise<number> {
 
 /** Mapa de expand recursivo: references em TODO nível (topo e dentro de owned). */
 export type ExpandSpec = { [field: string]: true | ExpandSpec };
+
+/** Mapa de select recursivo (whitelist): campo → `true` (subárvore inteira) | submapa. */
+export type SelectSpec = { [field: string]: true | SelectSpec };
 
 /**
  * Expande references um nível, em qualquer profundidade de `owned`. Reference de
