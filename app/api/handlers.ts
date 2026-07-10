@@ -36,7 +36,10 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const access = await resolveAccess(c, entity, "read");
     const { listObjects } = await import("../engine/control-plane/data.js");
     const page = Math.max(1, Number(query.page) || 1);
-    const perPage = Math.min(100, Math.max(1, Number(query.perPage) || 20));
+    // `findMany` devolve TUDO que casa (default 10k quando não passa `limit`, igual ao
+    // idioma do zodMongo); sem cap silencioso. Explicitar `limit`/`perPage` sobe/desce —
+    // é honrado sem teto (o dev assume o risco). Antes travava mudo em 20 (default) / 100 (cap).
+    const perPage = Math.max(1, Number(query.perPage) || 10000);
     const expand = parseJson<ExpandSpec>(query.expand);
     const select = parseJson<SelectSpec>(query.select);
     const orderBy = parseJson<WNode>(query.orderBy);

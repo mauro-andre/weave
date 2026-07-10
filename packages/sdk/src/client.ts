@@ -60,6 +60,13 @@ export interface ReadOpts<E extends Entity<string, ShapeRecord>, X, S> {
    * É o widget de métricas vivas ("o doc mais recente por worker/container").
    */
   latestPer?: (keyof E["columns"] & string)[];
+  /**
+   * Máximo de linhas do `findMany`. Default **10 000** (a "lista inteira" — findMany
+   * devolve tudo que casa, sem cap silencioso). Suba pra ler listas maiores de uma vez,
+   * ou baixe pra um teto. Pra UI paginada / listas realmente grandes, use `paginate`.
+   * (Ignorado por `findOne`, que é sempre 1; no `paginate`, quem manda é o `perPage`.)
+   */
+  limit?: number;
 }
 
 export interface PageOpts<E extends Entity<string, ShapeRecord>, X, S> extends ReadOpts<E, X, S> {
@@ -140,7 +147,7 @@ interface ListResponse {
 }
 
 // Formas frouxas usadas SÓ na implementação (a interface dá os tipos).
-type AnyOpts = { orderBy?: unknown; expand?: unknown; select?: unknown; page?: number; perPage?: number; latestPer?: unknown };
+type AnyOpts = { orderBy?: unknown; expand?: unknown; select?: unknown; limit?: number; page?: number; perPage?: number; latestPer?: unknown };
 
 /**
  * Cria o client tipado a partir do entities-as-code. Casca fina sobre a API HTTP do
@@ -237,7 +244,10 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
         return d === undefined ? null : revive(d);
       },
       async findMany(where: unknown = {}, o: AnyOpts = {}) {
-        return (await list(where, o)).docs?.map(revive) ?? [];
+        // `limit` → `perPage` (page 1). Ausente → o servidor devolve a lista inteira
+        // (default 10k). O `findMany` nunca trunca calado.
+        const opts = o.limit !== undefined ? { ...o, perPage: o.limit } : o;
+        return (await list(where, opts)).docs?.map(revive) ?? [];
       },
       async paginate(where: unknown = {}, o: AnyOpts = {}) {
         const page = await list(where, o);

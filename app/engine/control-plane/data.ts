@@ -31,7 +31,7 @@ export interface ObjectPage {
 export async function listObjects(
   name: string,
   page = 1,
-  perPage = 20,
+  perPage = 10000, // default "lista inteira" (findMany); a GUI/paginate mandam o seu explícito
   where?: WhereArg | null,
   orderBy?: OrderArg | null,
   expand?: ExpandSpec | null,
