@@ -17,7 +17,7 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, fkConstraintName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 
@@ -260,11 +260,6 @@ function renderColumnSpec(c: ColumnSpec): string {
   // CREATE (ver `renderForeignKey`), pra ordem de criação nunca importar — é o que
   // deixa ciclo mútuo e self-ref possíveis, sem topo-sort.
   return parts.join(" ");
-}
-
-/** Nome determinístico da constraint de FK (convenção do Postgres: `<tabela>_<col>_fkey`). */
-function fkConstraintName(table: string, column: string): string {
-  return `${table}_${column}_fkey`;
 }
 
 /**

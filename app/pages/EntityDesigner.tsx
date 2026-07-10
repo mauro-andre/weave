@@ -252,7 +252,9 @@ function fieldsFromIR(fields: Record<string, FieldIR>, selfName: string): Field[
 }
 
 // ── Preview ao vivo das tabelas (espelha o collectTables; resolve mirrors) ────
-function previewTables(name: string, fields: Field[], byName: Map<string, EntityIR>): string[] {
+// Usa o MESMO `ownedChildTable` do core que o DDL do servidor — então o clamp de 63
+// chars é herdado automaticamente e o preview bate com as tabelas que serão criadas.
+export function previewTables(name: string, fields: Field[], byName: Map<string, EntityIR>): string[] {
   const root = tableize(name); // igual ao DDL: nome lógico → tabela snake_case
   const out = [root];
   walkOwned(fields, root, out, byName);

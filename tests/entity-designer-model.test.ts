@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { EntityIR } from "@mauroandre/weave-core";
-import { toIR, irToModel, SELF_TARGET } from "../app/pages/EntityDesigner.js";
+import { toIR, irToModel, SELF_TARGET, previewTables } from "../app/pages/EntityDesigner.js";
+import { collectTables, fromIR } from "../app/engine/index.js";
 
 // A GUI do designer edita um `EntityModel` e serializa pro IR. Os compostos (unique/
 // index de entidade) referenciam campos por ID (rename-proof) e o `toIR` resolve pro
@@ -177,5 +178,48 @@ describe("EntityDesigner — self-ref (sentinela $self)", () => {
     const back = toIR(m);
     expect(back.name).toBe("person");
     expect(back.fields.directManagers).toMatchObject({ target: "person" }); // segue o rename
+  });
+});
+
+// ── Preview de tabelas ≡ o que o servidor cria (clamp de 63 herdado do core) ────
+describe("EntityDesigner — previewTables bate com o DDL (clamp incluso)", () => {
+  const deepIR: EntityIR = {
+    irVersion: 1,
+    name: "paths_applied",
+    fields: {
+      ratingAssessments: {
+        kind: "owned", array: true,
+        shape: {
+          name: { kind: "column", type: "text" },
+          statements: {
+            kind: "owned", array: true,
+            shape: {
+              statement: { kind: "column", type: "text" },
+              criteria: {
+                kind: "owned", array: true,
+                shape: {
+                  threshold: { kind: "column", type: "int4" },
+                  thresholds: { kind: "owned", array: true, shape: { value: { kind: "column", type: "int4" } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  it("preview do designer == nomes de tabela do collectTables, com o nível 4 clampado", () => {
+    const model = irToModel(deepIR);
+    const preview = previewTables(model.name, model.fields, new Map());
+    // o que o servidor REALMENTE cria:
+    const entity = (fromIR([deepIR]) as Record<string, unknown>)["paths_applied"];
+    const server = collectTables(entity as never).map((s: { name: string }) => s.name);
+
+    expect([...preview].sort()).toEqual([...server].sort()); // preview ≡ servidor
+    expect(preview.length).toBe(5); // root + 4 níveis
+    expect(preview.some((t) => t.length > 63)).toBe(false); // todos cabem
+    // o nível 4 clampou (contém o leaf mas não o caminho inteiro):
+    expect(preview.some((t) => t.endsWith("__thresholds") && !t.includes("criteria__thresholds"))).toBe(true);
   });
 });
