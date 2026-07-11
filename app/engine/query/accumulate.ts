@@ -18,7 +18,8 @@
  * Ler deriva a média (`sum/count`) na leitura; nunca se guarda média pronta (§0).
  */
 
-import { Column, Reference, camelToSnake, uuidv7, type Entity, type ShapeRecord, type AccumulateOp } from "@mauroandre/weave-core";
+import { Column, Reference, camelToSnake, type Entity, type ShapeRecord, type AccumulateOp } from "@mauroandre/weave-core";
+import { generateId } from "../id.js";
 
 export interface CompiledAccumulate {
   text: string;
@@ -95,7 +96,7 @@ export function compileAccumulate<E extends Entity<string, ShapeRecord>>(
 
   // id gerado app-side (funciona em qualquer Postgres); no conflito, preserva o id.
   const columns: string[] = ["id", ...keyCols];
-  const params: unknown[] = [uuidv7(), ...keyFields.map((f) => key[f])];
+  const params: unknown[] = [generateId(), ...keyFields.map((f) => key[f])];
   const updates: string[] = [];
 
   for (const [field, op] of Object.entries(ops)) {

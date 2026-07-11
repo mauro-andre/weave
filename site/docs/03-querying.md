@@ -90,6 +90,21 @@ orders[0].customer;      // undefined — you didn't expand it
 the pointer and `expand` to pull the object.** Expand nests to any depth — the owned
 comes for free at every level, references you name.
 
+## How many rows — `findMany`, `limit`, `paginate`
+
+`findMany` returns **every** matching row — no silent truncation — up to **10 000** by
+default. Cap or raise that with `limit`; for a paged UI use `paginate`:
+
+```ts
+await weave.product.findMany({ active: true });                // all matches (≤ 10 000)
+await weave.product.findMany({ active: true }, { limit: 50 }); // at most 50
+await weave.product.paginate({}, { page: 2, perPage: 100 });   // one page + totals
+```
+
+The split: **`findMany`** is "give me the list" (small-to-medium sets, catalogs, seeds);
+**`paginate`** is for large sets / paged UI and returns `{ docs, docsQuantity,
+pageQuantity, currentPage }`.
+
 ## orderBy & expand — the opts
 
 ```ts
@@ -112,6 +127,29 @@ orders[0].items[0].product.price; // nested, revived (Dates too), inferred
 ```
 
 No hand-written result types — the shape follows the `expand` you pass.
+
+## Reading a subset — `select`
+
+By default a read hydrates everything you own. For a deep entity read in a **list**, that
+can mean joining tables the screen never shows. Narrow it with `select` — a whitelist
+that mirrors the tree; only what you name comes back (`id` always; timestamps only if you
+select them):
+
+```ts
+await weave.order.findMany(where, {
+  select: {
+    status: true,
+    submittedAt: true,
+    customer: true,                    // a whole reference/owned subtree
+    items: { sku: true, qty: true },   // just these fields of the owned list
+  },
+});
+```
+
+Anything you don't name — the other columns, the owned subtrees the list doesn't use —
+**isn't even joined**. `select` also **subsumes `expand`** (it controls references in the
+same key), and the return type follows it. So the detail view reads full (no `select`),
+the list reads lean.
 
 ## Naming types at the boundary
 

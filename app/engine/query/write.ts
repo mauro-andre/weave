@@ -14,7 +14,8 @@
  * `reference` is not handled here (Phase 3).
  */
 
-import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, uuidv7 } from "@mauroandre/weave-core";
+import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { generateId } from "../id.js";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
 export interface Executor {
@@ -61,8 +62,8 @@ async function writeNode(
   input: Record<string, unknown>,
   parent: ParentLink | undefined,
 ): Promise<string> {
-  // Generate the id app-side (works on any Postgres; see util/uuid).
-  const id = typeof input["id"] === "string" ? input["id"] : uuidv7();
+  // Generate the id app-side (works on any Postgres; UUID v7 or ObjectId per WEAVE_ID_TYPE).
+  const id = typeof input["id"] === "string" ? input["id"] : generateId();
   const columns: string[] = ["id"];
   const values: unknown[] = [id];
 

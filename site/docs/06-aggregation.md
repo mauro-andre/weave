@@ -55,6 +55,11 @@ groupBy: { bucket: timeBucket("ts", "1h") }   // by a time bucket — "30s" · "
 `timeBucket` aligns on epoch/UTC, so `"1d"` buckets don't drift with the session
 timezone. Omit `groupBy` entirely to aggregate the whole set into a single row.
 
+Group by a **reference** too — it buckets by the target's foreign key. `groupBy:
+["department", "company"]` groups by `department_id` + `company_id`; you can name the
+reference (`department`) or its id (`departmentId`). The same holds for `latestPer`,
+`having`, and the aggregate's `orderBy` — anywhere a field name is taken.
+
 ## having, orderBy & top-N
 
 `having` filters **groups** by their aggregates; `orderBy` sorts by an output alias;

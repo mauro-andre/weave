@@ -18,6 +18,7 @@
  */
 
 import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, fkConstraintName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { idType, idSqlType } from "../id.js";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
 
@@ -124,16 +125,21 @@ function collect(
   shape: ShapeRecord | OwnedShape,
   parent: ParentLink | undefined,
 ): TableSpec[] {
-  const columns: ColumnSpec[] = [
-    { name: "id", sqlType: "uuid", notNull: true, primaryKey: true, default: "gen_random_uuid()" },
-  ];
+  const idSql = idSqlType(); // `uuid` or `char(24)` (ObjectId), instance-wide
+  // uuid keeps a `gen_random_uuid()` default as a safety net; objectId has no PG-native
+  // generator, so the app always supplies the id (no column default).
+  const idCol: ColumnSpec =
+    idType() === "objectId"
+      ? { name: "id", sqlType: idSql, notNull: true, primaryKey: true }
+      : { name: "id", sqlType: idSql, notNull: true, primaryKey: true, default: "gen_random_uuid()" };
+  const columns: ColumnSpec[] = [idCol];
   const indexes: IndexSpec[] = [];
   const children: TableSpec[] = [];
 
   if (parent) {
     columns.push({
       name: parent.fkColumn,
-      sqlType: "uuid",
+      sqlType: idSql,
       notNull: true,
       references: { table: parent.table, cascade: true },
     });
@@ -153,7 +159,7 @@ function collect(
       const col = `${camelToSnake(field)}_id`;
       columns.push({
         name: col,
-        sqlType: "uuid",
+        sqlType: idSql,
         notNull: value.isNotNull,
         references: { table: value.target.name, cascade: false },
       });
@@ -166,8 +172,8 @@ function collect(
       children.push({
         name: join,
         columns: [
-          { name: owningFk, sqlType: "uuid", notNull: true, references: { table: tableName, cascade: true } },
-          { name: targetFk, sqlType: "uuid", notNull: true, references: { table: value.target.name, cascade: true } },
+          { name: owningFk, sqlType: idSql, notNull: true, references: { table: tableName, cascade: true } },
+          { name: targetFk, sqlType: idSql, notNull: true, references: { table: value.target.name, cascade: true } },
         ],
         primaryKey: [owningFk, targetFk],
         // Index the target FK for reverse lookup + cascade-from-target.

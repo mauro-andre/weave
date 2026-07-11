@@ -32,3 +32,43 @@ export function uuidv7(): string {
     `${hex.slice(16, 20)}-${hex.slice(20)}`
   );
 }
+
+// ── ObjectId-compatible id (Mongo→Weave migration) ───────────────────────────
+// Byte-exact MongoDB ObjectId layout (v3.4+): 4-byte second timestamp + 5-byte
+// per-process random + 3-byte incrementing counter → 24 hex chars. Same STRING shape
+// as a real ObjectId (passes `ObjectId.isValid`, `getTimestamp()` reads the first 4
+// bytes), with zero dependency on the `bson` lib — so the `core` stays pure/portable.
+// The counter keeps same-second ids monotonic (sort-by-id ≈ insertion order, like Mongo).
+// Enabled server-side by `WEAVE_ID_TYPE=objectId`. Lazily initialized (no module-load
+// side effects); only ever called server-side (write/accumulate).
+
+let oidProcess: Uint8Array | undefined; // 5-byte per-process random, once
+let oidCounter = -1; // 3-byte counter, starts random, wraps at 2^24
+
+/** MongoDB-ObjectId-compatible 24-hex id. See the block comment above. */
+export function objectId(): string {
+  if (oidProcess === undefined) {
+    const proc = new Uint8Array(5);
+    globalThis.crypto.getRandomValues(proc);
+    oidProcess = proc;
+    const seed = new Uint8Array(3);
+    globalThis.crypto.getRandomValues(seed);
+    oidCounter = ((seed[0]! << 16) | (seed[1]! << 8) | seed[2]!) & 0xffffff;
+  }
+
+  const bytes = new Uint8Array(12);
+  // 4-byte big-endian second timestamp.
+  let ts = Math.floor(Date.now() / 1000);
+  for (let i = 3; i >= 0; i--) {
+    bytes[i] = ts & 0xff;
+    ts = Math.floor(ts / 256);
+  }
+  bytes.set(oidProcess, 4); // 5-byte per-process random
+  // 3-byte incrementing counter (wraps at 2^24).
+  oidCounter = (oidCounter + 1) & 0xffffff;
+  bytes[9] = (oidCounter >> 16) & 0xff;
+  bytes[10] = (oidCounter >> 8) & 0xff;
+  bytes[11] = oidCounter & 0xff;
+
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}

@@ -84,3 +84,29 @@ Applying releases the deploy: the next `pushAll` in the boot loop sees an empty
 Only the **last** `pushAll` matters. The server keeps a single pending slot, so a
 newer deploy's push replaces whatever the previous one was waiting on — you always
 resolve against the image that's actually trying to come up.
+
+## Migrating from MongoDB — `WEAVE_ID_TYPE`
+
+Weave ids are UUID v7 by default. Migrating a MongoDB app, every id is a 24-hex
+**ObjectId** string, and your data (and every front-end link) references those strings —
+so brand-new UUIDs would break every link at cutover.
+
+Set **`WEAVE_ID_TYPE=objectId`** on the server and Weave keeps the ObjectId shape end to
+end: the `id` and all foreign-key columns become `char(24)`, and new rows get an
+ObjectId-compatible id (byte-exact Mongo layout — timestamp + random + counter, unique
+and time-ordered, no `bson` dependency).
+
+The cutover:
+
+```bash
+WEAVE_ID_TYPE=objectId   # on the Weave server
+```
+
+1. Boot with the env set, then push your schema — tables are created with `char(24)` ids.
+2. Bulk-insert your Mongo documents **with their original ids** (Weave honours a supplied
+   `id`) — every foreign key still matches, so the links hold.
+3. New rows written after the cutover get a generated ObjectId.
+
+`WEAVE_ID_TYPE` is a **fixed instance property** — it describes your entities' id scheme
+and must be chosen before the database has data (it can't switch on a live database).
+Default is `uuid`; leave it unset for a normal deployment.
