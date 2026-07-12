@@ -482,7 +482,10 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
 // IDENTIFICADORES (campos, aliases) são VALIDADOS contra o shape / regex — nunca vêm
 // param-bindados (não dá), então a validação é a barreira contra injection.
 
-const IDENT_RE = /^[A-Za-z0-9_]+$/;
+// Output aliases go into quoted `AS "…"` / `ORDER BY "…"`. A `groupBy` array entry defaults
+// its alias to the field STRING, which may be a dot-path (`"respondent.departmentSlug"`) — so
+// dots are allowed. Still no `"`, so the quoted identifier can't break out (anti-injection).
+const IDENT_RE = /^[A-Za-z0-9_.]+$/;
 
 function safeAlias(alias: string): string {
   if (!IDENT_RE.test(alias)) throw new Error(`weave: invalid aggregate alias '${alias}'.`);
@@ -510,6 +513,136 @@ function aggCol(table: string, shape: ShapeRecord | OwnedShape, key: string): st
   throw new Error(`weave: unknown field '${key}' in aggregate.`);
 }
 
+interface PathNode {
+  alias: string; // what column refs use (root table name, or a `_aN` join alias)
+  naming: string; // real table/path for deriving owned children (owned FK + child table)
+  shape: ShapeRecord | OwnedShape;
+}
+
+/**
+ * Resolves aggregate field paths to SQL column expressions, building the FROM's JOINs on
+ * demand. A bare field (`"status"`) resolves against the root — no JOIN, identical to the
+ * flat aggregate. A dot-path (`"respondent.departmentSlug"`, `"managerResult.anchors.name"`)
+ * walks the shape, LEFT-JOINing each `reference` (N:1) / `owned` (1:1) hop, and returns the
+ * leaf column. Prefixes are shared: `anchors.name` and `anchors.value` reuse one JOIN.
+ *
+ * An `owned` LIST hop fans the rows out (one per element) and is allowed ONLY when its path
+ * is the declared `unnest` — that hop is an INNER JOIN; any other list hop is an error.
+ * IDENTIFIERS are validated against the shape (the anti-injection barrier), never bound.
+ */
+class AggPaths {
+  readonly joins: string[] = [];
+  private readonly reg = new Map<string, PathNode>();
+  private n = 0;
+
+  constructor(
+    rootTable: string,
+    rootShape: ShapeRecord | OwnedShape,
+    private readonly unnestPath?: string,
+  ) {
+    this.reg.set("", { alias: rootTable, naming: rootTable, shape: rootShape });
+    if (unnestPath) {
+      const segs = unnestPath.split(".");
+      const parent = this.walk(segs.slice(0, -1));
+      const field = (parent.shape as Record<string, unknown>)[segs[segs.length - 1]!];
+      if (!(field instanceof Owned) || field.cardinality !== "many") {
+        throw new Error(`weave: unnest '${unnestPath}' must be an owned list.`);
+      }
+      this.walk(segs); // register the fan-out (INNER) JOIN up front
+    }
+  }
+
+  /** JOIN lines for the FROM clause, in dependency order. */
+  joinSql(): string {
+    return this.joins.length ? "\n" + this.joins.join("\n") : "";
+  }
+
+  /** A (possibly dotted) field path → its SQL column expression, registering JOINs. */
+  col(path: string): string {
+    const segs = path.split(".");
+    const leaf = segs.pop()!;
+    const node = this.walk(segs);
+    return aggCol(node.alias, node.shape, leaf);
+  }
+
+  /** The alias of the table a path's leaf lives on — for `first`'s `ORDER BY <alias>.created_at`. */
+  aliasOf(path: string): string {
+    const segs = path.split(".");
+    segs.pop();
+    return this.walk(segs).alias;
+  }
+
+  private walk(segs: string[]): PathNode {
+    let key = "";
+    let node = this.reg.get("")!;
+    for (const seg of segs) {
+      key = key ? `${key}.${seg}` : seg;
+      const cached = this.reg.get(key);
+      if (cached) {
+        node = cached;
+        continue;
+      }
+      node = this.hop(node, key, seg);
+      this.reg.set(key, node);
+    }
+    return node;
+  }
+
+  private hop(parent: PathNode, key: string, seg: string): PathNode {
+    const field = (parent.shape as Record<string, unknown>)[seg];
+    const segSnake = camelToSnake(seg);
+    const alias = `_a${this.n++}`;
+    if (field instanceof Reference && field.cardinality === "one") {
+      const t = field.target.name;
+      this.joins.push(`LEFT JOIN ${t} ${alias} ON ${alias}.id = ${parent.alias}.${segSnake}_id`);
+      return { alias, naming: t, shape: field.target.columns };
+    }
+    if (field instanceof Owned && field.cardinality === "one") {
+      const child = ownedChildTable(parent.naming, segSnake, field.options.table);
+      this.joins.push(`LEFT JOIN ${child} ${alias} ON ${alias}.${ownedFkColumn(parent.naming)} = ${parent.alias}.id`);
+      return { alias, naming: child, shape: field.shape };
+    }
+    if (field instanceof Owned && field.cardinality === "many") {
+      if (key !== this.unnestPath) {
+        throw new Error(`weave: '${key}' is an owned list — aggregate through it needs \`unnest: "${key}"\`.`);
+      }
+      const child = ownedChildTable(parent.naming, segSnake, field.options.table);
+      // INNER JOIN: the fan-out. A parent with no elements contributes nothing (like `$unwind`).
+      this.joins.push(`JOIN ${child} ${alias} ON ${alias}.${ownedFkColumn(parent.naming)} = ${parent.alias}.id`);
+      return { alias, naming: child, shape: field.shape };
+    }
+    throw new Error(`weave: cannot aggregate through '${key}'.`);
+  }
+}
+
+/**
+ * An accumulator's `{ where }` → the `FILTER (WHERE …)` predicate. Field-vs-const, AND/OR/NOT,
+ * and dot-paths resolved through the SAME JOINs as the fields — so under `unnest` a path
+ * addresses the ELEMENT (`{ "…anchors.alignment": { eq: "high" } }` → `_aN.alignment = $x`).
+ * Deliberately NOT the full `where` grammar (no owned quantifiers) — that's the top-level `where`.
+ */
+function aggFilterWhere(paths: AggPaths, where: Record<string, unknown>, params: unknown[]): string {
+  const conds: string[] = [];
+  for (const [key, val] of Object.entries(where)) {
+    if (val === undefined) continue;
+    if (key === "and" || key === "or") {
+      if (!Array.isArray(val)) continue;
+      const subs = val
+        .map((w) => aggFilterWhere(paths, w as Record<string, unknown>, params))
+        .filter((s) => s.length > 0);
+      if (subs.length) conds.push(`(${subs.join(key === "and" ? " AND " : " OR ")})`);
+      continue;
+    }
+    if (key === "not") {
+      const s = aggFilterWhere(paths, val as Record<string, unknown>, params);
+      if (s) conds.push(`NOT (${s})`);
+      continue;
+    }
+    conds.push(compileFieldFilter(paths.col(key), val, params));
+  }
+  return conds.join(" AND ");
+}
+
 /** "5min" → 300s. Uniforme (epoch-floor) pra qualquer intervalo. */
 function intervalSeconds(interval: string): number {
   const m = /^(\d+)(s|min|h|d)$/.exec(interval.trim());
@@ -518,24 +651,24 @@ function intervalSeconds(interval: string): number {
   return Number(m[1]) * unit;
 }
 
-function groupSql(table: string, shape: ShapeRecord | OwnedShape, g: string | GroupExpr): string {
-  if (typeof g === "string") return aggCol(table, shape, g);
+function groupSql(paths: AggPaths, g: string | GroupExpr): string {
+  if (typeof g === "string") return paths.col(g);
   const { field, interval } = g.timeBucket;
   const secs = intervalSeconds(interval);
   // epoch-floor: alinhado por UTC, uniforme pra qualquer intervalo (Decisão: epoch/UTC).
-  return `to_timestamp(floor(extract(epoch from ${aggCol(table, shape, field)}) / ${secs}) * ${secs})`;
+  return `to_timestamp(floor(extract(epoch from ${paths.col(field)}) / ${secs}) * ${secs})`;
 }
 
 // Um acumulador → expressão SQL. `{ where }` (opcional) vira `… FILTER (WHERE …)`.
 // `params` recebe os binds na ORDEM em que a expressão aparece no SELECT (o chamador
 // respeita a ordem SELECT→WHERE→HAVING pra os $N baterem com `.unsafe`).
-function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator, params: unknown[]): string {
+function accSql(paths: AggPaths, acc: Accumulator, params: unknown[]): string {
   const wRaw = (acc as { where?: Record<string, unknown> }).where;
 
   // histogram monta N+1 `count(*) FILTER` num array[] — trata o `{ where }` INLINE
   // (AND-ado em cada balde), já que não dá pra pôr FILTER sobre o array constructor.
   if (acc.agg === "histogram") {
-    return histogramSql(table, shape, acc, params, wRaw);
+    return histogramSql(paths, acc, params, wRaw);
   }
 
   let base: string;
@@ -547,24 +680,28 @@ function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator
     case "avg":
     case "min":
     case "max":
-      base = `${acc.agg}(${aggCol(table, shape, acc.field)})`;
+      base = `${acc.agg}(${paths.col(acc.field)})`;
       break;
     case "distinct":
-      base = `count(distinct ${aggCol(table, shape, acc.field)})`;
+      base = `count(distinct ${paths.col(acc.field)})`;
+      break;
+    case "first":
+      // One representative per group, deterministic by the element's created_at.
+      base = `(array_agg(${paths.col(acc.field)} ORDER BY ${paths.aliasOf(acc.field)}.created_at))[1]`;
       break;
     case "percentile": {
       const p = acc.p;
       if (typeof p !== "number" || !Number.isFinite(p) || p <= 0 || p >= 1) {
         throw new Error(`weave: percentile p must be a fraction between 0 and 1 (got ${JSON.stringify(p)}).`);
       }
-      base = `percentile_cont(${bind(params, p)}) WITHIN GROUP (ORDER BY ${aggCol(table, shape, acc.field)})`;
+      base = `percentile_cont(${bind(params, p)}) WITHIN GROUP (ORDER BY ${paths.col(acc.field)})`;
       break;
     }
     default:
       throw new Error(`weave: unknown accumulator '${(acc as { agg?: string }).agg}'.`);
   }
   if (wRaw && Object.keys(wRaw).length) {
-    const f = compileWhere(table, table, shape, wRaw, params);
+    const f = aggFilterWhere(paths, wRaw, params);
     if (f) base += ` FILTER (WHERE ${f})`;
   }
   return base;
@@ -574,8 +711,7 @@ function accSql(table: string, shape: ShapeRecord | OwnedShape, acc: Accumulator
 // (overflow). Cada balde é um `count(*) FILTER`; o array[] os junta num valor só. As
 // fronteiras são BINDADAS (validadas numéricas); um `{ where }` opcional é AND-ado em todos.
 function histogramSql(
-  table: string,
-  shape: ShapeRecord | OwnedShape,
+  paths: AggPaths,
   acc: { field: string; bounds: number[] },
   params: unknown[],
   where?: Record<string, unknown>,
@@ -593,9 +729,9 @@ function histogramSql(
       throw new Error("weave: histogram boundaries must be strictly ascending.");
     }
   }
-  const col = aggCol(table, shape, acc.field);
+  const col = paths.col(acc.field);
   const ph = bounds.map((b) => bind(params, b)); // fronteira → $N (bindada uma vez, reusada)
-  const w = where && Object.keys(where).length ? compileWhere(table, table, shape, where, params) : "";
+  const w = where && Object.keys(where).length ? aggFilterWhere(paths, where, params) : "";
   const andW = w ? ` AND (${w})` : "";
   const bucket = (cond: string) => `count(*) FILTER (WHERE ${cond}${andW})`;
 
@@ -617,8 +753,7 @@ function isExpr(node: unknown): node is Expr {
 function operandSql(
   operand: ExprOperand,
   aliasExpr: Record<string, string>,
-  table: string,
-  shape: ShapeRecord | OwnedShape,
+  paths: AggPaths,
   params: unknown[],
 ): string {
   if (typeof operand === "number") {
@@ -630,8 +765,8 @@ function operandSql(
     if (!e) throw new Error(`weave: expression references unknown select alias '${operand}'.`);
     return e;
   }
-  if (isExpr(operand)) return exprSql(operand, aliasExpr, table, shape, params);
-  return accSql(table, shape, operand, params); // acumulador inline
+  if (isExpr(operand)) return exprSql(operand, aliasExpr, paths, params);
+  return accSql(paths, operand, params); // acumulador inline
 }
 
 // Expressão aritmética → SQL. `div` protege contra divisão-por-zero (nullif) e casta
@@ -639,12 +774,11 @@ function operandSql(
 function exprSql(
   node: Expr,
   aliasExpr: Record<string, string>,
-  table: string,
-  shape: ShapeRecord | OwnedShape,
+  paths: AggPaths,
   params: unknown[],
 ): string {
-  const l = operandSql(node.left, aliasExpr, table, shape, params);
-  const r = operandSql(node.right, aliasExpr, table, shape, params);
+  const l = operandSql(node.left, aliasExpr, paths, params);
+  const r = operandSql(node.right, aliasExpr, paths, params);
   switch (node.op) {
     case "div":
       return `((${l})::numeric / nullif((${r}), 0))`;
@@ -667,13 +801,17 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
   const shape = entity.columns;
   const params: unknown[] = [];
 
+  // Path resolver — bare fields hit the root (flat, as before); dot-paths LEFT-JOIN through
+  // `owned`/`reference`, and `unnest` INNER-JOINs one owned list (fan-out to its elements).
+  const paths = new AggPaths(table, shape, (input as { unnest?: string }).unnest);
+
   // Chaves de grupo: array de campos (alias homônimo) ou mapa alias → campo|expr.
   const groups: { alias: string; expr: string }[] = [];
   const gb = input.groupBy;
   if (Array.isArray(gb)) {
-    for (const f of gb) groups.push({ alias: safeAlias(f), expr: groupSql(table, shape, f) });
+    for (const f of gb) groups.push({ alias: safeAlias(f), expr: groupSql(paths, f) });
   } else if (gb) {
-    for (const [alias, g] of Object.entries(gb)) groups.push({ alias: safeAlias(alias), expr: groupSql(table, shape, g) });
+    for (const [alias, g] of Object.entries(gb)) groups.push({ alias: safeAlias(alias), expr: groupSql(paths, g) });
   }
 
   const cols: string[] = groups.map((g) => `${g.expr} AS "${g.alias}"`);
@@ -689,12 +827,12 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
       deferred.push([a, node]); // passada 2
       continue;
     }
-    const expr = accSql(table, shape, node as Accumulator, params);
+    const expr = accSql(paths, node as Accumulator, params);
     aliasExpr[a] = expr;
     cols.push(`${expr} AS "${a}"`);
   }
   for (const [a, node] of deferred) {
-    const expr = exprSql(node, aliasExpr, table, shape, params);
+    const expr = exprSql(node, aliasExpr, paths, params);
     aliasExpr[a] = expr;
     cols.push(`${expr} AS "${a}"`);
   }
@@ -712,7 +850,7 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
     havingConds.push(compileFieldFilter(expr, cond, params));
   }
 
-  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}`];
+  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}${paths.joinSql()}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
   if (groups.length) lines.push(`GROUP BY ${groups.map((g) => g.expr).join(", ")}`);
   if (havingConds.length) lines.push(`HAVING ${havingConds.join(" AND ")}`);

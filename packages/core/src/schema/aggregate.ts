@@ -19,7 +19,8 @@ export type Accumulator =
   | { readonly agg: "count"; readonly where?: Record<string, unknown> }
   | { readonly agg: "sum" | "avg" | "min" | "max" | "distinct"; readonly field: string; readonly where?: Record<string, unknown> }
   | { readonly agg: "percentile"; readonly field: string; readonly p: number; readonly where?: Record<string, unknown> }
-  | { readonly agg: "histogram"; readonly field: string; readonly bounds: number[]; readonly where?: Record<string, unknown> };
+  | { readonly agg: "histogram"; readonly field: string; readonly bounds: number[]; readonly where?: Record<string, unknown> }
+  | { readonly agg: "first"; readonly field: string; readonly where?: Record<string, unknown> };
 
 // Anexa `{ where }` (→ FILTER) preservando o membro específico do union.
 const withWhere = <A extends Accumulator>(base: A, opts?: AggOpts): A =>
@@ -44,6 +45,13 @@ export function max(arg: string | number, opts?: AggOpts): Accumulator | Accumul
 }
 /** Distintos EXATOS (`count(distinct …)`) — tier recente. */
 export const distinct = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "distinct", field }, opts);
+/**
+ * One representative value of `field` per group — `(array_agg(field ORDER BY created_at))[1]`.
+ * Deterministic (ordered by the element's `created_at`). Meant for metadata that is constant
+ * within a group (e.g. under `unnest`, the description/weight tied to the group key): `first`
+ * just picks the representative. Not a running-order pick — it's the earliest-created member.
+ */
+export const first = (field: string, opts?: AggOpts): Accumulator => withWhere({ agg: "first", field }, opts);
 /** Percentil EXATO (`percentile_cont`) sobre escalar cru. `p` é fração 0..1 (p95 → 0.95). */
 export const percentile = (field: string, p: number, opts?: AggOpts): Accumulator =>
   withWhere({ agg: "percentile", field, p }, opts);
@@ -101,6 +109,15 @@ export interface FacetInput<E extends Entity<string, ShapeRecord>> {
  */
 export interface AggregateInput<E extends Entity<string, ShapeRecord>> {
   where?: WhereInput<E>;
+  /**
+   * Unnest one `owned` list before grouping — the aggregate then runs over the list's
+   * ELEMENTS (like Mongo's `$unwind`), one row per element. A dot-path to the array
+   * (`"managerResult.anchors"`); the `groupBy`/accumulator `field`/FILTER paths then
+   * address the element's fields (`"managerResult.anchors.name"`). `where` still filters
+   * the PARENT rows; the accumulators' `{ where }` filter the elements. Counting parents
+   * under `unnest` needs `distinct("id")` (the parent id repeats per element).
+   */
+  unnest?: string;
   groupBy?: string[] | Record<string, string | GroupExpr>;
   select: Record<string, Accumulator | Expr>;
   having?: Record<string, unknown>;

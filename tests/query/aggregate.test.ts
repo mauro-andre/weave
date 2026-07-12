@@ -3,6 +3,8 @@ import {
   compileAggregate,
   count,
   sum,
+  avg,
+  first,
   distinct,
   percentile,
   histogram,
@@ -12,7 +14,12 @@ import {
   defineEntity,
   text,
   int4,
+  bool,
+  float8,
   timestamptz,
+  owned,
+  array,
+  reference,
 } from "../../app/engine/index.js";
 
 // Esqueleto do compilador de agregação (count/sum + groupBy + orderBy). SQL puro,
@@ -228,5 +235,110 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     expect(() => sqlOf({ groupBy: { t: timeBucket("ts", "5weeks") }, select: { n: count() } })).toThrow(
       /invalid timeBucket/,
     );
+  });
+});
+
+// ── Path-based aggregate: dot-paths (Pedido 2) + unnest owned-array (Pedido 1) ──
+// The aggregate resolves owned/reference dot-paths via JOINs, and `unnest` fans one
+// owned list out to its elements. Pure SQL shape — the JOIN plan and the fan-out.
+const aggdept = defineEntity("aggdept", { slug: text().notNull() });
+const aggjob = defineEntity("aggjob", { title: text().notNull(), department: reference(aggdept) });
+const aggresp2 = defineEntity("aggresp2", {
+  name: text().notNull(),
+  departmentSlug: text(),
+  jobPosition: reference(aggjob),
+});
+const aggpaths = defineEntity("aggpaths", {
+  isFinalized: bool(),
+  respondent: reference(aggresp2),
+  managerResult: owned({
+    cargoFitFitScore: float8(),
+    careerAnchorAnalysis: owned({
+      anchors: owned(
+        array({
+          name: text().notNull(),
+          anchorAverage: float8(),
+          companyAverage: float8(),
+          alignment: text(),
+          managerDescription: text(),
+        }),
+      ),
+    }),
+  }),
+});
+const ANCHORS = "aggpaths__manager_result__career_anchor_analysis__anchors";
+const pathsOf = (input: Parameters<typeof compileAggregate<typeof aggpaths>>[1]) => compileAggregate(aggpaths, input);
+
+describe("compileAggregate — dot-paths (Pedido 2)", () => {
+  it("groupBy por path reference→escalar → LEFT JOIN no alvo, agrupa pela coluna dele", () => {
+    const { text: sql } = pathsOf({ groupBy: ["respondent.departmentSlug"], select: { n: count() } });
+    expect(sql).toMatch(/LEFT JOIN aggresp2 (\w+) ON \1\.id = aggpaths\.respondent_id/);
+    expect(sql).toMatch(/\w+\.department_slug AS "respondent\.departmentSlug"/);
+    expect(sql).toMatch(/GROUP BY \w+\.department_slug/);
+  });
+
+  it("avg por path owned-1:1 → LEFT JOIN na tabela filha, coluna snake", () => {
+    const { text: sql } = pathsOf({ select: { fit: avg("managerResult.cargoFitFitScore") } });
+    expect(sql).toMatch(/LEFT JOIN aggpaths__manager_result (\w+) ON \1\.aggpaths_id = aggpaths\.id/);
+    expect(sql).toMatch(/avg\(\w+\.cargo_fit_fit_score\)/);
+  });
+
+  it("groupBy por reference MULTI-HOP → JOINs encadeados, agrupa pela FK do alvo final", () => {
+    const { text: sql } = pathsOf({ groupBy: ["respondent.jobPosition.department"], select: { n: count() } });
+    expect(sql).toContain("LEFT JOIN aggresp2 ");
+    expect(sql).toContain("LEFT JOIN aggjob ");
+    expect(sql).toMatch(/GROUP BY \w+\.department_id/); // folha é reference → FK
+  });
+
+  it("prefixo compartilhado: dois campos do mesmo owned reusam UM join", () => {
+    const { text: sql } = pathsOf({
+      select: { a: avg("managerResult.cargoFitFitScore"), b: sum("managerResult.cargoFitFitScore") },
+    });
+    expect(sql.match(/JOIN aggpaths__manager_result /g)).toHaveLength(1); // dedup por prefixo
+  });
+
+  it("guard: agregar através de owned LIST sem unnest → erro", () => {
+    expect(() =>
+      pathsOf({ groupBy: ["managerResult.careerAnchorAnalysis.anchors.name"], select: { n: count() } }),
+    ).toThrow(/is an owned list/);
+  });
+});
+
+describe("compileAggregate — unnest owned-array (Pedido 1)", () => {
+  const agg = () =>
+    pathsOf({
+      where: { isFinalized: true },
+      unnest: "managerResult.careerAnchorAnalysis.anchors",
+      groupBy: ["managerResult.careerAnchorAnalysis.anchors.name"],
+      select: {
+        anchorAvg: avg("managerResult.careerAnchorAnalysis.anchors.anchorAverage"),
+        distHigh: count({ where: { "managerResult.careerAnchorAnalysis.anchors.alignment": { eq: "high" } } }),
+        desc: first("managerResult.careerAnchorAnalysis.anchors.managerDescription"),
+      },
+    });
+
+  it("a lista vira INNER JOIN (fan-out), os hops 1:1 intermediários são LEFT JOIN", () => {
+    const { text: sql } = agg();
+    expect(sql).toContain(`\nJOIN ${ANCHORS} `); // fan-out: bare JOIN
+    expect(sql).not.toContain(`LEFT JOIN ${ANCHORS} `); // não é LEFT
+    expect(sql).toContain("LEFT JOIN aggpaths__manager_result "); // 1:1 intermediário
+  });
+
+  it("groupBy/avg/FILTER/first resolvem contra a coluna do ELEMENTO", () => {
+    const { text: sql, params } = agg();
+    expect(sql).toMatch(/GROUP BY \w+\.name/);
+    expect(sql).toMatch(/avg\(\w+\.anchor_average\)/);
+    // band = count FILTER com condição DIRETA na coluna do elemento (field vs const), sem EXISTS
+    expect(sql).toMatch(/count\(\*\) FILTER \(WHERE \w+\.alignment = \$\d\)/);
+    expect(sql).not.toContain("EXISTS");
+    // first = representante determinístico por created_at do elemento
+    expect(sql).toMatch(/\(array_agg\(\w+\.manager_description ORDER BY \w+\.created_at\)\)\[1\]/);
+    // where do pai continua no root (filtra os pais, não os elementos)
+    expect(sql).toMatch(/WHERE aggpaths\.is_finalized/);
+    expect(params).toContain("high");
+  });
+
+  it("guard: unnest de algo que não é lista → erro", () => {
+    expect(() => pathsOf({ unnest: "managerResult", select: { n: count() } })).toThrow(/must be an owned list/);
   });
 });

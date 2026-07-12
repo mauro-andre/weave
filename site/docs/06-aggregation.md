@@ -23,6 +23,7 @@ count()                       // number of rows
 sum(field) · avg(field)       // over a numeric field
 min(field) · max(field)
 distinct(field)               // count of distinct values
+first(field)                  // one representative per group (earliest by created_at)
 percentile(field, p)          // exact percentile — p is 0..1 (p95 → 0.95)
 histogram(field, [bounds])    // bucket counts (see below)
 ```
@@ -59,6 +60,57 @@ Group by a **reference** too — it buckets by the target's foreign key. `groupB
 ["department", "company"]` groups by `department_id` + `company_id`; you can name the
 reference (`department`) or its id (`departmentId`). The same holds for `latestPer`,
 `having`, and the aggregate's `orderBy` — anywhere a field name is taken.
+
+## Grouping through relationships — paths
+
+Any field slot in an aggregate — `groupBy`, an accumulator's `field`, a FILTER — takes a
+**dot-path** through what you own and what you reference. Weave joins the tables for you;
+you never write the join.
+
+```ts
+await weave.order.aggregate({
+  groupBy: ["customer.region"],          // reference → a scalar on the target
+  select: { n: count(), revenue: sum("total") },
+});
+```
+
+A path steps through a `reference` (N:1) or an `owned` object, to any depth —
+`avg("fulfilment.cost")` (an owned object), `["customer.company.tier"]` (two hops). A
+**reference at the leaf** buckets by its foreign key. Paths that share a prefix share one
+join. In the array form the output alias is the path string itself, so read it back as
+`row["customer.region"]`.
+
+## Unnesting an owned list — `unnest`
+
+Everything above rolls up **parent** rows. To roll up the **elements** of an owned list
+instead — an average or a distribution per element, not per parent — name the list in
+`unnest`. The aggregate then runs one row per element (Postgres' answer to Mongo's
+`$unwind`), and `groupBy` / an accumulator's `field` / a FILTER address the element's fields:
+
+```ts
+const perSku = await weave.order.aggregate({
+  where:   { status: "paid" },     // filters the PARENT orders
+  unnest:  "items",                // one row per line item
+  groupBy: ["items.sku"],
+  select: {
+    lines:      count(),
+    qty:        sum("items.qty"),
+    backorders: count({ where: { "items.status": { eq: "backordered" } } }), // a band
+    label:      first("items.name"),
+  },
+  orderBy: { "items.sku": "asc" },
+});
+```
+
+The two filters play different roles: **`where` filters the parents** (which rows' elements
+count at all), while an accumulator's **`{ where }` filters the elements** (the band —
+`count(… FILTER …)`). `first` gives one representative per group — the earliest element by
+`created_at` — for metadata that's constant within the group (the label tied to a sku).
+
+With `unnest` the unit of aggregation is the element, so a parent contributes as many rows
+as it has elements. Counting **parents** under `unnest` therefore needs `distinct("id")`
+(the parent id repeats per element). One `unnest` per call — for several lists, run one
+aggregate each.
 
 ## having, orderBy & top-N
 

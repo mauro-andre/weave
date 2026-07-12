@@ -71,6 +71,7 @@ export {
   min,
   max,
   distinct,
+  first,
   percentile,
   histogram,
   div,
