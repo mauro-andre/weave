@@ -1,5 +1,5 @@
 import type { EntityIR, FieldIR, Entity, ShapeRecord, ScopeWhereInput, FieldPath, ExtractParams } from "../../core/src/index.js";
-import { systemColumnSentinel } from "../../core/src/index.js";
+import { systemColumnSentinel, tableize } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 
@@ -253,12 +253,18 @@ export async function pushScopes(
   for (const def of Object.values(scopes)) {
     const entities: Record<string, unknown> = {};
     for (const [entity, rule] of Object.entries(def.entities)) {
-      const rows = rule.where ? whereToFilter(rule.where, entity, byName) : null;
+      // `byName` é chaveado pelo nome do IR (tableizado/snake); o `entity` é o nome LÓGICO
+      // (camelCase, `entity.name`). Palavra-única coincide, multi-palavra não — tableiza pra
+      // casar (`respondentResults` → `respondent_results`), senão o mapa de campos sai vazio
+      // e TODO campo declarado vira "desconhecido". A chave de storage segue lógica (o
+      // enforcement tableiza os dois lados).
+      const irName = tableize(entity);
+      const rows = rule.where ? whereToFilter(rule.where, irName, byName) : null;
       let fields: { mode: "include" | "exclude"; paths: string[][] } | null = null;
       if (rule.fields?.include) {
-        fields = { mode: "include", paths: rule.fields.include.map((p) => namePathToIds(entity, byName, p)) };
+        fields = { mode: "include", paths: rule.fields.include.map((p) => namePathToIds(irName, byName, p)) };
       } else if (rule.fields?.exclude) {
-        fields = { mode: "exclude", paths: rule.fields.exclude.map((p) => namePathToIds(entity, byName, p)) };
+        fields = { mode: "exclude", paths: rule.fields.exclude.map((p) => namePathToIds(irName, byName, p)) };
       }
       entities[entity] = { verbs: rule.verbs, rows, fields };
     }

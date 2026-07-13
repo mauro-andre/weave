@@ -11,6 +11,9 @@ import { createClient, defineScope, scopeRule, pushScopes, defineEntity, text, r
 
 const tenant = defineEntity("scompany", { name: text().notNull() });
 const doc = defineEntity("sdoc", { title: text().notNull(), company: reference(tenant) });
+// Nome MULTI-PALAVRA (camelCase → snake `s_billing_regions`): a regressão do casing na
+// resolução de campos do pushScopes (byName por IR/snake vs entity lógico camelCase).
+const region = defineEntity("sBillingRegions", { code: text().notNull(), secret: text() });
 
 describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
@@ -18,7 +21,7 @@ describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () =>
   let acme = "";
   let globex = "";
   const base = () => ({ url: "http://localhost", key, fetch: (r: Request) => app.hono.fetch(r) });
-  const client = () => createClient({ ...base(), entities: { scompany: tenant, sdoc: doc } });
+  const client = () => createClient({ ...base(), entities: { scompany: tenant, sdoc: doc, sBillingRegions: region } });
 
   beforeAll(async () => {
     app = await createTestApp({
@@ -28,9 +31,9 @@ describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () =>
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS sdoc, scompany CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('sdoc','scompany')`;
-        await sql`DELETE FROM weave_scopes WHERE name IN ('tenant_fk','tenant_trav','by_id')`;
+        await sql`DROP TABLE IF EXISTS sdoc, scompany, s_billing_regions CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('sdoc','scompany','s_billing_regions')`;
+        await sql`DELETE FROM weave_scopes WHERE name IN ('tenant_fk','tenant_trav','by_id','mw')`;
         await sql`DELETE FROM weave_api_keys`;
         const { applyEntity } = await import("../app/engine/control-plane/entities.js");
         await applyEntity({ irVersion: 1, name: "scompany", fields: { name: { kind: "column", type: "text", notNull: true } } });
@@ -40,6 +43,14 @@ describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () =>
           fields: {
             title: { kind: "column", type: "text", notNull: true },
             company: { kind: "reference", target: "scompany", cardinality: "one" },
+          },
+        });
+        await applyEntity({
+          irVersion: 1,
+          name: "sBillingRegions",
+          fields: {
+            code: { kind: "column", type: "text", notNull: true },
+            secret: { kind: "column", type: "text" },
           },
         });
       },
@@ -59,6 +70,8 @@ describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () =>
     await god.sdoc.create({ title: "A1", companyId: acme });
     await god.sdoc.create({ title: "A2", companyId: acme });
     await god.sdoc.create({ title: "G1", companyId: globex });
+    await god.sBillingRegions.create({ code: "us", secret: "s1" });
+    await god.sBillingRegions.create({ code: "eu", secret: "s2" });
   });
 
   afterAll(async () => {
@@ -93,5 +106,21 @@ describe("scope where: colunas de sistema + FK-shorthand (multi-tenancy)", () =>
     );
     const rows = await client().as("by_id", { docId: target.id }).sdoc.findMany();
     expect(rows.map((r) => r.title)).toEqual(["A1"]);
+  });
+
+  it("nome de entidade MULTI-PALAVRA: campos declarados resolvem no push (não 'desconhecido')", async () => {
+    // Antes do fix, `sBillingRegions` (→ IR `s_billing_regions`) não casava no byName do
+    // pushScopes → where/fields por campo declarado estouravam ("campo 'code' desconhecido").
+    await pushScopes(
+      {
+        s: defineScope("mw", [
+          scopeRule(region, { verbs: ["read"], where: { code: { eq: { param: "c" } } }, fields: { exclude: ["secret"] } }),
+        ]),
+      },
+      base(),
+    );
+    const rows = (await client().as("mw", { c: "us" }).sBillingRegions.findMany()) as Record<string, unknown>[];
+    expect(rows.map((r) => r.code)).toEqual(["us"]); // where por campo declarado resolveu
+    expect(rows.every((r) => !("secret" in r))).toBe(true); // fields.exclude resolveu (namePathToIds)
   });
 });
