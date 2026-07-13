@@ -8,6 +8,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     cli: "src/cli.ts",
+    als: "src/als.ts",
   },
   format: ["esm"],
   // tsconfig do build cobre sdk/src + core/src no rootDir (senão o core cai fora

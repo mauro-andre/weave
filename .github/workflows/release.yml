@@ -46,6 +46,7 @@ jobs:
             p.exports = {
               ".":     { types: "./dist/index.d.ts", import: "./dist/index.js" },
               "./cli": { types: "./dist/cli.d.ts",   import: "./dist/cli.js" },
+              "./als": { types: "./dist/als.d.ts",   import: "./dist/als.js" },
             };
             fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
           '

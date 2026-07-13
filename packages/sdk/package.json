@@ -28,6 +28,10 @@
     "./cli": {
       "types": "./src/cli.ts",
       "import": "./src/cli.ts"
+    },
+    "./als": {
+      "types": "./src/als.ts",
+      "import": "./src/als.ts"
     }
   },
   "scripts": {

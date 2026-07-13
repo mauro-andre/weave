@@ -30,8 +30,10 @@ ever a loose string, so a typo or a rename can't silently produce a broken (over
 policy.
 
 - **verbs** — any of `read` · `create` · `update` · `delete`.
-- **where** — the same `WhereInput` you query with; rows outside it don't exist for
-  this scope.
+- **where** — the same `WhereInput` you query with. It filters which rows are **visible**
+  (read / update-target / delete-target) **and** what a write may **produce**: a `create`
+  or `update` whose resulting row would fall outside the filter is rejected (`403`). So a
+  scope can never be used to write into — or move a row into — another tenant.
 - **fields** — `include` or `exclude` a set of paths (dot-paths into owned/refs).
 
 ## Parameters
@@ -80,3 +82,52 @@ The verbs stay the same — `findOne` · `findMany` · `paginate` · `create` ·
 just call them on the scoped client. The API doesn't change under a scope; the server
 enforces the scope's verbs, rows and fields, and the client can't widen them. Push
 scopes to the server with **[the CLI](/docs/the-cli)**.
+
+## Ambient scoping — one client, scoped per request
+
+`weave.as(scope, params)` returns a scoped client you thread by hand. In a multi-tenant
+server that means passing it through every service call — and forgetting once leaks god
+access. The **ambient** client removes the threading: it resolves the active scope from an
+`AsyncLocalStorage` context, so your services just use `weave.*` and get the right scoped
+client automatically. Turn it on in `weave.config.ts` and regenerate:
+
+```ts
+// weave.config.ts
+export default { ambient: true };
+```
+
+```ts
+import { weave } from "./weave/index.js"; // now an ambient client
+
+// middleware — establish the scope for the whole request, from the user's role:
+app.use((ctx, next) =>
+  weave.runAs(scopeFor(ctx.user.role), { companyId: ctx.user.companyId }, () => next()),
+);
+
+// any service / loader inside the request — zero plumbing, already scoped:
+const orders = await weave.order.findMany();
+```
+
+**Fail-closed by construction.** Outside any `runAs`, `weave.*` **throws**
+(`WeaveScopeError`) — never god. Forgetting the middleware, or losing the async context,
+**denies** the request; it never silently falls back to full access. That's the opposite of
+the usual "default to admin" footgun — a missing scope fails loud, not open.
+
+The three ways to run:
+
+```ts
+weave.runAs(scope, params, fn)  // scoped for fn (sync or async); params typed & required
+weave.runAs(publicScope, fn)    // a scope with no params → no params object needed
+weave.runAsGod(fn)              // explicit full access for fn (a trusted admin route, or a
+                                // deliberate cross-tenant op inside a scoped request)
+weave.god.session.findOne(...)  // the raw god client — for auth *before* a scope exists,
+                                // and for boot / ETL / scripts outside any request
+```
+
+`runAs` returns whatever `fn` returns, and the scope **propagates across every `await`**
+inside it. Runs **nest**: a `runAsGod` inside a `runAs` shadows the scope for its callback,
+and the outer scope restores when it returns.
+
+The ambient client lives in the `@mauroandre/weave-sdk/als` subpath (it pulls Node's
+`AsyncLocalStorage`); projects that don't opt in never load it, and the explicit
+`weave.as(scope, params)` stays available for one-off scoped calls.
