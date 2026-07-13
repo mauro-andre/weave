@@ -163,7 +163,11 @@ function jsonSafe<T>(v: T): T {
  * editor; aqui só convertemos a forma expandida de volta pra id-form, pra o
  * `save` do engine **preservar** os vínculos (sobretudo N:N, que ele substitui).
  */
-export async function saveObject(name: string, object: Record<string, unknown>): Promise<unknown> {
+export async function saveObject(
+  name: string,
+  object: Record<string, unknown>,
+  check?: Record<string, unknown>,
+): Promise<unknown> {
   name = tableize(name);
   const irs = await listEntities();
   const root = irs.find((e) => e.name === name);
@@ -192,8 +196,8 @@ export async function saveObject(name: string, object: Record<string, unknown>):
         throw new Error(`weave: this row's '${field}' is older than the retention window (${root.retention}).`);
       }
     }
-    const loose = client as unknown as { save(e: unknown, i: unknown): Promise<unknown> };
-    return jsonSafe(await loose.save(entities[name], object));
+    const loose = client as unknown as { save(e: unknown, i: unknown, check?: unknown): Promise<unknown> };
+    return jsonSafe(await loose.save(entities[name], object, check));
   } finally {
     await client.close();
   }
@@ -207,6 +211,7 @@ export async function saveObject(name: string, object: Record<string, unknown>):
 export async function createManyObjects(
   name: string,
   inputs: Record<string, unknown>[],
+  check?: Record<string, unknown>,
 ): Promise<Record<string, unknown>[]> {
   name = tableize(name);
   const irs = await listEntities();
@@ -225,8 +230,8 @@ export async function createManyObjects(
   try {
     const toInsert = await applyPartitioning(sql, root, name, inputs);
     if (toInsert.length === 0) return [];
-    const loose = client as unknown as { createMany(e: unknown, i: unknown[]): Promise<unknown[]> };
-    return jsonSafe(await loose.createMany(entities[name], toInsert)) as Record<string, unknown>[];
+    const loose = client as unknown as { createMany(e: unknown, i: unknown[], check?: unknown): Promise<unknown[]> };
+    return jsonSafe(await loose.createMany(entities[name], toInsert, check)) as Record<string, unknown>[];
   } finally {
     await client.close();
   }

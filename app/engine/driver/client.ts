@@ -36,6 +36,18 @@ type Sql = postgres.Sql;
 type TransactionSql = postgres.TransactionSql;
 type AnyEntity = Entity<string, ShapeRecord>;
 
+/**
+ * Um write escopado produziria uma linha FORA do filtro do scope (o "WITH CHECK" do RLS):
+ * criar/mover uma linha pra outro tenant. Lançado DENTRO da transação → rollback; o caller
+ * (handler) mapeia pra 403. Cobre create e update (ambos passam pelo `save`/upsert).
+ */
+export class WithCheckError extends Error {
+  constructor(message = "weave: write violates the active scope's row filter.") {
+    super(message);
+    this.name = "WithCheckError";
+  }
+}
+
 /** Arbitrary constant keying the advisory lock that serializes `sync()`. */
 const SYNC_LOCK_KEY = 0x7ea7e_0001;
 
@@ -339,14 +351,34 @@ export class Weave {
   async save<TName extends string, TShape extends ShapeRecord>(
     entity: Entity<TName, TShape>,
     input: InferInsert<Entity<TName, TShape>>,
+    check?: WhereInput<Entity<TName, TShape>>,
   ): Promise<InferEntity<Entity<TName, TShape>>> {
-    const id = await this.transaction((tx) =>
-      shred(tx as unknown as Executor, entity, input as Record<string, unknown>),
-    );
+    const id = await this.transaction(async (tx) => {
+      const newId = await shred(tx as unknown as Executor, entity, input as Record<string, unknown>);
+      // WITH CHECK: a linha resultante (create OU update/upsert) tem que satisfazer o
+      // filtro do scope — senão é write cross-tenant. Verifica DENTRO da txn → rollback.
+      if (check) await this.assertWithCheck(tx, entity, newId, check, 1);
+      return newId;
+    });
     const [saved] = await this.find(entity, {
       where: { id } as WhereInput<Entity<TName, TShape>>,
     });
     return saved!;
+  }
+
+  /** Conta, na txn, quantas das linhas (`ids`) satisfazem `check`; ≠ esperado → viola o scope. */
+  private async assertWithCheck<TName extends string, TShape extends ShapeRecord>(
+    tx: TransactionSql,
+    entity: Entity<TName, TShape>,
+    ids: string | string[],
+    check: WhereInput<Entity<TName, TShape>>,
+    expected: number,
+  ): Promise<void> {
+    const idFilter = Array.isArray(ids) ? { id: { in: ids } } : { id: ids };
+    const where = { and: [idFilter, check] } as unknown as WhereInput<Entity<TName, TShape>>;
+    const { text, params } = compileCount(entity, where);
+    const [row] = (await tx.unsafe(text, params as never[])) as unknown as { n: number }[];
+    if (Number(row?.n ?? 0) !== expected) throw new WithCheckError();
   }
 
   /**
@@ -358,6 +390,7 @@ export class Weave {
   async createMany<TName extends string, TShape extends ShapeRecord>(
     entity: Entity<TName, TShape>,
     inputs: InferInsert<Entity<TName, TShape>>[],
+    check?: WhereInput<Entity<TName, TShape>>,
   ): Promise<InferEntity<Entity<TName, TShape>>[]> {
     if (inputs.length === 0) return [];
     const ids = await this.transaction(async (tx) => {
@@ -365,6 +398,8 @@ export class Weave {
       for (const input of inputs) {
         out.push(await shred(tx as unknown as Executor, entity, input as Record<string, unknown>));
       }
+      // WITH CHECK do lote: TODAS as linhas novas têm que satisfazer o filtro (senão rollback).
+      if (check) await this.assertWithCheck(tx, entity, out, check, out.length);
       return out;
     });
     const found = (await this.find(entity, {

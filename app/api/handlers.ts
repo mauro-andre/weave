@@ -15,6 +15,8 @@ const statusFor = (m: string) => (/unknown entity|not found/i.test(m) ? 404 : 40
 
 function fail(c: Context, e: unknown): Response {
   if (e instanceof ScopeError) return c.json({ error: e.message }, e.status as 400 | 403);
+  // WITH CHECK violado (write cross-tenant) → 403. Checa por `name` (bundle-safe, sem import do driver).
+  if (e instanceof Error && e.name === "WithCheckError") return c.json({ error: e.message }, 403);
   const m = msg(e);
   return c.json({ error: m }, statusFor(m) as 400 | 404);
 }
@@ -116,16 +118,19 @@ export async function apiCreate({ c, params }: EndpointHandlerArgs): Promise<Res
     const access = await resolveAccess(c, entity, "create");
     const body = (await c.req.json()) as Record<string, unknown> | Record<string, unknown>[];
     const project = (o: Record<string, unknown>) => (access.god ? o : prune(o, access.projection));
+    // WITH CHECK: sob scope, a linha criada tem que cair no filtro de linhas (senão é
+    // create cross-tenant). `god`/scope-sem-where → sem check. Ver `WithCheckError` → 403.
+    const check = access.god ? undefined : (access.rows ?? undefined);
 
     if (Array.isArray(body)) {
       const { createManyObjects } = await import("../engine/control-plane/data.js");
       if (body.length > BULK_CAP) throw new ScopeError(`Bulk create exceeds cap of ${BULK_CAP}.`, 400);
-      const rows = await createManyObjects(entity, body);
+      const rows = await createManyObjects(entity, body, check ?? undefined);
       return c.json(rows.map(project), 201);
     }
 
     const { saveObject } = await import("../engine/control-plane/data.js");
-    const obj = (await saveObject(entity, body)) as Record<string, unknown>;
+    const obj = (await saveObject(entity, body, check ?? undefined)) as Record<string, unknown>;
     return c.json(project(obj), 201);
   } catch (e) {
     return fail(c, e);
@@ -154,8 +159,11 @@ export async function apiUpdate({ c, params, query }: EndpointHandlerArgs): Prom
     const where = mutationWhere(access, query);
     const orderBy = parseJson<WNode>(query.orderBy);
     const patch = (await c.req.json()) as Record<string, unknown>;
+    // WITH CHECK no update: o resultado (upsert do merge) tem que CONTINUAR no filtro do
+    // scope — impede o patch de MOVER a linha pra fora do tenant (ex.: trocar o FK).
+    const check = access.god ? undefined : (access.rows ?? undefined);
     // merge: campos omitidos vêm do objeto atual (owned/refs preservados).
-    const apply = (existing: WNode) => saveObject(entity, { ...existing, ...patch, id: existing.id });
+    const apply = (existing: WNode) => saveObject(entity, { ...existing, ...patch, id: existing.id }, check ?? undefined);
 
     if (query.mode === "many") {
       const rows = (await listObjects(entity, 1, BULK_CAP, where, orderBy)).docs;
