@@ -10,6 +10,7 @@ export {
   type WhereInput,
   type ScopeWhereInput,
   type FieldPath,
+  type ExtractParams,
   type OrderByInput,
   type SortDir,
   type Filter,

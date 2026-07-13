@@ -1,4 +1,4 @@
-import type { EntityIR, FieldIR, Entity, ShapeRecord, ScopeWhereInput, FieldPath } from "../../core/src/index.js";
+import type { EntityIR, FieldIR, Entity, ShapeRecord, ScopeWhereInput, FieldPath, ExtractParams } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 
@@ -15,7 +15,7 @@ export type Verb = "read" | "create" | "update" | "delete";
  *  contra a entity `E`: `where` é um `WhereInput<E>` param-aware, `fields` são dot-paths
  *  de `E`. Typo/rename num campo/path viram erro de compilação, nunca falha silenciosa. */
 export interface ScopeRuleConfig<E extends Entity<string, ShapeRecord> = Entity<string, ShapeRecord>> {
-  verbs: Verb[];
+  verbs: readonly Verb[];
   /** Filtro de linhas: `WhereInput<E>` onde qualquer folha aceita `{ param: "x" }`. */
   where?: ScopeWhereInput<E>;
   /** Projeção: dot-paths de `E` (`"whatsapp"`, `"summaryForTheManager.expectedRoi"`). */
@@ -23,13 +23,18 @@ export interface ScopeRuleConfig<E extends Entity<string, ShapeRecord> = Entity<
 }
 
 /** Uma regra já resolvida (type-erased): o nome LÓGICO da entity (`entity.name`) + a
- *  config frouxa, pronta pro storage (o `defineScope`/`pushScopes` só leem valores). */
-export interface ScopeRule {
+ *  config frouxa. `Params` é um phantom com os nomes de param inferidos do `where`. */
+export interface ScopeRule<Params extends string = string> {
   entity: string;
   verbs: Verb[];
   where?: Record<string, unknown>;
   fields?: { include?: string[]; exclude?: string[] };
+  /** @internal phantom — nomes de param (`{ param: "x" }`) inferidos do `where`. */
+  readonly __params?: Params;
 }
+
+/** Nomes de param no `where` de uma config (vazio quando não há `where`). */
+type WhereParams<C> = C extends { where: infer W } ? ExtractParams<W> : never;
 
 export interface ScopeEntityRule {
   verbs: Verb[];
@@ -37,27 +42,44 @@ export interface ScopeEntityRule {
   fields?: { include?: string[]; exclude?: string[] };
 }
 
-export interface ScopeDef {
+/** `Params` = union dos nomes de param inferidos das regras — o `weave.as` tipa contra isso. */
+export interface ScopeDef<Params extends string = never> {
   name: string;
   entities: Record<string, ScopeEntityRule>;
+  /** @internal phantom — carrega os nomes de param pro `weave.as`. */
+  readonly __params?: Params;
 }
 
 /**
  * Amarra uma regra a uma ENTITY por referência. O binding sai de `entity.name` (o nome
  * LÓGICO canônico — camelCase como você escreveu no `defineEntity`), não de uma string —
- * então typo/casing/snake_case não existem aqui. Espelha o `reference(entity)`.
+ * então typo/casing/snake_case não existem aqui. Espelha o `reference(entity)`. O `const`
+ * na config preserva os literais dos `{ param: "x" }` pra inferência (Pedido 2d).
  */
-export function scopeRule<E extends Entity<string, ShapeRecord>>(entity: E, config: ScopeRuleConfig<E>): ScopeRule {
+export function scopeRule<E extends Entity<string, ShapeRecord>, const C>(
+  entity: E,
+  config: C & ScopeRuleConfig<E>,
+): ScopeRule<WhereParams<C>> {
   return {
     entity: entity.name,
-    verbs: config.verbs,
-    ...(config.where ? { where: config.where } : {}),
-    ...(config.fields ? { fields: config.fields } : {}),
+    verbs: [...config.verbs],
+    ...(config.where ? { where: config.where as Record<string, unknown> } : {}),
+    ...(config.fields ? { fields: config.fields as { include?: string[]; exclude?: string[] } } : {}),
   };
 }
 
-/** Helper pro scope-as-code (igual `defineEntity`): nome + regras amarradas por `scopeRule`. */
-export function defineScope(name: string, rules: ScopeRule[]): ScopeDef {
+/** Union dos params de todas as regras de um scope. */
+type RulesParams<R extends readonly ScopeRule[]> = NonNullable<R[number]["__params"]>;
+
+/**
+ * Helper pro scope-as-code (igual `defineEntity`): nome + regras amarradas por `scopeRule`.
+ * Devolve `ScopeDef<Params>` com os nomes de param INFERIDOS das regras — o `weave.as`
+ * usa isso pra tipar (e exigir) o objeto de params na chamada, sem você declarar nada.
+ */
+export function defineScope<const R extends readonly ScopeRule[]>(
+  name: string,
+  rules: R,
+): ScopeDef<RulesParams<R>> {
   const entities: Record<string, ScopeEntityRule> = {};
   for (const r of rules) {
     if (entities[r.entity]) throw new Error(`scope '${name}': regra duplicada para a entity '${r.entity}'.`);
@@ -187,7 +209,7 @@ function whereToFilter(where: Record<string, unknown>, entity: string, byName: M
  * resolver os ids (rename-proof no storage).
  */
 export async function pushScopes(
-  scopes: Record<string, ScopeDef>,
+  scopes: Record<string, ScopeDef<string>>,
   options: PushScopesOptions,
 ): Promise<{ pushed: string[] }> {
   const transport: FetchLike = options.fetch ?? ((req) => globalThis.fetch(req));

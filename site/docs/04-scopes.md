@@ -37,7 +37,27 @@ policy.
 ## Parameters
 
 A rule can depend on request-time values with `{ param: "name" }` — perfect for
-per-tenant or per-user filtering.
+per-tenant or per-user filtering. The `where` is fully typed against the entity, and
+literal and `{ param }` values mix freely in the same tree:
+
+```ts
+scopeRule(order, {
+  verbs: ["read"],
+  where: { and: [
+    { customer: { id: { eq: { param: "customerId" } } } }, // a request-time param
+    { status: { ne: "draft" } },                            // a literal
+  ]},
+});
+```
+
+The param **names are inferred** from the rules — you never declare them. `defineScope`
+carries them into its type, so `weave.as` **requires the params object, typed**: a missing
+or misspelled param is a compile error, not a runtime surprise.
+
+```ts
+weave.as(storefront, { customerId: ctx.user.id }); // ✓
+weave.as(storefront, {});                           // ✗ — 'customerId' is required
+```
 
 ## Acting under a scope
 

@@ -141,6 +141,21 @@ type PathOf<TShape, D extends unknown[] = PBudget> = D extends []
  */
 export type FieldPath<E> = E extends Entity<string, infer TShape> ? PathOf<TShape> : never;
 
+/**
+ * Union dos NOMES de param (`{ param: "x" }`) em qualquer lugar de uma árvore — o where
+ * de um scope. Anda por objetos e arrays; a folha `{ param: L }` rende o literal `L`.
+ * Requer que os literais sejam preservados (o `scopeRule` usa `const` no config).
+ */
+export type ExtractParams<T> = T extends { param: infer L }
+  ? L extends string
+    ? L
+    : never
+  : T extends readonly (infer U)[]
+    ? ExtractParams<U>
+    : T extends object
+      ? { [K in keyof T]: ExtractParams<T[K]> }[keyof T]
+      : never;
+
 /** Direção de ordenação. */
 export type SortDir = "asc" | "desc";
 

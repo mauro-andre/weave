@@ -130,9 +130,16 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
 export type WeaveClient<S extends Record<string, Entity<string, ShapeRecord>>> = {
   [K in keyof S]: EntityClient<S[K]>;
 } & {
-  /** Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. Aceita o
-   *  OBJETO do scope (`defineScope(...)`) — recomendado — ou o nome (string). */
-  as(scope: ScopeDef | string, params?: Record<string, unknown>): WeaveClient<S>;
+  /**
+   * Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. Aceita o
+   * OBJETO do scope (`defineScope(...)`) — recomendado — ou o nome (string). Quando o
+   * scope infere params (`{ param: "x" }` no where), o objeto de params vira OBRIGATÓRIO
+   * e tipado (`.as(admin, { companyId })`); sem params, é opcional.
+   */
+  as<P extends string = never>(
+    scope: ScopeDef<P> | string,
+    ...rest: [P] extends [never] ? [params?: Record<string, unknown>] : [params: { [K in P]: unknown }]
+  ): WeaveClient<S>;
   /**
    * Factory reset — **dev/test only**. Zera o banco pra estado virgem (apaga dados,
    * tabelas de entity e o schema todo); um `push` em seguida reconstrói. Só funciona
