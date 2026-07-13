@@ -148,3 +148,23 @@ export function joinTableName(pathPrefix: string, fieldSnake: string): string {
 export function joinTargetFk(fieldSnake: string): string {
   return `${fieldSnake}_id`;
 }
+
+// ── Reserved system columns (scope storage) ─────────────────────────────────────
+// Toda entity tem `id` (PK) + `createdAt`/`updatedAt`, mas eles NÃO têm `$id` de campo
+// (o nome já é estável/reservado). No path-Filter por-id do scope, viram um SENTINEL
+// (`@id`, …) — um token que não colide com field-`$id` (UUID) nem com valor de id (o
+// valor é sempre `{ param }`, opaco; o sentinel é a IDENTIDADE da coluna, não o valor).
+export const SYSTEM_COLUMNS = ["id", "createdAt", "updatedAt"] as const;
+const SYS_PREFIX = "@";
+
+/** Nome de coluna de sistema → sentinel de storage (`"id"` → `"@id"`), senão `undefined`. */
+export function systemColumnSentinel(name: string): string | undefined {
+  return (SYSTEM_COLUMNS as readonly string[]).includes(name) ? `${SYS_PREFIX}${name}` : undefined;
+}
+
+/** Sentinel de storage → nome de coluna de sistema (`"@id"` → `"id"`), senão `undefined`. */
+export function systemColumnName(sentinel: string): string | undefined {
+  if (!sentinel.startsWith(SYS_PREFIX)) return undefined;
+  const name = sentinel.slice(SYS_PREFIX.length);
+  return (SYSTEM_COLUMNS as readonly string[]).includes(name) ? name : undefined;
+}

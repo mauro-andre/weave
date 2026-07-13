@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Verb } from "../engine/control-plane/scopes.js";
-import { tableize } from "@mauroandre/weave-core";
+import { tableize, systemColumnName } from "@mauroandre/weave-core";
 import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
 export class ScopeError extends Error {
@@ -131,6 +131,8 @@ function conditionToWhere(
     const node = fields[seg];
     if (idx === names.length - 1) {
       const sc = leafOp(op, value);
+      // Folha é uma reference N:1 → FK-shorthand direto (`{ companyId: … }`), não travessia.
+      if (node?.kind === "reference" && node.cardinality === "one") return { [`${seg}Id`]: sc };
       const isArray = node?.kind === "column" && node.array === true;
       return { [seg]: isArray && op !== "isEmpty" ? { some: sc } : sc };
     }
@@ -203,6 +205,13 @@ function idPathToNames(
   const names: string[] = [];
   let cur = fields;
   for (let i = 0; i < idPath.length; i++) {
+    // Sentinel de coluna de sistema (`@id`, …) → nome; é sempre FOLHA (não atravessável).
+    const sysName = systemColumnName(idPath[i]!);
+    if (sysName) {
+      names.push(sysName);
+      if (i !== idPath.length - 1) return null;
+      break;
+    }
     const entry = Object.entries(cur).find(([, node]) => node.id === idPath[i]);
     if (!entry) return null;
     const [name, node] = entry;

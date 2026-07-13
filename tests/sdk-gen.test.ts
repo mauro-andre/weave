@@ -171,6 +171,27 @@ describe("SDK codegen — scopeToSource", () => {
     expect(src).toContain('eq: {'); // valor é { param: "label" }
     expect(src).toContain('param: "label"');
   });
+
+  it("resolve coluna de sistema (@id) e FK-shorthand (ref como folha)", () => {
+    const scope = {
+      name: "sys",
+      entities: {
+        product: {
+          verbs: ["read"] as string[],
+          rows: {
+            and: [
+              { path: ["@id"], op: "equals", value: { param: "pid" } }, // sentinel de sistema
+              { path: ["f3"], op: "equals", value: { param: "cat" } }, // category (ref) como FOLHA → FK
+            ],
+          },
+          fields: null,
+        },
+      },
+    };
+    const src = scopeToSource(scope, byName);
+    expect(src).toContain("id: {"); // @id → id (coluna de sistema)
+    expect(src).toContain("categoryId: {"); // ref na folha → FK-shorthand direto
+  });
 });
 
 describe("SDK codegen — genProject / weave gen", () => {

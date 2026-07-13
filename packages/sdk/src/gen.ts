@@ -1,4 +1,4 @@
-import { camelize, tableize } from "../../core/src/index.js";
+import { camelize, tableize, systemColumnName } from "../../core/src/index.js";
 import type { EntityIR, FieldIR } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
@@ -161,6 +161,11 @@ function idPathToNames(entity: string, byName: Map<string, EntityIR>, idPath: st
   const names: string[] = [];
   let fields = byName.get(entity)?.fields ?? {};
   for (let i = 0; i < idPath.length; i++) {
+    const sysName = systemColumnName(idPath[i]!); // sentinel de coluna de sistema → nome (folha)
+    if (sysName) {
+      names.push(sysName);
+      break;
+    }
     const entry = Object.entries(fields).find(([, f]) => f.id === idPath[i]);
     if (!entry) throw new Error(`scope gen: field id '${idPath[i]}' não encontrado em '${entity}'.`);
     const [name, f] = entry;
@@ -223,6 +228,7 @@ function buildWhere(
     const f = fields[seg];
     if (idx === names.length - 1) {
       const sc = opToWhere(op, value);
+      if (f?.kind === "reference" && f.cardinality === "one") return { [`${seg}Id`]: sc }; // FK-shorthand
       const isArray = f?.kind === "column" && f.array === true;
       return { [seg]: isArray && op !== "isEmpty" ? { some: sc } : sc };
     }

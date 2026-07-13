@@ -6,7 +6,12 @@ import { Page } from "../components/Page.js";
 import { Select, type SelectOption } from "../components/Select.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
 import type { ColumnIR, EntityIR, FieldIR } from "@mauroandre/weave-core";
-import { camelize } from "@mauroandre/weave-core";
+import { camelize, SYSTEM_COLUMNS, systemColumnSentinel, systemColumnName } from "@mauroandre/weave-core";
+
+// Colunas de sistema (id/createdAt/updatedAt): selecionáveis no where, sem `$id` — o path
+// guarda o SENTINEL (`@id`, …). Nós sintéticos só pra alimentar o drill/leaf da GUI.
+const SYS_COL_TYPE: Record<string, string> = { id: "text", createdAt: "timestamptz", updatedAt: "timestamptz" };
+const sysColNode = (name: string): FieldIR => ({ kind: "column", type: SYS_COL_TYPE[name] ?? "text" }) as ColumnIR;
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Scope, EntityRule, Verb } from "../engine/control-plane/scopes.js";
 import * as btn from "../styles/button.css.js";
@@ -348,6 +353,13 @@ function ScopeCond({
   const needsValue = !NO_VALUE.has(cond.op);
 
   const pick = (id: string) => {
+    const sysName = systemColumnName(id); // coluna de sistema → folha (sentinel no path)
+    if (sysName) {
+      cond.path = [...cond.path, id];
+      cond.op = opOptions(SYS_COL_TYPE[sysName] ?? "text")[0]?.value ?? "equals";
+      bump();
+      return;
+    }
     const node = Object.values(nextFields).find((n) => n.id === id);
     cond.path = [...cond.path, id];
     if (node?.kind === "column") cond.op = opOptions(node.type)[0]?.value ?? "equals";
@@ -494,6 +506,12 @@ function resolvePath(shapes: Shapes, root: string, idPath: string[]) {
   const crumbs: { id: string; name: string; node: FieldIR }[] = [];
   let fields = shapes[root] ?? {};
   for (const id of idPath) {
+    const sysName = systemColumnName(id); // sentinel de coluna de sistema → folha sintética
+    if (sysName) {
+      crumbs.push({ id, name: sysName, node: sysColNode(sysName) });
+      fields = {};
+      break;
+    }
     const entry = Object.entries(fields).find(([, n]) => n.id === id);
     if (!entry) break;
     const [name, node] = entry;
@@ -510,9 +528,12 @@ function resolvePath(shapes: Shapes, root: string, idPath: string[]) {
 }
 
 function drillOptions(fields: Record<string, FieldIR>): SelectOption[] {
-  return Object.entries(fields)
+  const declared = Object.entries(fields)
     .filter(([, n]) => !!n.id)
     .map(([name, n]) => ({ value: n.id!, label: name, hint: kindLabel(n) }));
+  // Colunas de sistema, selecionáveis em qualquer nível (o `company.id` do multi-tenancy).
+  const system = SYSTEM_COLUMNS.map((name) => ({ value: systemColumnSentinel(name)!, label: name, hint: "system" }));
+  return [...declared, ...system];
 }
 
 function kindLabel(node: FieldIR): string {

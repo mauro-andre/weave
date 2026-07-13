@@ -1,4 +1,5 @@
 import type { EntityIR, FieldIR, Entity, ShapeRecord, ScopeWhereInput, FieldPath, ExtractParams } from "../../core/src/index.js";
+import { systemColumnSentinel } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 
@@ -181,18 +182,41 @@ function whereFieldsToFilter(
       continue;
     }
     if (key === "not") throw new Error("scope: `not` não é suportado no where de um scope.");
-    const f = fields[key];
-    if (!f?.id) throw new Error(`scope: campo '${key}' desconhecido.`);
-    if (f.kind === "column") {
-      const opObj = f.array && isObj(val) && "some" in val ? (val["some"] as Record<string, unknown>) : val;
-      const { op, value } = decodeOp(opObj);
-      conds.push(value === undefined ? { path: [f.id], op } : { path: [f.id], op, value });
+
+    // Coluna de SISTEMA (id/createdAt/updatedAt): sentinel reservado, sem `$id` de campo.
+    const sys = systemColumnSentinel(key);
+    if (sys) {
+      const { op, value } = decodeOp(val);
+      conds.push(value === undefined ? { path: [sys], op } : { path: [sys], op, value });
       continue;
     }
-    // travessia owned/reference: desce (desembrulha `some` no to-many) e prefixa o id.
-    const nested = (isObj(val) && "some" in val ? val["some"] : val) as Record<string, unknown>;
-    const targetFields = f.kind === "owned" ? (f.shape ?? {}) : (byName.get(f.target)?.fields ?? {});
-    conds.push(prefixPath(f.id, whereFieldsToFilter(nested, targetFields, byName)));
+
+    const f = fields[key];
+    if (f?.id) {
+      if (f.kind === "column") {
+        const opObj = f.array && isObj(val) && "some" in val ? (val["some"] as Record<string, unknown>) : val;
+        const { op, value } = decodeOp(opObj);
+        conds.push(value === undefined ? { path: [f.id], op } : { path: [f.id], op, value });
+        continue;
+      }
+      // travessia owned/reference: desce (desembrulha `some` no to-many) e prefixa o id.
+      const nested = (isObj(val) && "some" in val ? val["some"] : val) as Record<string, unknown>;
+      const targetFields = f.kind === "owned" ? (f.shape ?? {}) : (byName.get(f.target)?.fields ?? {});
+      conds.push(prefixPath(f.id, whereFieldsToFilter(nested, targetFields, byName)));
+      continue;
+    }
+
+    // FK-shorthand `<field>Id`: `companyId` → o `$id` da reference `company` como FOLHA
+    // (path de 1 segmento terminando numa ref → o enforcement emite o filtro DIRETO da FK).
+    if (key.endsWith("Id")) {
+      const ref = fields[key.slice(0, -2)];
+      if (ref?.kind === "reference" && ref.cardinality === "one" && ref.id) {
+        const { op, value } = decodeOp(val);
+        conds.push(value === undefined ? { path: [ref.id], op } : { path: [ref.id], op, value });
+        continue;
+      }
+    }
+    throw new Error(`scope: campo '${key}' desconhecido.`);
   }
   if (conds.length === 0) throw new Error("scope: filtro vazio.");
   return conds.length === 1 ? conds[0]! : { and: conds };
