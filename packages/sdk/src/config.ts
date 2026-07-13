@@ -8,12 +8,6 @@ export interface WeaveConfig {
    * Default: `"weave"` na raiz do projeto. Ex.: `"app/weave"`.
    */
   dir?: string;
-  /**
-   * Gera o `weave` como client AMBIENT (multi-tenant): resolve o scope por request via
-   * `runAs`/`runAsGod` (AsyncLocalStorage), FORA de qualquer run → DENY (fail-closed).
-   * Puxa `@mauroandre/weave-sdk/als` (Node). Default `false`: o client de sempre (god).
-   */
-  ambient?: boolean;
 }
 
 /** Helper tipado pro `weave.config.ts` (igual `defineConfig` do Vite/Drizzle). */

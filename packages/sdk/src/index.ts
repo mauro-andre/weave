@@ -12,6 +12,11 @@ export type {
   PageResult,
   FetchLike,
 } from "./client.js";
+// Client escopado (multi-tenant): `scopedWeave = createScopedClient(weave)` — request-scoped,
+// fail-closed (deny fora de `runAs` → `WeaveScopeError`, exportado de ./errors). Node-only
+// (`node:async_hooks`), server-side como o resto.
+export { createScopedClient } from "./scoped.js";
+export type { ScopedClient } from "./scoped.js";
 export type { Infer, InferWhere, InferPatch, InferOrderBy, InferUpdate } from "./types.js";
 export { pushEntities } from "./push.js";
 export type { PushOptions, PushResult, MigrationPlan, PlanChange } from "./push.js";

@@ -149,7 +149,7 @@ export async function runCli(argv: string[], deps: CliDeps = {}): Promise<number
   const dirRel = config.dir ?? DEFAULT_DIR;
   const dir = path.resolve(cwd, dirRel);
   const entitiesDir = path.join(dir, "entities");
-  const net = { url, key, ...(deps.fetch ? { fetch: deps.fetch } : {}), ...(config.ambient ? { ambient: true } : {}) };
+  const net = { url, key, ...(deps.fetch ? { fetch: deps.fetch } : {}) };
   const write = deps.write ?? defaultWrite;
   const clean = deps.clean ?? defaultClean;
 

@@ -277,13 +277,9 @@ describe("SDK codegen — genProject / weave gen", () => {
     expect(files["index.ts"]).toContain("createClient({");
     expect(files["index.ts"]).toContain("process.env.WEAVE_URL");
     expect(files["index.ts"]).toContain('import * as entities from "./entities/index.js";');
-  });
-
-  it("genProject { ambient: true } → client ambient (createAmbientClient + subpath /als)", async () => {
-    const { files } = await genProject({ url: "http://localhost", key, fetch: (r) => app.hono.fetch(r), ambient: true });
-    expect(files["index.ts"]).toContain('import { createAmbientClient } from "@mauroandre/weave-sdk/als";');
-    expect(files["index.ts"]).toContain("createAmbientClient({");
-    expect(files["index.ts"]).not.toContain("createClient(");
+    // projeto COM scope (genstaff) → exporta scopedWeave (base compartilhada) + o import.
+    expect(files["index.ts"]).toContain('import { createClient, createScopedClient } from "@mauroandre/weave-sdk";');
+    expect(files["index.ts"]).toContain("export const scopedWeave = createScopedClient(weave);");
   });
 
   it("runCli gen: limpa as pastas e escreve a árvore na pasta do config", async () => {

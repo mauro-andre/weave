@@ -2,15 +2,24 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { createClient, defineScope, scopeRule, pushScopes, defineEntity, text, reference } from "@mauroandre/weave-sdk";
-import { createAmbientClient, WeaveScopeError } from "@mauroandre/weave-sdk/als";
+import {
+  createClient,
+  createScopedClient,
+  WeaveScopeError,
+  defineScope,
+  scopeRule,
+  pushScopes,
+  defineEntity,
+  text,
+  reference,
+} from "@mauroandre/weave-sdk";
 
-// Client AMBIENT (Peça B): runAs/runAsGod/weave.god via AsyncLocalStorage. FORA de qualquer
-// run → DENY (fail-closed). Prova o comportamento end-to-end contra o server real.
+// Client ESCOPADO (Peça B): scopedWeave.runAs/runAsGod/god via AsyncLocalStorage. FORA de
+// qualquer run → DENY (fail-closed). No entry principal, base compartilhada com o god.
 const company = defineEntity("acompany", { name: text().notNull() });
 const doc = defineEntity("adoc", { title: text().notNull(), company: reference(company) });
 
-describe("ambient client — runAs / runAsGod / god + fail-closed", () => {
+describe("scoped client — runAs / runAsGod / god + fail-closed", () => {
   let app: Awaited<ReturnType<typeof createTestApp>>;
   let key = "";
   let acme = "";
@@ -51,7 +60,7 @@ describe("ambient client — runAs / runAsGod / god + fail-closed", () => {
     });
     const { findUserByUsername } = await import("../app/engine/control-plane/users.js");
     const master = (await findUserByUsername(process.env.MASTER_USERNAME!))!;
-    const res = await app.as({ user: master }).action(action_createKey, { body: { name: "amb key" } });
+    const res = await app.as({ user: master }).action(action_createKey, { body: { name: "sc key" } });
     key = (await res.json()).key as string;
 
     const god = createClient(opts());
@@ -69,46 +78,51 @@ describe("ambient client — runAs / runAsGod / god + fail-closed", () => {
     await closeDb();
   });
 
+  it("base compartilhada: createScopedClient(weave) → scopedWeave.god === weave", () => {
+    const weave = createClient(opts());
+    const scoped = createScopedClient(weave);
+    expect(scoped.god).toBe(weave); // um god client só
+  });
+
   it("FORA de runAs → DENY (WeaveScopeError, fail-closed) — nunca god silencioso", () => {
-    const weave = createAmbientClient(opts());
-    expect(() => weave.adoc.findMany()).toThrow(WeaveScopeError);
+    const scoped = createScopedClient(opts());
+    expect(() => scoped.adoc.findMany()).toThrow(WeaveScopeError);
   });
 
   it("runAs escopa o callback (só a company do param)", async () => {
-    const weave = createAmbientClient(opts());
-    const rows = await weave.runAs(tenant, { co: acme }, () => weave.adoc.findMany());
+    const scoped = createScopedClient(opts());
+    const rows = await scoped.runAs(tenant, { co: acme }, () => scoped.adoc.findMany());
     expect(rows.map((r) => r.title).sort()).toEqual(["A1", "A2"]);
   });
 
   it("runAsGod → acesso total no callback", async () => {
-    const weave = createAmbientClient(opts());
-    const rows = await weave.runAsGod(() => weave.adoc.findMany());
-    expect(rows).toHaveLength(3);
+    const scoped = createScopedClient(opts());
+    expect(await scoped.runAsGod(() => scoped.adoc.findMany())).toHaveLength(3);
   });
 
-  it("weave.god → acesso total em qualquer ponto (auth pré-scope / boot)", async () => {
-    const weave = createAmbientClient(opts());
-    expect(await weave.god.adoc.findMany()).toHaveLength(3);
+  it("scopedWeave.god → acesso total em qualquer ponto (auth pré-scope / boot)", async () => {
+    const scoped = createScopedClient(opts());
+    expect(await scoped.god.adoc.findMany()).toHaveLength(3);
   });
 
   it("ALS propaga através de await (handler async, inclusive setTimeout)", async () => {
-    const weave = createAmbientClient(opts());
-    const rows = await weave.runAs(tenant, { co: globex }, async () => {
+    const scoped = createScopedClient(opts());
+    const rows = await scoped.runAs(tenant, { co: globex }, async () => {
       await Promise.resolve();
       await new Promise((r) => setTimeout(r, 1));
-      return weave.adoc.findMany();
+      return scoped.adoc.findMany();
     });
     expect(rows.map((r) => r.title)).toEqual(["G1"]);
   });
 
   it("aninhado: runAsGod dentro de runAs, e o escopo externo RESTAURA depois", async () => {
-    const weave = createAmbientClient(opts());
-    const out = await weave.runAs(tenant, { co: acme }, async () => {
-      const scoped = (await weave.adoc.findMany()).length; // Acme (2)
-      const all = (await weave.runAsGod(() => weave.adoc.findMany())).length; // god (3)
-      const back = (await weave.adoc.findMany()).length; // volta pro escopo Acme (2)
-      return { scoped, all, back };
+    const scoped = createScopedClient(opts());
+    const out = await scoped.runAs(tenant, { co: acme }, async () => {
+      const inScope = (await scoped.adoc.findMany()).length; // Acme (2)
+      const all = (await scoped.runAsGod(() => scoped.adoc.findMany())).length; // god (3)
+      const back = (await scoped.adoc.findMany()).length; // volta pro escopo Acme (2)
+      return { inScope, all, back };
     });
-    expect(out).toEqual({ scoped: 2, all: 3, back: 2 });
+    expect(out).toEqual({ inScope: 2, all: 3, back: 2 });
   });
 });

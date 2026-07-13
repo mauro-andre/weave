@@ -1,38 +1,28 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createClient, type ClientOptions, type WeaveClient } from "./client.js";
+import { WeaveScopeError } from "./errors.js";
 import type { Entity, ShapeRecord } from "../../core/src/index.js";
 import type { ScopeDef } from "./scope.js";
 
-// Client AMBIENT pro caso multi-tenant: um AsyncLocalStorage guarda o client escopado do
+// Client ESCOPADO pro caso multi-tenant: um AsyncLocalStorage guarda o client escopado do
 // request; os entities resolvem por ele. FORA de qualquer `runAs`/`runAsGod` → DENY (throw),
-// nunca god — FAIL-CLOSED por construção (esquecer/perder o contexto nega, não vaza). `node:
-// async_hooks` fica isolado neste subpath (`@mauroandre/weave-sdk/als`) pra não impor ALS a
-// quem não faz multi-tenancy. Aditivo: quem não importa daqui segue com o client de sempre.
-
-/**
- * Levantado quando um entity é acessado FORA de um `runAs`/`runAsGod` no client ambient.
- * O caller (servidor HTTP do app) mapeia pra 401/403. Fail-closed: sem scope, nega.
- */
-export class WeaveScopeError extends Error {
-  constructor(
-    message = "weave: no ambient scope in this context. Wrap the request in weave.runAs(scope, params, fn), " +
-      "use weave.runAsGod(fn), or call weave.god.* for explicit full access (auth/boot/scripts).",
-  ) {
-    super(message);
-    this.name = "WeaveScopeError";
-  }
-}
+// nunca god — FAIL-CLOSED por construção (esquecer/perder o contexto nega, não vaza). É o
+// par do `createClient`: `weave` (god, boot/infra) + `scopedWeave` (request, fail-closed).
 
 // deny-client: qualquer OPERAÇÃO estoura (o ACESSO ao entity não, pra não quebrar
 // destructuring/inspeção) — o erro surge no ponto certo (a chamada `findMany()`/`create()`).
+// Reusa `WeaveScopeError` (o mesmo 403 do enforcement): acessar sem scope = negado.
 const denyOp = (): never => {
-  throw new WeaveScopeError();
+  throw new WeaveScopeError(
+    "weave: no scope in this context. Wrap the request in scopedWeave.runAs(scope, params, fn), " +
+      "use scopedWeave.runAsGod(fn), or use the plain `weave` client for full access (auth/boot/scripts).",
+  );
 };
 const denyEntity: unknown = new Proxy({}, { get: () => denyOp });
 const denyClient: unknown = new Proxy({}, { get: () => denyEntity });
 
-/** Client ambient: `runAs`/`runAsGod`/`god` + entities resolvidos pelo ALS (deny fora). */
-export type AmbientClient<S extends Record<string, Entity<string, ShapeRecord>>> = WeaveClient<S> & {
+/** Client escopado: `runAs`/`runAsGod`/`god` + entities resolvidos pelo ALS (deny fora). */
+export type ScopedClient<S extends Record<string, Entity<string, ShapeRecord>>> = WeaveClient<S> & {
   /** O client god cru (auth PRÉ-scope, boot, ETL, scripts) — não passa pelo ALS. */
   readonly god: WeaveClient<S>;
   /** Estabelece o scope pro callback (sync/async), devolve o retorno de `fn`. Params
@@ -45,17 +35,24 @@ export type AmbientClient<S extends Record<string, Entity<string, ShapeRecord>>>
   runAsGod<R>(fn: () => R): R;
 };
 
+function isClient<S extends Record<string, Entity<string, ShapeRecord>>>(
+  base: WeaveClient<S> | ClientOptions<S>,
+): base is WeaveClient<S> {
+  return typeof (base as { as?: unknown }).as === "function";
+}
+
 /**
- * Cria um client AMBIENT sobre a mesma config do `createClient`. Os entities resolvem pelo
- * client escopado ativo (setado por `runAs`/`runAsGod` via AsyncLocalStorage); FORA de
- * qualquer run → DENY (throw), nunca god. `weave.god` expõe o god cru pra auth/boot.
+ * Cria um client ESCOPADO. Aceita um client god JÁ criado (`createScopedClient(weave)` —
+ * COMPARTILHA a base, então `scopedWeave.god === weave`) ou as options (cria a base). Os
+ * entities resolvem pelo client escopado ativo (setado por `runAs`/`runAsGod` via
+ * AsyncLocalStorage); FORA de qualquer run → DENY (throw), nunca god.
  */
-export function createAmbientClient<S extends Record<string, Entity<string, ShapeRecord>>>(
-  options: ClientOptions<S>,
-): AmbientClient<S> {
-  const god = createClient(options);
+export function createScopedClient<S extends Record<string, Entity<string, ShapeRecord>>>(
+  base: WeaveClient<S> | ClientOptions<S>,
+): ScopedClient<S> {
+  const god = isClient(base) ? base : createClient(base);
   const als = new AsyncLocalStorage<WeaveClient<S>>();
-  // `.as` aceita (scope, params); tipamos frouxo aqui (o tipo público está no AmbientClient).
+  // `.as` aceita (scope, params); tipamos frouxo aqui (o tipo público está no ScopedClient).
   const asLoose = god.as as unknown as (scope: unknown, params?: unknown) => WeaveClient<S>;
 
   const runAs = (scope: ScopeDef<string> | string, a: unknown, b?: unknown): unknown => {
@@ -85,5 +82,5 @@ export function createAmbientClient<S extends Record<string, Entity<string, Shap
         }
       }
     },
-  }) as AmbientClient<S>;
+  }) as ScopedClient<S>;
 }
