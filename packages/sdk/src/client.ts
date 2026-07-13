@@ -15,6 +15,7 @@ import type {
 } from "../../core/src/index.js";
 import { reviveShape } from "./serialize.js";
 import { errorFor } from "./errors.js";
+import type { ScopeDef } from "./scope.js";
 
 /** Função de transporte: recebe um `Request`, devolve um `Response` (WHATWG fetch).
  *  Aceita retorno síncrono ou Promise (o `app.hono.fetch` pode ser síncrono). */
@@ -129,8 +130,9 @@ export interface EntityClient<E extends Entity<string, ShapeRecord>> {
 export type WeaveClient<S extends Record<string, Entity<string, ShapeRecord>>> = {
   [K in keyof S]: EntityClient<S[K]>;
 } & {
-  /** Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. */
-  as(scope: string, params?: Record<string, unknown>): WeaveClient<S>;
+  /** Client escopado: toda requisição leva `x-weave-scope` + `x-weave-params`. Aceita o
+   *  OBJETO do scope (`defineScope(...)`) — recomendado — ou o nome (string). */
+  as(scope: ScopeDef | string, params?: Record<string, unknown>): WeaveClient<S>;
   /**
    * Factory reset — **dev/test only**. Zera o banco pra estado virgem (apaga dados,
    * tabelas de entity e o schema todo); um `push` em seguida reconstrói. Só funciona
@@ -294,8 +296,9 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
   }
 
   // `weave.as(scope, params)` → novo client com os headers de scope em toda req.
-  client["as"] = (scope: string, params?: Record<string, unknown>) =>
-    createClient({ ...options, scope, ...(params ? { params } : {}) });
+  // Aceita o objeto do scope (usa `.name`) ou a string do nome.
+  client["as"] = (scope: ScopeDef | string, params?: Record<string, unknown>) =>
+    createClient({ ...options, scope: typeof scope === "string" ? scope : scope.name, ...(params ? { params } : {}) });
 
   // `weave.reset()` → factory reset (dev/test only; gated por WEAVE_DEV_MODE no server).
   client["reset"] = async () => {

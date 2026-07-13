@@ -2,6 +2,7 @@ import type { LoaderArgs } from "@mauroandre/velojs";
 import { Link } from "@mauroandre/velojs";
 import { useLoader } from "@mauroandre/velojs/hooks";
 import { Page } from "../components/Page.js";
+import { camelize } from "@mauroandre/weave-core";
 import * as btn from "../styles/button.css.js";
 import * as css from "./Scopes.css.js";
 
@@ -35,7 +36,7 @@ export const Component = () => {
           {scopes.map((s) => (
             <Link key={s.name} to={`~/scopes/${s.name}`} class={css.item}>
               <span class={css.name}>{s.name}</span>
-              <span class={css.meta}>{s.entities.join(" · ") || "no entities"}</span>
+              <span class={css.meta}>{s.entities.map(camelize).join(" · ") || "no entities"}</span>
             </Link>
           ))}
         </div>

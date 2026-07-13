@@ -1,4 +1,4 @@
-import { camelize } from "../../core/src/index.js";
+import { camelize, tableize } from "../../core/src/index.js";
 import type { EntityIR, FieldIR } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
@@ -270,22 +270,32 @@ function lit(value: unknown, indent = 0): string {
   return JSON.stringify(value);
 }
 
-/** Gera o source `export default defineScope(...)` de UM scope (resolve id→nome). */
+/** Gera o source `export default defineScope(...)` de UM scope: cada regra amarrada à
+ *  entity por referência (`scopeRule(<logical>, …)`) + o import da entity. Resolve
+ *  id→nome nos paths. Normaliza a chave guardada (snake OU camel) pro nome lógico. */
 export function scopeToSource(scope: StoredScope, byName: Map<string, EntityIR>): string {
-  const rules: Record<string, unknown> = {};
-  for (const [entity, rule] of Object.entries(scope.entities)) {
-    const out: Record<string, unknown> = { verbs: rule.verbs };
-    if (rule.rows) out["where"] = filterToWhere(rule.rows, entity, byName);
+  const imports: string[] = [];
+  const rules: string[] = [];
+  for (const [entityKey, rule] of Object.entries(scope.entities)) {
+    const irName = tableize(entityKey); // nome de storage/IR (snake) — pros lookups em byName
+    const logical = camelize(entityKey); // nome lógico (camelCase) — var do import + arquivo
+    imports.push(`import ${logical} from "../entities/${logical}.js";`);
+
+    const cfg: Record<string, unknown> = { verbs: rule.verbs };
+    if (rule.rows) cfg["where"] = filterToWhere(rule.rows, irName, byName);
     if (rule.fields) {
-      const paths = rule.fields.paths.map((p) => idPathToNames(entity, byName, p).join("."));
-      out["fields"] = rule.fields.mode === "include" ? { include: paths } : { exclude: paths };
+      const paths = rule.fields.paths.map((p) => idPathToNames(irName, byName, p).join("."));
+      cfg["fields"] = rule.fields.mode === "include" ? { include: paths } : { exclude: paths };
     }
-    rules[entity] = out;
+    rules.push(`  scopeRule(${logical}, ${lit(cfg, 1)}),`);
   }
   return [
-    `import { defineScope } from "@mauroandre/weave-sdk";`,
+    `import { defineScope, scopeRule } from "@mauroandre/weave-sdk";`,
+    ...imports,
     "",
-    `export default defineScope(${JSON.stringify(scope.name)}, ${lit(rules)});`,
+    `export default defineScope(${JSON.stringify(scope.name)}, [`,
+    ...rules,
+    `]);`,
     "",
   ].join("\n");
 }

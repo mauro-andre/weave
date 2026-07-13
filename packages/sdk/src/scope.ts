@@ -1,19 +1,35 @@
-import type { EntityIR, FieldIR } from "../../core/src/index.js";
+import type { EntityIR, FieldIR, Entity, ShapeRecord } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 
-// Scope-as-code: o dev escreve o scope por NOME (where Prisma-style + campos por
-// nome), e o `pushScopes` converte pro formato de STORAGE (por field-id, rename-proof)
-// e grava via `/admin/scopes`. Os conversores aqui são o inverso do enforcement
-// (`scope.ts → resolveFilter`): WhereInput-por-nome → path-Filter-por-id.
+// Scope-as-code: o dev escreve o scope amarrando cada regra a uma ENTITY (por
+// referência, `scopeRule(entity, …)`) — o binding sai do objeto, não de uma string
+// solta (mata typo/casing/snake_case na origem). O `pushScopes` converte pro formato
+// de STORAGE (por field-id, rename-proof) e grava via `/admin/scopes`. Os conversores
+// aqui são o inverso do enforcement (`scope.ts → resolveFilter`): WhereInput-por-nome
+// → path-Filter-por-id.
 
 export type Verb = "read" | "create" | "update" | "delete";
 
-export interface ScopeEntityRule {
+/** Config de uma regra (sem a entity — ela vem por referência no `scopeRule`). O
+ *  parâmetro `E` fica pronto pra tipar `where`/`fields` contra a entity (Pedido 2b/2c). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export interface ScopeRuleConfig<E extends Entity<string, ShapeRecord> = Entity<string, ShapeRecord>> {
   verbs: Verb[];
   /** Filtro de linhas (WhereInput, por NOME; valores podem ser `{ param: "x" }`). */
   where?: Record<string, unknown>;
   /** Projeção: caminhos por NOME (dot-path, ex.: `"items.secret"`). */
+  fields?: { include?: string[]; exclude?: string[] };
+}
+
+/** Uma regra já resolvida: o nome LÓGICO da entity (canônico, `entity.name`) + a config. */
+export interface ScopeRule extends ScopeRuleConfig {
+  entity: string;
+}
+
+export interface ScopeEntityRule {
+  verbs: Verb[];
+  where?: Record<string, unknown>;
   fields?: { include?: string[]; exclude?: string[] };
 }
 
@@ -22,8 +38,31 @@ export interface ScopeDef {
   entities: Record<string, ScopeEntityRule>;
 }
 
-/** Helper tipado pro scope-as-code (igual `defineEntity`). */
-export function defineScope(name: string, entities: Record<string, ScopeEntityRule>): ScopeDef {
+/**
+ * Amarra uma regra a uma ENTITY por referência. O binding sai de `entity.name` (o nome
+ * LÓGICO canônico — camelCase como você escreveu no `defineEntity`), não de uma string —
+ * então typo/casing/snake_case não existem aqui. Espelha o `reference(entity)`.
+ */
+export function scopeRule<E extends Entity<string, ShapeRecord>>(entity: E, config: ScopeRuleConfig<E>): ScopeRule {
+  return {
+    entity: entity.name,
+    verbs: config.verbs,
+    ...(config.where ? { where: config.where } : {}),
+    ...(config.fields ? { fields: config.fields } : {}),
+  };
+}
+
+/** Helper pro scope-as-code (igual `defineEntity`): nome + regras amarradas por `scopeRule`. */
+export function defineScope(name: string, rules: ScopeRule[]): ScopeDef {
+  const entities: Record<string, ScopeEntityRule> = {};
+  for (const r of rules) {
+    if (entities[r.entity]) throw new Error(`scope '${name}': regra duplicada para a entity '${r.entity}'.`);
+    entities[r.entity] = {
+      verbs: r.verbs,
+      ...(r.where ? { where: r.where } : {}),
+      ...(r.fields ? { fields: r.fields } : {}),
+    };
+  }
   return { name, entities };
 }
 

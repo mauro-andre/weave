@@ -7,20 +7,27 @@ renames) and enforces it on every request.
 
 ```ts
 // weave/scopes/storefront.ts
-import { defineScope } from "@mauroandre/weave-sdk";
+import { defineScope, scopeRule } from "@mauroandre/weave-sdk";
+import product from "../entities/product.js";
+import order from "../entities/order.js";
 
-export default defineScope("storefront", {
-  product: {
+export default defineScope("storefront", [
+  scopeRule(product, {
     verbs: ["read"],
     where: { active: { eq: true } },
     fields: { exclude: ["cost"] },
-  },
-  order: {
+  }),
+  scopeRule(order, {
     verbs: ["read", "create"],
     where: { customer: { id: { eq: { param: "customerId" } } } },
-  },
-});
+  }),
+]);
 ```
+
+Each rule is bound to its entity **by reference** with `scopeRule(entity, …)` — the same
+entity object you `defineEntity`'d, exactly like `reference(entity)`. No entity name is
+ever a loose string, so a typo or a rename can't silently produce a broken (over-permissive)
+policy.
 
 - **verbs** — any of `read` · `create` · `update` · `delete`.
 - **where** — the same `WhereInput` you query with; rows outside it don't exist for
@@ -38,11 +45,16 @@ The god-mode key is for trusted server-side use. To serve a request as a tenant,
 derive a scoped client:
 
 ```ts
-const tenant = weave.as("storefront", { customerId: ctx.user.id });
+import storefront from "./weave/scopes/storefront.js";
+
+const tenant = weave.as(storefront, { customerId: ctx.user.id });
 
 await tenant.product.findMany();  // only active products, no `cost` field
 await tenant.order.create(o);     // allowed; rows still constrained to this customer
 ```
+
+`weave.as` takes the **scope object** (`defineScope(…)`) — recommended — or its name as a
+string. Passing the object keeps a single source of truth, just like importing an entity.
 
 The verbs stay the same — `findOne` · `findMany` · `paginate` · `create` · … — you
 just call them on the scoped client. The API doesn't change under a scope; the server

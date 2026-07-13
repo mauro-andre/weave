@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { createClient, defineScope, pushScopes, defineEntity, text, int4 } from "@mauroandre/weave-sdk";
+import { createClient, defineScope, scopeRule, pushScopes, defineEntity, text, int4 } from "@mauroandre/weave-sdk";
 
 // F4b: defineScope (por NOME) → pushScopes (converte pra by-id, grava) → weave.as
 // (enforcement). Prova o round-trip completo do scope-as-code.
@@ -58,18 +58,19 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
   });
 
   it("defineScope por nome → pushScopes (by-id) → weave.as impõe linhas + projeção + verbo", async () => {
-    // O dev escreve o scope por NOME, Prisma-style; pushScopes resolve os ids.
-    const storefront = defineScope("sdkstore2", {
-      sdkpur2: {
+    // O dev amarra cada regra à ENTITY por referência (scopeRule); pushScopes resolve os ids.
+    const storefront = defineScope("sdkstore2", [
+      scopeRule(purchase, {
         verbs: ["read"],
         where: { company: { eq: { param: "company" } } },
         fields: { exclude: ["cost"] },
-      },
-    });
+      }),
+    ]);
     const out = await pushScopes({ storefront }, base());
     expect(out.pushed).toEqual(["sdkstore2"]);
 
-    const store = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkstore2", { company: 1 });
+    // `.as` aceita o OBJETO do scope (não só a string do nome).
+    const store = createClient({ ...base(), entities: { sdkpur2: purchase } }).as(storefront, { company: 1 });
     const rows = await store.sdkpur2.findMany();
     expect(rows.length).toBe(3); // só company 1 (filtro de linhas resolvido por id)
     expect(rows.every((r) => !("cost" in (r as Record<string, unknown>)))).toBe(true); // cost podado
@@ -86,12 +87,12 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
     await god.sdkpur2.create({ code: "H9", cost: 200, company: 9 });
 
     // duas condições no MESMO nível: company == param AND cost < 100
-    const s = defineScope("sdkmulti", {
-      sdkpur2: { verbs: ["read"], where: { company: { eq: { param: "co" } }, cost: { lt: 100 } } },
-    });
+    const s = defineScope("sdkmulti", [
+      scopeRule(purchase, { verbs: ["read"], where: { company: { eq: { param: "co" } }, cost: { lt: 100 } } }),
+    ]);
     await pushScopes({ s }, base());
 
-    const scoped = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkmulti", { co: 9 });
+    const scoped = createClient({ ...base(), entities: { sdkpur2: purchase } }).as(s, { co: 9 });
     const codes = ((await scoped.sdkpur2.findMany()) as { code: string }[]).map((r) => r.code).sort();
     // AND aplicado: L9(10) + M9(60); H9(200) fica de fora. Antes do fix o `cost` era
     // dropado em silêncio e H9 vazava (3 linhas).
@@ -104,13 +105,16 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
     await god.sdkpur2.create({ code: "C8", cost: 60, company: 8 });
 
     // bare literal → eq
-    await pushScopes({ s: defineScope("sdkbare", { sdkpur2: { verbs: ["read"], where: { company: 8 } } }) }, base());
+    await pushScopes(
+      { s: defineScope("sdkbare", [scopeRule(purchase, { verbs: ["read"], where: { company: 8 } })]) },
+      base(),
+    );
     const lit = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkbare");
     expect((await lit.sdkpur2.findMany()).length).toBe(2);
 
     // bare { param } (sem eq) → eq { param } — antes estourava no decodeOp
     await pushScopes(
-      { s: defineScope("sdkbarep", { sdkpur2: { verbs: ["read"], where: { company: { param: "co" } } } }) },
+      { s: defineScope("sdkbarep", [scopeRule(purchase, { verbs: ["read"], where: { company: { param: "co" } } })]) },
       base(),
     );
     const par = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkbarep", { co: 8 });

@@ -6,6 +6,7 @@ import { Page } from "../components/Page.js";
 import { Select, type SelectOption } from "../components/Select.js";
 import { ConfirmModal } from "../components/ConfirmModal.js";
 import type { ColumnIR, EntityIR, FieldIR } from "@mauroandre/weave-core";
+import { camelize } from "@mauroandre/weave-core";
 import type { Filter } from "../engine/control-plane/filter.js";
 import type { Scope, EntityRule, Verb } from "../engine/control-plane/scopes.js";
 import * as btn from "../styles/button.css.js";
@@ -106,7 +107,8 @@ export const Component = () => {
   const navigate = useNavigate();
 
   const used = new Set(model.value.entities.map((e) => e.entity));
-  const addable = entities.filter((e) => !used.has(e.name)).map((e) => ({ value: e.name, label: e.name }));
+  // value = nome de storage (snake, chaveia `shapes`); label = nome lógico canônico (camelCase).
+  const addable = entities.filter((e) => !used.has(e.name)).map((e) => ({ value: e.name, label: camelize(e.name) }));
 
   const addEntity = (name: string) => {
     model.value.entities.push({
@@ -241,7 +243,7 @@ function RuleCard({
   return (
     <div class={css.card}>
       <div class={css.cardHead}>
-        <span class={css.entityName}>{entity}</span>
+        <span class={css.entityName}>{camelize(entity)}</span>
         <button class={css.remove} onClick={onRemove} title="remove entity">
           ✕
         </button>

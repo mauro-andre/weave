@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createTestApp } from "@mauroandre/velojs/testing";
 import routes from "../app/routes.js";
 import { action_createKey } from "../app/pages/Api.js";
-import { irToSource, scopeToSource, genProject, pushScopes, defineScope } from "@mauroandre/weave-sdk";
+import { irToSource, scopeToSource, genProject, pushScopes, defineScope, scopeRule, defineEntity, text } from "@mauroandre/weave-sdk";
 import type { EntityIR } from "@mauroandre/weave-core";
 import { runCli } from "@mauroandre/weave-sdk/cli";
 
@@ -144,7 +144,9 @@ describe("SDK codegen — scopeToSource", () => {
       },
     };
     const src = scopeToSource(scope, byName);
-    expect(src).toContain('export default defineScope("public", {');
+    expect(src).toContain('export default defineScope("public", [');
+    expect(src).toContain("scopeRule(product, {"); // regra amarrada à entity por referência
+    expect(src).toContain('import product from "../entities/product.js";'); // + o import da entity
     expect(src).toContain('verbs: ["read"]');
     expect(src).toContain('title: {'); // where resolvido por nome
     expect(src).toContain('ilike: "%a%"'); // contains → ilike %..%
@@ -210,9 +212,13 @@ describe("SDK codegen — genProject / weave gen", () => {
     // empurra um scope-as-code (exercita o round-trip por-id → por-nome no gen)
     await pushScopes(
       {
-        staff: defineScope("genstaff", {
-          genprod: { verbs: ["read"], where: { name: { ilike: "%a%" } }, fields: { exclude: ["category"] } },
-        }),
+        staff: defineScope("genstaff", [
+          scopeRule(defineEntity("genprod", { name: text() }), {
+            verbs: ["read"],
+            where: { name: { ilike: "%a%" } },
+            fields: { exclude: ["category"] },
+          }),
+        ]),
       },
       { url: "http://localhost", key, fetch: (r) => app.hono.fetch(r) },
     );
@@ -237,8 +243,10 @@ describe("SDK codegen — genProject / weave gen", () => {
     expect(files["entities/index.ts"]).toContain('export { default as genprod } from "./genprod.js";');
     expect(files["entities/index.ts"]).toContain('export { default as gencat } from "./gencat.js";');
 
-    // scope resolvido de volta por nome
-    expect(files["scopes/genstaff.ts"]).toContain('export default defineScope("genstaff", {');
+    // scope resolvido de volta: regra por referência à entity + import
+    expect(files["scopes/genstaff.ts"]).toContain('export default defineScope("genstaff", [');
+    expect(files["scopes/genstaff.ts"]).toContain("scopeRule(genprod,");
+    expect(files["scopes/genstaff.ts"]).toContain('import genprod from "../entities/genprod.js";');
     expect(files["scopes/genstaff.ts"]).toContain("name: {");
     expect(files["scopes/genstaff.ts"]).toContain('ilike: "%a%"');
     expect(files["scopes/genstaff.ts"]).toContain('exclude: ["category"]');
