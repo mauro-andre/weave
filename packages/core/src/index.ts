@@ -8,6 +8,8 @@ export * from "./schema/index.js";
 // ── Linguagem de query tipada (filtro + ordenação) — compartilhada engine/GUI/SDK ──
 export {
   type WhereInput,
+  type ScopeWhereInput,
+  type FieldPath,
   type OrderByInput,
   type SortDir,
   type Filter,

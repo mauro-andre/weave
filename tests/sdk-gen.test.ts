@@ -213,7 +213,7 @@ describe("SDK codegen — genProject / weave gen", () => {
     await pushScopes(
       {
         staff: defineScope("genstaff", [
-          scopeRule(defineEntity("genprod", { name: text() }), {
+          scopeRule(defineEntity("genprod", { name: text(), category: text() }), {
             verbs: ["read"],
             where: { name: { ilike: "%a%" } },
             fields: { exclude: ["category"] },

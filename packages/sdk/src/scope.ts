@@ -1,4 +1,4 @@
-import type { EntityIR, FieldIR, Entity, ShapeRecord } from "../../core/src/index.js";
+import type { EntityIR, FieldIR, Entity, ShapeRecord, ScopeWhereInput, FieldPath } from "../../core/src/index.js";
 import { errorFor } from "./errors.js";
 import type { FetchLike } from "./client.js";
 
@@ -11,20 +11,24 @@ import type { FetchLike } from "./client.js";
 
 export type Verb = "read" | "create" | "update" | "delete";
 
-/** Config de uma regra (sem a entity — ela vem por referência no `scopeRule`). O
- *  parâmetro `E` fica pronto pra tipar `where`/`fields` contra a entity (Pedido 2b/2c). */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+/** Config de uma regra (sem a entity — ela vem por referência no `scopeRule`), TIPADA
+ *  contra a entity `E`: `where` é um `WhereInput<E>` param-aware, `fields` são dot-paths
+ *  de `E`. Typo/rename num campo/path viram erro de compilação, nunca falha silenciosa. */
 export interface ScopeRuleConfig<E extends Entity<string, ShapeRecord> = Entity<string, ShapeRecord>> {
   verbs: Verb[];
-  /** Filtro de linhas (WhereInput, por NOME; valores podem ser `{ param: "x" }`). */
-  where?: Record<string, unknown>;
-  /** Projeção: caminhos por NOME (dot-path, ex.: `"items.secret"`). */
-  fields?: { include?: string[]; exclude?: string[] };
+  /** Filtro de linhas: `WhereInput<E>` onde qualquer folha aceita `{ param: "x" }`. */
+  where?: ScopeWhereInput<E>;
+  /** Projeção: dot-paths de `E` (`"whatsapp"`, `"summaryForTheManager.expectedRoi"`). */
+  fields?: { include?: FieldPath<E>[]; exclude?: FieldPath<E>[] };
 }
 
-/** Uma regra já resolvida: o nome LÓGICO da entity (canônico, `entity.name`) + a config. */
-export interface ScopeRule extends ScopeRuleConfig {
+/** Uma regra já resolvida (type-erased): o nome LÓGICO da entity (`entity.name`) + a
+ *  config frouxa, pronta pro storage (o `defineScope`/`pushScopes` só leem valores). */
+export interface ScopeRule {
   entity: string;
+  verbs: Verb[];
+  where?: Record<string, unknown>;
+  fields?: { include?: string[]; exclude?: string[] };
 }
 
 export interface ScopeEntityRule {
