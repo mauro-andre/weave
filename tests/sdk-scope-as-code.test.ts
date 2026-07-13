@@ -23,7 +23,7 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
         const sql = db();
         await sql`DROP TABLE IF EXISTS sdkpur2 CASCADE`;
         await sql`DELETE FROM weave_entities WHERE name = 'sdkpur2'`;
-        await sql`DELETE FROM weave_scopes WHERE name = 'sdkstore2'`;
+        await sql`DELETE FROM weave_scopes WHERE name IN ('sdkstore2', 'sdkmulti', 'sdkbare', 'sdkbarep')`;
         await sql`DELETE FROM weave_api_keys`;
         const { applyEntity } = await import("../app/engine/control-plane/entities.js");
         await applyEntity({
@@ -76,5 +76,44 @@ describe("SDK scope-as-code (F4b) — defineScope + pushScopes", () => {
 
     // verbo create não está no scope → 403
     await expect(store.sdkpur2.create({ code: "X", cost: 1, company: 1 })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("multi-chave no where = AND implícito — não dropa condição (furo de auth fechado)", async () => {
+    // dados isolados (company 9): cost 10, 60, 200
+    const god = createClient({ ...base(), entities: { sdkpur2: purchase } });
+    await god.sdkpur2.create({ code: "L9", cost: 10, company: 9 });
+    await god.sdkpur2.create({ code: "M9", cost: 60, company: 9 });
+    await god.sdkpur2.create({ code: "H9", cost: 200, company: 9 });
+
+    // duas condições no MESMO nível: company == param AND cost < 100
+    const s = defineScope("sdkmulti", {
+      sdkpur2: { verbs: ["read"], where: { company: { eq: { param: "co" } }, cost: { lt: 100 } } },
+    });
+    await pushScopes({ s }, base());
+
+    const scoped = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkmulti", { co: 9 });
+    const codes = ((await scoped.sdkpur2.findMany()) as { code: string }[]).map((r) => r.code).sort();
+    // AND aplicado: L9(10) + M9(60); H9(200) fica de fora. Antes do fix o `cost` era
+    // dropado em silêncio e H9 vazava (3 linhas).
+    expect(codes).toEqual(["L9", "M9"]);
+  });
+
+  it("bare value no where (1:1 com a query): { company: 8 } ≡ { eq: 8 }, e { param } bare", async () => {
+    const god = createClient({ ...base(), entities: { sdkpur2: purchase } });
+    await god.sdkpur2.create({ code: "B8", cost: 60, company: 8 });
+    await god.sdkpur2.create({ code: "C8", cost: 60, company: 8 });
+
+    // bare literal → eq
+    await pushScopes({ s: defineScope("sdkbare", { sdkpur2: { verbs: ["read"], where: { company: 8 } } }) }, base());
+    const lit = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkbare");
+    expect((await lit.sdkpur2.findMany()).length).toBe(2);
+
+    // bare { param } (sem eq) → eq { param } — antes estourava no decodeOp
+    await pushScopes(
+      { s: defineScope("sdkbarep", { sdkpur2: { verbs: ["read"], where: { company: { param: "co" } } } }) },
+      base(),
+    );
+    const par = createClient({ ...base(), entities: { sdkpur2: purchase } }).as("sdkbarep", { co: 8 });
+    expect((await par.sdkpur2.findMany()).length).toBe(2);
   });
 });

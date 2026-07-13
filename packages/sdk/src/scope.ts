@@ -54,59 +54,88 @@ function namePathToIds(entity: string, byName: Map<string, EntityIR>, dotPath: s
   return ids;
 }
 
-/** Objeto de operador WhereInput → { op armazenado, value }. Inverso do `leafOp`. */
-function decodeOp(val: Record<string, unknown>): { op: string; value?: unknown } {
+/**
+ * Operator object → { stored op, value }. Inverse of `leafOp`. A **bare value** — a
+ * primitive, `null`, or a `{ param }` wrapper (no operator key) — means `eq`, 1:1 with
+ * the query's shorthand (`{ active: true }` ≡ `{ active: { eq: true } }`; `null` → isNull).
+ */
+function decodeOp(val: unknown): { op: string; value?: unknown } {
+  if (val === null) return { op: "isEmpty" };
+  if (typeof val !== "object") return { op: "equals", value: val };
+  const v = val as Record<string, unknown>;
   const ilikeUnwrap = (s: unknown): { op: string; value: unknown } => {
     if (typeof s === "string" && s.startsWith("%") && s.endsWith("%")) return { op: "contains", value: s.slice(1, -1) };
     if (typeof s === "string" && s.endsWith("%")) return { op: "startsWith", value: s.slice(0, -1) };
     return { op: "contains", value: s };
   };
-  if ("ilike" in val) return ilikeUnwrap(val["ilike"]);
-  if ("eq" in val) return { op: "equals", value: val["eq"] };
-  if ("ne" in val) return { op: "notEquals", value: val["ne"] };
-  if ("gt" in val) return { op: "gt", value: val["gt"] };
-  if ("gte" in val) return { op: "gte", value: val["gte"] };
-  if ("lt" in val) return { op: "lt", value: val["lt"] };
-  if ("lte" in val) return { op: "lte", value: val["lte"] };
-  if ("in" in val) return { op: "in", value: val["in"] };
-  if ("notIn" in val) return { op: "notIn", value: val["notIn"] };
-  if ("isNull" in val) return { op: "isEmpty" };
-  return { op: "equals", value: undefined };
+  if ("ilike" in v) return ilikeUnwrap(v["ilike"]);
+  if ("eq" in v) return { op: "equals", value: v["eq"] };
+  if ("ne" in v) return { op: "notEquals", value: v["ne"] };
+  if ("gt" in v) return { op: "gt", value: v["gt"] };
+  if ("gte" in v) return { op: "gte", value: v["gte"] };
+  if ("lt" in v) return { op: "lt", value: v["lt"] };
+  if ("lte" in v) return { op: "lte", value: v["lte"] };
+  if ("in" in v) return { op: "in", value: v["in"] };
+  if ("notIn" in v) return { op: "notIn", value: v["notIn"] };
+  if ("isNull" in v) return { op: "isEmpty" };
+  // No known operator key (e.g. `{ param: "x" }`) → treat the whole object as a bare eq value.
+  return { op: "equals", value: v };
 }
 
-type ScopeFilter = unknown; // árvore path-based por-id (formato de storage)
+type StoredCond = { path: string[]; op: string; value?: unknown };
+type ScopeFilter = StoredCond | { and: ScopeFilter[] } | { or: ScopeFilter[] };
 
-/** WhereInput (por nome) → path-Filter (por id). Desce `some` em to-many. */
-function whereToFilter(where: Record<string, unknown>, entity: string, byName: Map<string, EntityIR>): ScopeFilter {
-  if (Array.isArray(where["and"])) {
-    return { and: (where["and"] as Record<string, unknown>[]).map((w) => whereToFilter(w, entity, byName)) };
-  }
-  if (Array.isArray(where["or"])) {
-    return { or: (where["or"] as Record<string, unknown>[]).map((w) => whereToFilter(w, entity, byName)) };
-  }
+/** Prepend a field-id to every leaf path in a subtree — used when descending an owned/ref hop. */
+function prefixPath(id: string, filter: ScopeFilter): ScopeFilter {
+  if ("and" in filter) return { and: filter.and.map((f) => prefixPath(id, f)) };
+  if ("or" in filter) return { or: filter.or.map((f) => prefixPath(id, f)) };
+  return { ...filter, path: [id, ...filter.path] };
+}
 
-  // Galho single-branch: desce até a folha (uma coluna), montando o id-path.
-  const idPath: string[] = [];
-  let cur: Record<string, unknown> = where;
-  let fields = byName.get(entity)?.fields ?? {};
-  for (let guard = 0; guard < 16; guard++) {
-    const entry = Object.entries(cur)[0];
-    if (!entry) break;
-    const [key, val] = entry;
-    const f: FieldIR | undefined = fields[key];
-    if (!f?.id) throw new Error(`scope: campo '${key}' desconhecido em '${entity}'.`);
-    idPath.push(f.id);
-
-    if (f.kind === "column") {
-      const opObj = f.array && isObj(val) && "some" in val ? (val["some"] as Record<string, unknown>) : (val as Record<string, unknown>);
-      const { op, value } = decodeOp(opObj);
-      return value === undefined ? { path: idPath, op } : { path: idPath, op, value };
+/**
+ * WhereInput (por nome) → path-Filter (por id), sobre um mapa de campos. **TODA chave
+ * num nível é um AND implícito** e vira uma condição própria — nada é DROPADO. (Dropar
+ * condição num filtro de acesso = filtro mais permissivo = furo de autorização; era o
+ * bug do `Object.entries(cur)[0]`.) `and`/`or` são combinadores; owned/reference descem
+ * recursivamente (com `some` desembrulhado no to-many) e recebem o field-id no prefixo.
+ */
+function whereFieldsToFilter(
+  where: Record<string, unknown>,
+  fields: Record<string, FieldIR>,
+  byName: Map<string, EntityIR>,
+): ScopeFilter {
+  const conds: ScopeFilter[] = [];
+  for (const key of Object.keys(where)) {
+    const val = where[key];
+    if (key === "and" && Array.isArray(val)) {
+      conds.push({ and: (val as Record<string, unknown>[]).map((w) => whereFieldsToFilter(w, fields, byName)) });
+      continue;
     }
-    // travessia: owned/reference. `some` (to-many) é desembrulhado.
-    fields = f.kind === "owned" ? (f.shape ?? {}) : (byName.get(f.target)?.fields ?? {});
-    cur = isObj(val) && "some" in val ? (val["some"] as Record<string, unknown>) : (val as Record<string, unknown>);
+    if (key === "or" && Array.isArray(val)) {
+      conds.push({ or: (val as Record<string, unknown>[]).map((w) => whereFieldsToFilter(w, fields, byName)) });
+      continue;
+    }
+    if (key === "not") throw new Error("scope: `not` não é suportado no where de um scope.");
+    const f = fields[key];
+    if (!f?.id) throw new Error(`scope: campo '${key}' desconhecido.`);
+    if (f.kind === "column") {
+      const opObj = f.array && isObj(val) && "some" in val ? (val["some"] as Record<string, unknown>) : val;
+      const { op, value } = decodeOp(opObj);
+      conds.push(value === undefined ? { path: [f.id], op } : { path: [f.id], op, value });
+      continue;
+    }
+    // travessia owned/reference: desce (desembrulha `some` no to-many) e prefixa o id.
+    const nested = (isObj(val) && "some" in val ? val["some"] : val) as Record<string, unknown>;
+    const targetFields = f.kind === "owned" ? (f.shape ?? {}) : (byName.get(f.target)?.fields ?? {});
+    conds.push(prefixPath(f.id, whereFieldsToFilter(nested, targetFields, byName)));
   }
-  throw new Error(`scope: filtro inválido em '${entity}'.`);
+  if (conds.length === 0) throw new Error("scope: filtro vazio.");
+  return conds.length === 1 ? conds[0]! : { and: conds };
+}
+
+/** WhereInput (por nome) → path-Filter (por id) na raiz da entity. */
+function whereToFilter(where: Record<string, unknown>, entity: string, byName: Map<string, EntityIR>): ScopeFilter {
+  return whereFieldsToFilter(where, byName.get(entity)?.fields ?? {}, byName);
 }
 
 /**
