@@ -138,3 +138,39 @@ and the outer scope restores when it returns.
 `createScopedClient` lives in the main `@mauroandre/weave-sdk` (it uses Node's
 `AsyncLocalStorage`, like the rest of the server-side SDK). The explicit
 `weave.as(scope, params)` stays available for one-off scoped calls.
+
+### Dispatching by principal — `dispatcher`
+
+`runAs(scopeFor(role), …)` still leaves an `if role === …` somewhere. Move that into a
+**dispatch table** — a file you own (never touched by `weave gen`) that maps each scope to
+*when* it applies and *how* to read its params from your authenticated principal:
+
+```ts
+// app/access.ts — your file, typed against your own principal
+import { scopedWeave } from "./weave/index.js";
+import { admin, consultant, master } from "./weave/scopes/index.js";
+import type { UserToken } from "./auth.js";
+
+export const runInScope = scopedWeave.dispatcher<UserToken>([
+  { scope: admin,      when: (p) => p.role === "admin",      params: (p) => ({ companyId: p.companyId }) },
+  { scope: consultant, when: (p) => p.role === "consultant", params: (p) => ({ userId: p.id }) },
+  { scope: master,     when: (p) => p.role === "master" },
+]);
+
+// middleware — no if-chain, ever again:
+app.use((ctx, next) => runInScope(ctx.user, () => next()));
+```
+
+`dispatcher` returns a callable `(principal, fn)` that runs `fn` under the **first** scope
+whose `when(principal)` is true, with `params(principal)` extracted. **First-match by order** —
+list the most specific first, a broader rule as a fallback (a `department` rule above the
+plain `admin` wins for a department user, without touching the `admin` rule). No rule matches →
+**deny** (`WeaveScopeError`) — the same fail-closed as being outside a `runAs`.
+
+`when` / `params` are **pure and synchronous** over the principal in memory — no I/O; they run
+on every request. Anything not on the token (a user's department ids, say) belongs on the
+principal at authentication, not inside `when`.
+
+The table lives in *your* code on purpose: `when`/`params` are client-side dispatch, not scope
+rules — they're never pushed, so they must stay out of `weave/scopes/*` (which `weave gen`
+overwrites from the server). `defineScope` stays `defineScope(name, rules)`, fully regenerable.

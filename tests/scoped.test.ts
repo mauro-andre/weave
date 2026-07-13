@@ -29,6 +29,8 @@ describe("scoped client — runAs / runAsGod / god + fail-closed", () => {
   const tenant = defineScope("atenant", [
     scopeRule(doc, { verbs: ["read"], where: { company: { id: { eq: { param: "co" } } } } }),
   ]);
+  const boss = defineScope("aboss", [scopeRule(doc, { verbs: ["read"] })]); // sem where → vê tudo
+  type Principal = { role: string; co: string };
 
   beforeAll(async () => {
     app = await createTestApp({
@@ -40,7 +42,7 @@ describe("scoped client — runAs / runAsGod / god + fail-closed", () => {
         const sql = db();
         await sql`DROP TABLE IF EXISTS adoc, acompany CASCADE`;
         await sql`DELETE FROM weave_entities WHERE name IN ('adoc','acompany')`;
-        await sql`DELETE FROM weave_scopes WHERE name = 'atenant'`;
+        await sql`DELETE FROM weave_scopes WHERE name IN ('atenant','aboss')`;
         await sql`DELETE FROM weave_api_keys`;
         const { applyEntity } = await import("../app/engine/control-plane/entities.js");
         await applyEntity({ irVersion: 1, name: "acompany", fields: { name: { kind: "column", type: "text", notNull: true } } });
@@ -69,7 +71,7 @@ describe("scoped client — runAs / runAsGod / god + fail-closed", () => {
     await god.adoc.create({ title: "A1", companyId: acme });
     await god.adoc.create({ title: "A2", companyId: acme });
     await god.adoc.create({ title: "G1", companyId: globex });
-    await pushScopes({ tenant }, opts());
+    await pushScopes({ tenant, boss }, opts());
   });
 
   afterAll(async () => {
@@ -124,5 +126,37 @@ describe("scoped client — runAs / runAsGod / god + fail-closed", () => {
       return { inScope, all, back };
     });
     expect(out).toEqual({ inScope: 2, all: 3, back: 2 });
+  });
+
+  it("dispatcher: first-match deriva scope + params do principal (sem if-chain)", async () => {
+    const scoped = createScopedClient(opts());
+    const runInScope = scoped.dispatcher<Principal>([
+      { scope: tenant, when: (p) => p.role === "member", params: (p) => ({ co: p.co }) },
+      { scope: boss, when: (p) => p.role === "boss" }, // sem params
+    ]);
+    // member → tenant escopado pelo co (Acme = 2)
+    const asMember = await runInScope({ role: "member", co: acme }, () => scoped.adoc.findMany());
+    expect(asMember.map((r) => r.title).sort()).toEqual(["A1", "A2"]);
+    // boss → scope sem where (vê tudo = 3)
+    const asBoss = await runInScope({ role: "boss", co: "" }, () => scoped.adoc.findMany());
+    expect(asBoss).toHaveLength(3);
+  });
+
+  it("dispatcher: nenhum when casa → deny (WeaveScopeError, fail-closed)", () => {
+    const scoped = createScopedClient(opts());
+    const runInScope = scoped.dispatcher<Principal>([{ scope: boss, when: (p) => p.role === "boss" }]);
+    expect(() => runInScope({ role: "nobody", co: "" }, () => scoped.adoc.findMany())).toThrow(WeaveScopeError);
+  });
+
+  it("dispatcher: overlap resolve por ORDEM (mais específico primeiro vence)", async () => {
+    const scoped = createScopedClient(opts());
+    // o principal casa AMBOS os `when`; a regra mais específica (tenant, acima) vence —
+    // é o padrão "department acima do admin, sem tocar na regra de baixo".
+    const runInScope = scoped.dispatcher<Principal>([
+      { scope: tenant, when: (p) => p.role === "member", params: () => ({ co: acme }) },
+      { scope: boss, when: (p) => p.role === "member" }, // também casa, mas está ABAIXO
+    ]);
+    const rows = await runInScope({ role: "member", co: acme }, () => scoped.adoc.findMany());
+    expect(rows).toHaveLength(2); // tenant (Acme) venceu, não o boss (veria 3)
   });
 });

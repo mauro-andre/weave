@@ -21,7 +21,19 @@ const denyOp = (): never => {
 const denyEntity: unknown = new Proxy({}, { get: () => denyOp });
 const denyClient: unknown = new Proxy({}, { get: () => denyEntity });
 
-/** Client escopado: `runAs`/`runAsGod`/`god` + entities resolvidos pelo ALS (deny fora). */
+/**
+ * Uma regra de dispatch: amarra um `scope` a um predicado `when(principal)` e a um
+ * extrator `params(principal)`. `when`/`params` são PUROS e SÍNCRONOS sobre o principal
+ * em memória (decisão de dispatch, roda a cada request — sem I/O/await). Dado que não
+ * está no token (ex.: departmentIds) entra no principal na AUTENTICAÇÃO, não aqui.
+ */
+export interface DispatchRule<P> {
+  scope: ScopeDef<string>;
+  when: (principal: P) => boolean;
+  params?: (principal: P) => Record<string, unknown>;
+}
+
+/** Client escopado: `runAs`/`runAsGod`/`god`/`dispatcher` + entities resolvidos pelo ALS (deny fora). */
 export type ScopedClient<S extends Record<string, Entity<string, ShapeRecord>>> = WeaveClient<S> & {
   /** O client god cru (auth PRÉ-scope, boot, ETL, scripts) — não passa pelo ALS. */
   readonly god: WeaveClient<S>;
@@ -33,6 +45,16 @@ export type ScopedClient<S extends Record<string, Entity<string, ShapeRecord>>> 
   ): R;
   /** God EXPLÍCITO pro callback (master, ou uma op cross-tenant consciente dentro de request). */
   runAsGod<R>(fn: () => R): R;
+  /**
+   * Constrói um dispatcher a partir de uma tabela `[{ scope, when, params? }]`: devolve um
+   * callable `(principal, fn)` que roda `fn` sob o **1º** scope cujo `when(principal)` é true
+   * (params via `params(principal)`). **First-match pela ordem** — overlaps são intencionais
+   * e resolvem por ordem (mais específico primeiro; ex.: `department` acima de `admin`).
+   * Nenhum casa → **deny** (`WeaveScopeError`, fail-closed). A tabela mora no APP (config sua,
+   * gen-safe) e é tipada pelo principal `P` — mata o if-chain de role→scope sem nada
+   * client-side no arquivo que o gen sobrescreve.
+   */
+  dispatcher<P>(rules: ReadonlyArray<DispatchRule<P>>): <R>(principal: P, fn: () => R) => R;
 };
 
 function isClient<S extends Record<string, Entity<string, ShapeRecord>>>(
@@ -61,6 +83,18 @@ export function createScopedClient<S extends Record<string, Entity<string, Shape
     return als.run(asLoose(scope, params), fn);
   };
 
+  const dispatcher =
+    (rules: ReadonlyArray<DispatchRule<unknown>>) =>
+    (principal: unknown, fn: () => unknown): unknown => {
+      // FIRST-MATCH pela ordem da lista (convenção: mais específico primeiro). Overlaps são
+      // INTENCIONAIS e resolvidos por ordem — ex.: uma regra `department` acima do `admin`
+      // comum vence pro usuário com departamento, sem tocar na regra do admin.
+      const chosen = rules.find((rule) => rule.when(principal));
+      // Nenhum casou → deny (fail-closed, o mesmo WeaveScopeError de estar fora de runAs).
+      if (!chosen) throw new WeaveScopeError("weave: no scope matches this principal — access denied.");
+      return als.run(asLoose(chosen.scope, chosen.params?.(principal)), fn);
+    };
+
   return new Proxy(god as object, {
     get(target, prop, recv) {
       if (typeof prop !== "string") return Reflect.get(target, prop, recv); // símbolos → god
@@ -71,6 +105,8 @@ export function createScopedClient<S extends Record<string, Entity<string, Shape
           return runAs;
         case "runAsGod":
           return (fn: () => unknown) => als.run(god, fn);
+        case "dispatcher":
+          return dispatcher;
         case "as":
         case "close":
         case "reset":
