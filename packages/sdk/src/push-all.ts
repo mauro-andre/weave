@@ -24,8 +24,9 @@ export interface PushAllOptions {
   key: string;
   /** Entities já carregadas — `import * as entities from "weave/entities/index.js"`. */
   entities: Record<string, Entity<string, ShapeRecord>>;
-  /** Scopes já carregados. Ausente/`{}` → nenhum scope a empurrar (muitos projetos não têm). */
-  scopes?: Record<string, ScopeDef>;
+  /** Scopes já carregados. Ausente/`{}` → nenhum scope a empurrar (muitos projetos não têm).
+   *  `ScopeDef<string>` (não o default `<never>`) pra aceitar scopes COM params inferidos. */
+  scopes?: Record<string, ScopeDef<string>>;
   fetch?: FetchLike;
   /** Drops confirmados / backfills, por entidade (resolução não-interativa). */
   confirm?: Record<string, string[]>;

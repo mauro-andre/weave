@@ -1,5 +1,7 @@
 import { describe, it } from "vitest";
 import { defineEntity, text, int4, bool, reference, owned, scopeRule, defineScope, createClient } from "@mauroandre/weave-sdk";
+import type { PushAllOptions } from "@mauroandre/weave-sdk";
+import { expectTypeOf } from "vitest";
 
 // 2b (where param-aware) + 2c (fields dot-path) + 2d (params inferidos → weave.as tipado).
 const company = defineEntity("company2d", { name: text().notNull(), tier: int4() });
@@ -67,5 +69,10 @@ describe("weave.as — params inferidos (2d)", () => {
 
   it("scope sem params → .as dispensa o objeto", () => {
     weave.as(publicScope);
+  });
+
+  it("pushAll aceita scope COM params (ScopeDef<'x'>, não só <never>)", () => {
+    // regressão: PushAllOptions.scopes era ScopeDef<never> e rejeitava scope parametrizado.
+    expectTypeOf({ admin, publicScope }).toMatchTypeOf<NonNullable<PushAllOptions["scopes"]>>();
   });
 });

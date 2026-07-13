@@ -45,7 +45,7 @@ const isScope = (v: unknown): v is ScopeDef =>
 export async function discoverScopes(
   scopesDir: string,
   load: ModuleLoader = (p) => import(pathToFileURL(p).href),
-): Promise<Record<string, ScopeDef>> {
+): Promise<Record<string, ScopeDef<string>>> {
   let names: string[];
   try {
     names = await fs.readdir(scopesDir);
@@ -54,7 +54,7 @@ export async function discoverScopes(
   }
   const files = names.filter((f) => /\.(ts|tsx|mts|js|mjs)$/.test(f) && !f.endsWith(".d.ts")).sort();
 
-  const scopes: Record<string, ScopeDef> = {};
+  const scopes: Record<string, ScopeDef<string>> = {};
   for (const f of files) {
     const mod = await load(path.resolve(scopesDir, f));
     if (isScope(mod.default)) scopes[mod.default.name] = mod.default;
