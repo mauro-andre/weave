@@ -62,9 +62,11 @@ export interface ReadOpts<E extends Entity<string, ShapeRecord>, X, S> {
    */
   latestPer?: (keyof E["columns"] & string)[];
   /**
-   * Máximo de linhas do `findMany`. Default **10 000** (a "lista inteira" — findMany
-   * devolve tudo que casa, sem cap silencioso). Suba pra ler listas maiores de uma vez,
-   * ou baixe pra um teto. Pra UI paginada / listas realmente grandes, use `paginate`.
+   * Máximo de linhas do `findMany`. Default **10 000** ({@link DEFAULT_LIMIT}) — a rede de
+   * segurança pra você não puxar uma tabela inteira sem querer. Suba pra ler mais de uma
+   * vez, ou baixe pra um teto menor; pra UI paginada / listas realmente grandes, use
+   * `paginate`. Se o filtro casar MAIS linhas que o limite, o `findMany` **avisa** (o corte
+   * nunca é mudo). Passar `limit` explícito cala o aviso — aí o teto é escolha sua.
    * (Ignorado por `findOne`, que é sempre 1; no `paginate`, quem manda é o `perPage`.)
    */
   limit?: number;
@@ -74,6 +76,14 @@ export interface PageOpts<E extends Entity<string, ShapeRecord>, X, S> extends R
   page?: number;
   perPage?: number;
 }
+
+/**
+ * Teto default do `findMany` (`ReadOpts.limit`). Mora AQUI, no SDK, e não escondido no
+ * servidor: é o dev que precisa enxergar o número. O servidor tem um teto próprio — aquele
+ * é defesa de infra (HTTP cru sem `perPage` materializaria a tabela toda na memória dele),
+ * este é a rede do dev. Os dois coexistem de propósito.
+ */
+export const DEFAULT_LIMIT = 10_000;
 
 /** Tipo do doc lido: `InferSelect` quando há `select` (whitelist), senão `InferRead` (expand). */
 export type ReadResult<E, X, S> = [S] extends [never] ? InferRead<E, X> : InferSelect<E, S>;
@@ -253,10 +263,21 @@ export function createClient<S extends Record<string, Entity<string, ShapeRecord
         return d === undefined ? null : revive(d);
       },
       async findMany(where: unknown = {}, o: AnyOpts = {}) {
-        // `limit` → `perPage` (page 1). Ausente → o servidor devolve a lista inteira
-        // (default 10k). O `findMany` nunca trunca calado.
-        const opts = o.limit !== undefined ? { ...o, perPage: o.limit } : o;
-        return (await list(where, opts)).docs?.map(revive) ?? [];
+        // `limit` → `perPage` (página 1); ausente → o teto default, mandado EXPLÍCITO.
+        const explicit = o.limit !== undefined;
+        const page = await list(where, { ...o, perPage: o.limit ?? DEFAULT_LIMIT });
+        const docs = page.docs?.map(revive) ?? [];
+        // O corte NUNCA é mudo. Sem `limit` seu, bater o teto é invisível — a lista parece
+        // completa e envenena toda conta feita em cima dela. O aviso sai AQUI, no teu
+        // processo: o servidor é outro container, log de lá ninguém lê. Com `limit`
+        // explícito, silêncio — o teto foi tua escolha.
+        if (!explicit && page.docsQuantity > docs.length) {
+          console.warn(
+            `weave: ${entity.name}.findMany() returned ${docs.length} of ${page.docsQuantity} matching rows — ` +
+              `the default limit of ${DEFAULT_LIMIT}. Pass { limit: n } to raise it, or use paginate() for large sets.`,
+          );
+        }
+        return docs;
       },
       async paginate(where: unknown = {}, o: AnyOpts = {}) {
         const page = await list(where, o);

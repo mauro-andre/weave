@@ -1,6 +1,6 @@
 import type { EndpointHandlerArgs } from "@mauroandre/velojs";
 import type { Context } from "hono";
-import { resolveAccess, resolveReached, pruneReached, andWhere, prune, ScopeError } from "./scope.js";
+import { resolveAccess, resolveReached, pruneReached, andWhere, prune, ScopeError, type ReachedRule } from "./scope.js";
 import type { ExpandSpec, SelectSpec } from "../engine/control-plane/data.js";
 
 // API wildcard de dados. Casca fina de transporte sobre o control-plane (mesmo
@@ -55,9 +55,10 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const access = await resolveAccess(c, entity, "read");
     const { listObjects } = await import("../engine/control-plane/data.js");
     const page = Math.max(1, Number(query.page) || 1);
-    // `findMany` devolve TUDO que casa (default 10k quando não passa `limit`, igual ao
-    // idioma do zodMongo); sem cap silencioso. Explicitar `limit`/`perPage` sobe/desce —
-    // é honrado sem teto (o dev assume o risco). Antes travava mudo em 20 (default) / 100 (cap).
+    // Teto de DEFESA DO SERVIDOR, não política de produto: um GET sem `perPage` numa
+    // tabela grande materializaria tudo na memória DESTE processo e derrubaria o Weave
+    // pra todo mundo, não só pra quem chamou. O SDK manda sempre o seu (`DEFAULT_LIMIT`),
+    // então isto só pega HTTP cru. `perPage` explícito é honrado sem teto (assume o risco).
     const perPage = Math.max(1, Number(query.perPage) || 10000);
     const expand = parseJson<ExpandSpec>(query.expand);
     const select = parseJson<SelectSpec>(query.select);

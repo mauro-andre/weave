@@ -38,14 +38,14 @@ const sqlOf = (input: Parameters<typeof compileAggregate<typeof req>>[1]) => com
 describe("compileAggregate — count/sum + groupBy + orderBy", () => {
   it("count + groupBy campo + orderBy por alias", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { total: count() }, orderBy: { total: "desc" } });
-    expect(sql).toContain(`SELECT appreq.route AS "route", count(*) AS "total"`);
+    expect(sql).toContain(`SELECT appreq.route AS "route", (count(*))::float8 AS "total"`);
     expect(sql).toContain("GROUP BY appreq.route");
     expect(sql).toContain(`ORDER BY "total" DESC`);
   });
 
   it("sum de coluna camelCase → coluna snake", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { dur: sum("durationMs") } });
-    expect(sql).toContain(`sum(appreq.duration_ms) AS "dur"`);
+    expect(sql).toContain(`(sum(appreq.duration_ms))::float8 AS "dur"`);
   });
 
   it("timeBucket 5min (epoch-floor UTC) — a query de aceitação", () => {
@@ -65,18 +65,18 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
 
   it("agregação do conjunto inteiro (sem groupBy)", () => {
     const { text: sql } = sqlOf({ select: { total: count() } });
-    expect(sql).toContain(`count(*) AS "total"`);
+    expect(sql).toContain(`(count(*))::float8 AS "total"`);
     expect(sql).not.toContain("GROUP BY");
   });
 
   it("distinct → count(distinct col)", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { hosts: distinct("host") } });
-    expect(sql).toContain(`count(distinct appreq.host) AS "hosts"`);
+    expect(sql).toContain(`(count(distinct appreq.host))::float8 AS "hosts"`);
   });
 
   it("percentile → percentile_cont WITHIN GROUP, p bindado", () => {
     const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { p95: percentile("durationMs", 0.95) } });
-    expect(sql).toMatch(/percentile_cont\(\$1\) WITHIN GROUP \(ORDER BY appreq\.duration_ms\) AS "p95"/);
+    expect(sql).toMatch(/\(percentile_cont\(\$1\) WITHIN GROUP \(ORDER BY appreq\.duration_ms\)\)::float8 AS "p95"/);
     expect(params[0]).toBe(0.95);
   });
 
@@ -92,8 +92,8 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
         errors: count({ where: { status: { gte: 500 } } }),
       },
     });
-    expect(sql).toContain(`count(*) AS "total"`);
-    expect(sql).toMatch(/count\(\*\) FILTER \(WHERE appreq\.status >= \$1\) AS "errors"/);
+    expect(sql).toContain(`(count(*))::float8 AS "total"`);
+    expect(sql).toMatch(/\(count\(\*\) FILTER \(WHERE appreq\.status >= \$1\)\)::float8 AS "errors"/);
     expect(params[0]).toBe(500);
   });
 
@@ -180,7 +180,7 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
       },
       orderBy: { errorRate: "desc" },
     });
-    expect(sql).toContain(`${RATE} AS "errorRate"`);
+    expect(sql).toContain(`(${RATE})::float8 AS "errorRate"`);
     expect(sql).toContain(`ORDER BY "errorRate" DESC`); // orderBy por alias de saída (Postgres deixa)
     expect(params).toEqual([500]);
   });
@@ -190,7 +190,7 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
       groupBy: ["route"],
       select: { rate: div(count({ where: { status: { gte: 500 } } }), count()) },
     });
-    expect(sql).toContain(`${RATE} AS "rate"`);
+    expect(sql).toContain(`(${RATE})::float8 AS "rate"`);
     expect(params).toEqual([500]);
   });
 
@@ -203,7 +203,7 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
         pct: mul(div("errors", "total"), 100),
       },
     });
-    expect(sql).toContain(`((${RATE}) * ($2)) AS "pct"`);
+    expect(sql).toContain(`(((${RATE}) * ($2)))::float8 AS "pct"`);
     expect(params).toEqual([500, 100]); // 500 (filter) → 100 (literal do mul)
   });
 

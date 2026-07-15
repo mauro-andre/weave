@@ -15,8 +15,24 @@ export function verifyPassword(password: string, stored: string): boolean {
   return derived.length === expected.length && timingSafeEqual(derived, expected);
 }
 
+/**
+ * A chave que assina a sessão do painel. **Sem default** — de propósito.
+ *
+ * Antes caía num literal ("dev-secret-change-me") e o servidor subia numa boa. Mas o Weave
+ * é open source: esse literal está no repositório público, então toda instância sem
+ * `SESSION_SECRET` aceitava um cookie de sessão forjado por QUALQUER pessoa — inclusive o
+ * do master. Não era um default fraco, era o painel sem autenticação, em silêncio.
+ * Falhar aqui é o certo: o erro aparece no boot/login, não num incidente.
+ */
 function secret(): string {
-  return process.env.SESSION_SECRET ?? "dev-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (!s) {
+    throw new Error(
+      "weave: SESSION_SECRET is not set. It signs the dashboard session — without it anyone " +
+        "could forge one. Set it to a long random string (e.g. `openssl rand -hex 32`).",
+    );
+  }
+  return s;
 }
 
 // Token de sessão assinado por HMAC. É só a sessão do operador do painel (estilo

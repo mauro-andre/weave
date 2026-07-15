@@ -26,14 +26,36 @@ export interface CompiledAccumulate {
   params: unknown[];
 }
 
+/**
+ * Nome CANÔNICO de um campo — o nome que existe no shape —, aceitando a FK-shorthand.
+ *
+ * Existe porque duas partes do Weave chamam a mesma reference por nomes diferentes, e as
+ * duas estão certas na sua própria regra: a key do `accumulate` é `Partial<InferInsert>`,
+ * onde uma reference N:1 SÓ existe como `<campo>Id` (`companyId`); o `unique` da entity e
+ * o DDL falam o nome do campo (`company` → coluna `company_id`). Sem convergir aqui, o
+ * accumulate fica INALCANÇÁVEL numa entity com reference na chave: `[["day","company"]]`
+ * recusa a key que o tipo exige, e `[["day","companyId"]]` o DDL recusa — o caminho que o
+ * runtime aceitava era o que o tipo proibia. Os dois nomes viram um só.
+ */
+function canonField(shape: ShapeRecord, field: string): string {
+  if (field in (shape as Record<string, unknown>)) return field;
+  if (field.endsWith("Id")) {
+    const base = field.slice(0, -2);
+    const node = (shape as Record<string, unknown>)[base];
+    if (node instanceof Reference && node.cardinality === "one") return base;
+  }
+  return field;
+}
+
 /** Coluna de um campo (managed | escalar | reference N:1), validada contra o shape. */
 function accColumn(shape: ShapeRecord, field: string): string {
   if (field === "id") return "id";
   if (field === "createdAt") return "created_at";
   if (field === "updatedAt") return "updated_at";
-  const node = (shape as Record<string, unknown>)[field];
-  if (node instanceof Column) return camelToSnake(field);
-  if (node instanceof Reference && node.cardinality === "one") return `${camelToSnake(field)}_id`;
+  const name = canonField(shape, field);
+  const node = (shape as Record<string, unknown>)[name];
+  if (node instanceof Column) return camelToSnake(name);
+  if (node instanceof Reference && node.cardinality === "one") return `${camelToSnake(name)}_id`;
   throw new Error(`weave: accumulate — unknown or non-column field '${field}'.`);
 }
 
@@ -41,16 +63,22 @@ function accColumn(shape: ShapeRecord, field: string): string {
 // um grupo composto (options.unique) com o MESMO conjunto de campos, ou — chave de
 // um campo só — uma coluna marcada `.unique()`.
 function assertUniqueKey(entity: Entity<string, ShapeRecord>, keyFields: string[]): void {
-  const want = new Set(keyFields);
-  const sameSet = (g: string[]) => g.length === want.size && g.every((f) => want.has(f));
+  const shape = entity.columns;
+  // Compara pelo nome CANÔNICO dos dois lados: a key pode vir com FK-shorthand
+  // (`companyId`) e o unique declara o campo (`company`) — é a mesma coluna. Ver `canonField`.
+  const canon = keyFields.map((f) => canonField(shape, f));
+  const want = new Set(canon);
+  const sameSet = (g: string[]) => g.length === want.size && g.every((f) => want.has(canonField(shape, f)));
   if ((entity.options?.unique ?? []).some(sameSet)) return;
-  if (keyFields.length === 1) {
-    const node = (entity.columns as Record<string, unknown>)[keyFields[0]!];
+  if (canon.length === 1) {
+    const node = (shape as Record<string, unknown>)[canon[0]!];
     if (node instanceof Column && node.config.unique) return;
   }
   throw new Error(
-    `weave: accumulate on '${entity.name}' needs a unique key on [${keyFields.join(", ")}]. ` +
-      `Declare it with unique: [[${keyFields.map((f) => `"${f}"`).join(", ")}]] on the entity.`,
+    `weave: accumulate on '${entity.name}' needs a unique key on [${canon.join(", ")}]. ` +
+      // Sugere o nome CANÔNICO: o DDL só aceita o nome do campo, então sugerir a
+      // FK-shorthand aqui mandaria você direto num erro do DDL — beco sem saída.
+      `Declare it with unique: [[${canon.map((f) => `"${f}"`).join(", ")}]] on the entity.`,
   );
 }
 

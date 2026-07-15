@@ -144,10 +144,15 @@ const OPERATORS = new Set([
 
 /** Whether a filter value is an operator object (vs a bare eq value). */
 function isOperatorMap(val: unknown): val is Record<string, unknown> {
-  if (val === null || typeof val !== "object") return false;
-  if (Array.isArray(val) || val instanceof Date || val instanceof Uint8Array) return false;
+  if (!isPlainObject(val)) return false;
   const keys = Object.keys(val);
   return keys.length > 0 && keys.every((k) => OPERATORS.has(k));
+}
+
+/** An object that could be an operator map — i.e. not a value with its own meaning. */
+function isPlainObject(val: unknown): val is Record<string, unknown> {
+  if (val === null || typeof val !== "object") return false;
+  return !Array.isArray(val) && !(val instanceof Date) && !(val instanceof Uint8Array);
 }
 
 function bind(params: unknown[], value: unknown): string {
@@ -193,9 +198,31 @@ function renderOperator(col: string, op: string, v: unknown, params: unknown[]):
 }
 
 /** Render one scalar column field's filter (eq shorthand or operator object). */
-function compileFieldFilter(col: string, val: unknown, params: unknown[]): string {
+/**
+ * Filtro de uma coluna: objeto de operadores, ou valor cru (atalho de `eq`).
+ *
+ * `jsonish` = a coluna é `json`/`jsonb`, onde um OBJETO é um valor legítimo
+ * (`{ meta: { foo: 1 } }` filtra pelo documento). Em qualquer outra coluna, um objeto só
+ * pode ser operador escrito errado — e aí **estoura**, em vez de degradar pra `eq`.
+ *
+ * Por que estourar: `isOperatorMap` é tudo-ou-nada, então um reflexo de Prisma/Mongo
+ * (`{ contains: "x" }`, ou `{ ilike: "%x%", mode: "insensitive" }`) caía no `eq` cru, o
+ * driver stringificava o objeto, e o SQL virava `col = '[object Object]'` → **zero linhas,
+ * sem erro**. Um operador válido ao lado de um desconhecido era descartado junto. Falha
+ * silenciosa que o `tsc` só pega no `where` tipado — o slot `{ where }` do acumulador e a
+ * API HTTP crua não têm tipo, e é por lá que isso entra.
+ */
+function compileFieldFilter(col: string, val: unknown, params: unknown[], jsonish = false): string {
   if (!isOperatorMap(val)) {
-    return val === null ? `${col} IS NULL` : `${col} = ${bind(params, val)}`;
+    if (val === null) return `${col} IS NULL`;
+    if (!jsonish && isPlainObject(val)) {
+      const bad = Object.keys(val).filter((k) => !OPERATORS.has(k));
+      throw new Error(
+        `weave: unknown operator${bad.length > 1 ? "s" : ""} ${bad.map((k) => `'${k}'`).join(", ")} on '${col}'. ` +
+          `Use one of: ${[...OPERATORS].join(", ")}.`,
+      );
+    }
+    return `${col} = ${bind(params, val)}`;
   }
   const conds = Object.entries(val).map(([op, v]) => renderOperator(col, op, v, params));
   return conds.length ? conds.join(" AND ") : "TRUE";
@@ -319,7 +346,11 @@ function compileWhere(
     const field = shape[key];
     if (field instanceof Column) {
       const col = `${table}.${camelToSnake(key)}`;
-      conds.push(field.config.isArray ? compileArrayFilter(col, val, params) : compileFieldFilter(col, val, params));
+      // `unknown` = json/jsonb (schemaless) — lá um objeto é VALOR, não operador torto.
+      const jsonish = field.config.pgType.tsLabel === "unknown";
+      conds.push(
+        field.config.isArray ? compileArrayFilter(col, val, params) : compileFieldFilter(col, val, params, jsonish),
+      );
     } else if (field instanceof Owned) {
       const childTable = ownedChildTable(prefix, camelToSnake(key), field.options.table);
       const fk = ownedFkColumn(prefix);
@@ -572,6 +603,15 @@ class AggPaths {
     return this.walk(segs).alias;
   }
 
+  /** The TS label of a path's leaf column (null when it isn't a column) — tells whether
+   *  an accumulator over it yields a number. See `accIsNumeric`. */
+  labelOf(path: string): string | null {
+    const segs = path.split(".");
+    const leaf = segs.pop()!;
+    const field = (this.walk(segs).shape as Record<string, unknown>)[leaf];
+    return field instanceof Column ? field.config.pgType.tsLabel : null;
+  }
+
   private walk(segs: string[]): PathNode {
     let key = "";
     let node = this.reg.get("")!;
@@ -638,7 +678,9 @@ function aggFilterWhere(paths: AggPaths, where: Record<string, unknown>, params:
       if (s) conds.push(`NOT (${s})`);
       continue;
     }
-    conds.push(compileFieldFilter(paths.col(key), val, params));
+    // Este é o slot SEM tipagem (`AggOpts.where` é `Record<string, unknown>`), então é
+    // por aqui que um reflexo de Prisma entra sem o `tsc` ver. Ver `compileFieldFilter`.
+    conds.push(compileFieldFilter(paths.col(key), val, params, paths.labelOf(key) === "unknown"));
   }
   return conds.join(" AND ");
 }
@@ -662,6 +704,42 @@ function groupSql(paths: AggPaths, g: string | GroupExpr): string {
 // Um acumulador → expressão SQL. `{ where }` (opcional) vira `… FILTER (WHERE …)`.
 // `params` recebe os binds na ORDEM em que a expressão aparece no SELECT (o chamador
 // respeita a ordem SELECT→WHERE→HAVING pra os $N baterem com `.unsafe`).
+/**
+ * O acumulador produz um NÚMERO? Decide o cast `::float8` da coluna de saída.
+ *
+ * Por que existe: o read passa por json aggregation no Postgres (numeric/int8 → number) +
+ * rehydrate; o aggregate lê coluna crua do driver, onde `bigint`/`numeric` chegam como
+ * STRING. Sem o cast, a MESMA coluna volta number no `findMany` e string no `aggregate`,
+ * e `count() + 1` vira `"11"` — sem erro de tipo nem exceção.
+ *
+ * `count`/`distinct`/`sum`/`avg`/`percentile` são sempre numéricos. `min`/`max`/`first`
+ * herdam o tipo da coluna (max de `text` é text, e tem que continuar text). `histogram`
+ * é array — tratado à parte.
+ */
+function accIsNumeric(paths: AggPaths, acc: Accumulator): boolean {
+  switch (acc.agg) {
+    case "count":
+    case "distinct":
+    case "sum":
+    case "avg":
+    case "percentile":
+      return true;
+    case "min":
+    case "max":
+    case "first": {
+      const l = paths.labelOf((acc as { field: string }).field);
+      return l === "number" || l === "bigint";
+    }
+    default:
+      return false;
+  }
+}
+
+/** `float8` casa com o double do JS (mesma mantissa de 53 bits), então o cast não perde
+ *  nada além do que o JSON já perderia — é a MESMA precisão que o `findMany` entrega
+ *  (json aggregation → JSON number). Ver a nota de precisão em `rehydrate.ts`. */
+const asNumber = (expr: string): string => `(${expr})::float8`;
+
 function accSql(paths: AggPaths, acc: Accumulator, params: unknown[]): string {
   const wRaw = (acc as { where?: Record<string, unknown> }).where;
 
@@ -828,13 +906,16 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
       continue;
     }
     const expr = accSql(paths, node as Accumulator, params);
+    // `aliasExpr` guarda a expressão CRUA de propósito: o HAVING e as expressões a
+    // re-emitem, e lá o cast só atrapalharia (comparação/aritmética já são numéricas).
+    // O cast é só na COLUNA DE SAÍDA — é ela que atravessa o driver e vira string.
     aliasExpr[a] = expr;
-    cols.push(`${expr} AS "${a}"`);
+    cols.push(`${accIsNumeric(paths, node as Accumulator) ? asNumber(expr) : expr} AS "${a}"`);
   }
   for (const [a, node] of deferred) {
     const expr = exprSql(node, aliasExpr, paths, params);
     aliasExpr[a] = expr;
-    cols.push(`${expr} AS "${a}"`);
+    cols.push(`${asNumber(expr)} AS "${a}"`); // div/mul/add/sub são sempre numéricas
   }
   if (cols.length === 0) throw new Error("weave: aggregate needs at least one `select`.");
 

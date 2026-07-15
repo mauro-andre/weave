@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Filter } from "../engine/control-plane/filter.js";
-import type { Verb } from "../engine/control-plane/scopes.js";
+import type { Verb, Scope } from "../engine/control-plane/scopes.js";
 import { tableize, systemColumnName } from "@mauroandre/weave-core";
 import type { EntityIR, FieldIR } from "@mauroandre/weave-core";
 
@@ -214,8 +214,7 @@ export function prune(doc: Record<string, unknown>, projection: ResolvedProjecti
 // `listEntities` batem no banco a cada chamada e não têm cache; uma leitura escopada passa
 // pelo `resolveAccess` E pelo `resolveReached`, então sem isto o request pagaria os dois
 // em dobro. WeakMap: nada a invalidar, some junto com o Context.
-const reqMemo = new WeakMap<object, { scope?: Promise<ScopeRow | null>; shapes?: Promise<Map<string, EntityIR>> }>();
-type ScopeRow = { name: string; entities: Record<string, { verbs: Verb[]; rows?: unknown; fields?: { mode: "include" | "exclude"; paths: string[][] } }> };
+const reqMemo = new WeakMap<object, { scope?: Promise<Scope | null>; shapes?: Promise<Map<string, EntityIR>> }>();
 
 function memo(c: Context) {
   let m = reqMemo.get(c);
@@ -224,12 +223,12 @@ function memo(c: Context) {
 }
 
 /** O scope do header, uma vez por request. */
-async function loadScope(c: Context, name: string): Promise<ScopeRow | null> {
+async function loadScope(c: Context, name: string): Promise<Scope | null> {
   const m = memo(c);
   if (!m.scope) {
     m.scope = (async () => {
       const { getScope } = await import("../engine/control-plane/scopes.js");
-      return (await getScope(name)) as ScopeRow | null;
+      return getScope(name);
     })();
   }
   return m.scope;
