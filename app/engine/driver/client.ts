@@ -22,13 +22,14 @@ import {
   type ActualSchema,
   type ChangeSet,
 } from "../ddl/diff.js";
-import { type Entity, type ShapeRecord, type InferEntity, type InferRead, type InferInsert, type InferSelect, type ExpandInput, type SelectInput, type Projection, type AnyProjection, type WhereInput, type OrderByInput } from "@mauroandre/weave-core";
+import { type Entity, type ShapeRecord, type InferEntity, type InferRead, type InferInsert, type InferSelect, type ExpandInput, type SelectInput, type Projection, type AnyProjection, type WhereInput, type OrderByInput, type AccumulateOp } from "@mauroandre/weave-core";
 import {
   compileFind,
   compileCount,
   type FindOptions,
   type SelectMap,
 } from "../query/read.js";
+import { compileAccumulate } from "../query/accumulate.js";
 import { rehydrate } from "../query/rehydrate.js";
 import { shred, type Executor } from "../query/write.js";
 
@@ -364,6 +365,27 @@ export class Weave {
       where: { id } as WhereInput<Entity<TName, TShape>>,
     });
     return saved!;
+  }
+
+  /**
+   * Accumulate (tier histórico): upsert mergeável na `key`, aplicando `ops` no Postgres.
+   * Roda em transação por causa do `check`: o accumulate é uma ESCRITA, então a linha
+   * RESULTANTE (criada, ou a que recebeu o merge) tem que cair no filtro do scope — senão
+   * é write cross-tenant, igual ao `save`. O `RETURNING *` dá o id da linha afetada, que é
+   * o alvo da checagem; violou → rollback (o merge não persiste) → 403 no handler.
+   */
+  async accumulate<TName extends string, TShape extends ShapeRecord>(
+    entity: Entity<TName, TShape>,
+    key: Record<string, unknown>,
+    ops: Record<string, AccumulateOp>,
+    check?: WhereInput<Entity<TName, TShape>>,
+  ): Promise<Record<string, unknown>> {
+    return this.transaction(async (tx) => {
+      const q = compileAccumulate(entity, key, ops);
+      const [row] = (await tx.unsafe(q.text, q.params as never[])) as unknown as Record<string, unknown>[];
+      if (check && row) await this.assertWithCheck(tx, entity, String(row.id), check, 1);
+      return row ?? {};
+    });
   }
 
   /** Conta, na txn, quantas das linhas (`ids`) satisfazem `check`; ≠ esperado → viola o scope. */

@@ -242,11 +242,15 @@ export async function createManyObjects(
  * aplicando `ops` (inc/max/min/setOnInsert) NO POSTGRES, e devolve a linha resultante
  * (Decisão 1 — inc-and-return). Não passa pelo `save` do engine (nada de shred/owned):
  * é uma tabela de rollup plana, então compila direto no upsert e roda numa query.
+ *
+ * `check` = o filtro de linhas do scope (WITH CHECK): accumulate é ESCRITA, então a linha
+ * resultante tem que cair no filtro — senão é write cross-tenant. Ver `Weave.accumulate`.
  */
 export async function accumulateObject(
   name: string,
   key: Record<string, unknown>,
   ops: Record<string, AccumulateOp>,
+  check?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   name = tableize(name);
   const irs = await listEntities();
@@ -258,14 +262,12 @@ export async function accumulateObject(
   const url = process.env.PLATFORM_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("weave: DATABASE_URL is not set.");
   const client = weave({ url, entities });
-  const sql = (client as unknown as { sql: { unsafe(q: string, p?: unknown[]): Promise<unknown[]> } }).sql;
   try {
-    const q = compileAccumulate(entities[name]!, key, ops);
-    const rows = (await sql.unsafe(q.text, q.params)) as Record<string, unknown>[];
+    const row = await client.accumulate(entities[name]!, key, ops, check as never);
     // `RETURNING *` volta com chaves snake_case (colunas cruas); o resto da API fala
     // camelCase (o SDK revive por lá). Remapeia pra alinhar (rollup é plano: sem owned).
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rows[0] ?? {})) out[camelize(k)] = v;
+    for (const [k, v] of Object.entries(row)) out[camelize(k)] = v;
     return jsonSafe(out);
   } finally {
     await client.close();
@@ -397,7 +399,12 @@ export type SelectSpec = { [field: string]: true | SelectSpec };
  * aninhada (ex.: o `category` de um item espelhado) voltava como `categoryId`
  * cru, nunca expandida.
  */
-function buildExpand(fields: Record<string, FieldIR>): ExpandSpec {
+/**
+ * Expande references um nível (o auto-expand). Exportado pro enforcement de scope poder
+ * checar o que uma leitura hidrata DE FATO sem duplicar a regra — o auto-expand traz
+ * referência que ninguém pediu, e ela passa pelo scope igual. Ver `resolveReached`.
+ */
+export function buildExpand(fields: Record<string, FieldIR>): ExpandSpec {
   const expand: ExpandSpec = {};
   for (const [name, node] of Object.entries(fields)) {
     if (node.kind === "reference") {

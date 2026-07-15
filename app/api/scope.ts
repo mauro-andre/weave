@@ -33,6 +33,16 @@ export interface Access {
   projection: ResolvedProjection | null;
 }
 
+/** Uma entity ALCANÇADA por referência (expand/select): onde ela está no doc + a projeção
+ *  da regra DELA no scope. O caminho é em nomes, relativo à raiz (owned no meio inclusive). */
+export interface ReachedRule {
+  path: string[];
+  projection: ResolvedProjection | null;
+}
+
+/** Mapa de expand/select (o mesmo formato dos dois): campo → `true` | submapa. */
+type Spec = { [field: string]: unknown };
+
 /**
  * Resolve o acesso da requisição p/ (entidade, verbo). Sem header `x-weave-scope`
  * → god (a key é o segredo confiável). Com scope: checa verbo, resolve o filtro de
@@ -43,8 +53,7 @@ export async function resolveAccess(c: Context, entity: string, verb: Verb): Pro
   const scopeName = c.req.header("x-weave-scope");
   if (!scopeName) return { god: true, rows: null, projection: null };
 
-  const { getScope } = await import("../engine/control-plane/scopes.js");
-  const scope = await getScope(scopeName);
+  const scope = await loadScope(c, scopeName);
   if (!scope) throw new ScopeError(`Unknown scope '${scopeName}'.`, 403);
   // As chaves do scope são o nome de entity que o dev escreveu (camelCase) — casa por
   // nome de tabela normalizado, pra bater com o `entity` já tableizado.
@@ -53,13 +62,136 @@ export async function resolveAccess(c: Context, entity: string, verb: Verb): Pro
   if (!rule) throw new ScopeError(`Scope '${scopeName}' has no access to '${entity}'.`, 403);
   if (!rule.verbs.includes(verb)) throw new ScopeError(`Scope '${scopeName}' can't ${verb} '${entity}'.`, 403);
 
-  const byName = await resolvedShapes();
+  const byName = await resolvedShapes(c);
   const params = parseParams(c.req.header("x-weave-params"));
   const rows = rule.rows ? resolveFilter(entity, byName, rule.rows, params) : null;
   const projection = rule.fields
     ? { mode: rule.fields.mode, paths: resolvePaths(entity, byName, rule.fields.paths) }
     : null;
   return { god: false, rows, projection };
+}
+
+/**
+ * Resolve o acesso das entities ALCANÇADAS por referência num `expand`/`select`.
+ *
+ * O `resolveAccess` vale pra entity da ROTA. Mas `expand`/`select` hidratam referências
+ * por baixo, no query layer — que é agnóstico de scope. Sem isto, alcançar uma entity por
+ * referência ignorava a regra dela: uma entity sem regra (403 no acesso direto) voltava
+ * INTEIRA, e um `fields.exclude` era furado pelo expand. A garantia é: **alcançar por
+ * referência vale o mesmo que acessar** — mesmo verbo (`read`), mesma projeção.
+ *
+ * Dois modos, pela ORIGEM do spec (ver `readSpec`):
+ *  - `deny` (expand/select EXPLÍCITO) — você pediu; sem regra ou sem `read` → **403**.
+ *  - `omit` (AUTO-expand, cortesia do servidor) — ninguém pediu, então proibido não é erro:
+ *    a referência simplesmente **não é expandida** (fica só a FK, como sem auto-expand).
+ *    403 aqui seria o servidor punindo o cliente pela conveniência que ele mesmo aplicou.
+ * Devolve o spec PODADO — no modo `omit` ele é o que vai pro query layer.
+ *
+ * Sem header de scope → god → nada a checar. `owned` não tem regra própria (é parte da
+ * entity), então só acumula caminho e segue com o MESMO dono.
+ *
+ * O `where` (filtro de linhas) da entity alcançada NÃO é aplicado: filtrar a linha de um
+ * JOIN é trabalho do query layer, não dá pra fazer podando o doc — e aplicá-lo mudaria
+ * uma referência legítima pra `null` em silêncio (pior que o furo). Verbo e projeção
+ * compõem pela referência; filtro de linha não. Decisão explícita.
+ */
+export async function resolveReached(
+  c: Context,
+  rootEntity: string,
+  expand: Spec | null,
+  select: Spec | null,
+): Promise<{ reached: ReachedRule[]; expand: Spec | null }> {
+  const scopeName = c.req.header("x-weave-scope");
+  if (!scopeName) return { reached: [], expand };
+
+  const scope = await loadScope(c, scopeName);
+  if (!scope) throw new ScopeError(`Unknown scope '${scopeName}'.`, 403);
+  const rules = new Map(Object.entries(scope.entities).map(([k, v]) => [tableize(k), v] as const));
+  const byName = await resolvedShapes(c);
+  const root = tableize(rootEntity);
+
+  // A MESMA decisão do `listObjects`: select vence; expand ausente = auto-expand de 1 nível.
+  // Feita aqui (com os IRs já em mão) pra não custar outra leitura do metastore.
+  const { buildExpand } = await import("../engine/control-plane/data.js");
+  const explicit = (select && Object.keys(select).length) || expand != null;
+  const spec: Spec | null = explicit
+    ? select && Object.keys(select).length
+      ? select
+      : expand
+    : buildExpand(byName.get(root)?.fields ?? {});
+  const mode: "deny" | "omit" = explicit ? "deny" : "omit";
+  if (!spec || !Object.keys(spec).length) return { reached: [], expand };
+
+  const out: ReachedRule[] = [];
+  const walk = (owner: string, fields: Record<string, FieldIR>, node: Spec, path: string[]): Spec => {
+    const kept: Spec = {};
+    for (const [key, sub] of Object.entries(node)) {
+      const f = fields[key];
+      if (!f) continue; // campo desconhecido no spec → o query layer que reclame
+      const here = [...path, key];
+      if (f.kind === "owned") {
+        // owned é parte do OWNER (sem regra própria) — desce mantendo o dono.
+        kept[key] = sub && typeof sub === "object" ? walk(owner, f.shape ?? {}, sub as Spec, here) : sub;
+        continue;
+      }
+      if (f.kind !== "reference") {
+        kept[key] = sub; // coluna (só aparece em `select`) — nada a alcançar
+        continue;
+      }
+
+      const target = tableize(f.target);
+      const rule = rules.get(target);
+      const canRead = rule?.verbs.includes("read") ?? false;
+      if (!canRead) {
+        // Pediu explicitamente → 403 (o mesmo do acesso direto). Auto-expand → só não expande.
+        if (mode === "omit") continue;
+        if (!rule) throw new ScopeError(`Scope '${scopeName}' has no access to '${target}'.`, 403);
+        throw new ScopeError(`Scope '${scopeName}' can't read '${target}'.`, 403);
+      }
+
+      const targetFields = byName.get(target)?.fields ?? {};
+      out.push({
+        path: here,
+        projection: rule!.fields
+          ? { mode: rule!.fields.mode, paths: resolvePaths(target, byName, rule!.fields.paths) }
+          : null,
+      });
+      kept[key] = sub && typeof sub === "object" ? walk(target, targetFields, sub as Spec, here) : sub;
+    }
+    return kept;
+  };
+  const pruned = walk(root, byName.get(root)?.fields ?? {}, spec, []);
+  // Explícito: o expand do caller vale (o proibido já estourou 403 acima). Auto: devolve o
+  // mapa PODADO como expand explícito — o proibido não é hidratado, e some o auto-expand.
+  return { reached: out, expand: explicit ? expand : pruned };
+}
+
+/** Aplica, em cada entity alcançada, a projeção da regra DELA (poda no lugar). */
+export function pruneReached(doc: Record<string, unknown>, reached: ReachedRule[]): Record<string, unknown> {
+  for (const r of reached) {
+    if (!r.projection) continue;
+    applyAt(doc, r.path, (sub) => prune(sub, r.projection));
+  }
+  return doc;
+}
+
+/** Navega até `path` e substitui o nó pelo resultado de `fn` (mapeia quando é lista). */
+function applyAt(
+  doc: Record<string, unknown>,
+  path: string[],
+  fn: (sub: Record<string, unknown>) => Record<string, unknown>,
+): void {
+  const [head, ...rest] = path;
+  if (!head) return;
+  const cur = doc[head];
+  if (cur == null) return;
+  const step = (v: unknown): unknown => {
+    if (v == null || typeof v !== "object") return v;
+    if (rest.length === 0) return fn(v as Record<string, unknown>);
+    applyAt(v as Record<string, unknown>, rest, fn);
+    return v;
+  };
+  doc[head] = Array.isArray(cur) ? cur.map(step) : step(cur);
 }
 
 /** Combina o WhereInput do scope com o do usuário (AND). `{}` do usuário = sem filtro. */
@@ -77,12 +209,45 @@ export function prune(doc: Record<string, unknown>, projection: ResolvedProjecti
 }
 
 // ── internals ─────────────────────────────────────────────────────────────────
-async function resolvedShapes(): Promise<Map<string, EntityIR>> {
-  const { listEntities } = await import("../engine/control-plane/entities.js");
-  const { resolveMirrors } = await import("@mauroandre/weave-core");
-  const irs = await listEntities();
-  const raw = new Map(irs.map((e) => [e.name, e] as const));
-  return new Map(irs.map((e) => [e.name, resolveMirrors(e, raw)] as const));
+
+// Memo POR REQUEST (chave = o Context do Hono, que morre com o request). `getScope` e
+// `listEntities` batem no banco a cada chamada e não têm cache; uma leitura escopada passa
+// pelo `resolveAccess` E pelo `resolveReached`, então sem isto o request pagaria os dois
+// em dobro. WeakMap: nada a invalidar, some junto com o Context.
+const reqMemo = new WeakMap<object, { scope?: Promise<ScopeRow | null>; shapes?: Promise<Map<string, EntityIR>> }>();
+type ScopeRow = { name: string; entities: Record<string, { verbs: Verb[]; rows?: unknown; fields?: { mode: "include" | "exclude"; paths: string[][] } }> };
+
+function memo(c: Context) {
+  let m = reqMemo.get(c);
+  if (!m) reqMemo.set(c, (m = {}));
+  return m;
+}
+
+/** O scope do header, uma vez por request. */
+async function loadScope(c: Context, name: string): Promise<ScopeRow | null> {
+  const m = memo(c);
+  if (!m.scope) {
+    m.scope = (async () => {
+      const { getScope } = await import("../engine/control-plane/scopes.js");
+      return (await getScope(name)) as ScopeRow | null;
+    })();
+  }
+  return m.scope;
+}
+
+/** Os IRs (mirrors resolvidos), uma vez por request. */
+async function resolvedShapes(c?: Context): Promise<Map<string, EntityIR>> {
+  const load = async (): Promise<Map<string, EntityIR>> => {
+    const { listEntities } = await import("../engine/control-plane/entities.js");
+    const { resolveMirrors } = await import("@mauroandre/weave-core");
+    const irs = await listEntities();
+    const raw = new Map(irs.map((e) => [e.name, e] as const));
+    return new Map(irs.map((e) => [e.name, resolveMirrors(e, raw)] as const));
+  };
+  if (!c) return load();
+  const m = memo(c);
+  if (!m.shapes) m.shapes = load();
+  return m.shapes;
 }
 
 function parseParams(raw: string | undefined): Record<string, unknown> {

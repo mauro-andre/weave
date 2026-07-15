@@ -1,6 +1,6 @@
 import type { EndpointHandlerArgs } from "@mauroandre/velojs";
 import type { Context } from "hono";
-import { resolveAccess, andWhere, prune, ScopeError } from "./scope.js";
+import { resolveAccess, resolveReached, pruneReached, andWhere, prune, ScopeError } from "./scope.js";
 import type { ExpandSpec, SelectSpec } from "../engine/control-plane/data.js";
 
 // API wildcard de dados. Casca fina de transporte sobre o control-plane (mesmo
@@ -32,6 +32,23 @@ function parseJson<T>(raw: string | undefined): T | null {
 
 const idEquals = (id: string): WNode => ({ id: { eq: id } });
 
+/**
+ * Resolve as entities alcançadas por referência (expand/select) contra o scope, e devolve
+ * o `expand` efetivo pra query. GOD sai na primeira linha: sem scope não há o que compor,
+ * e este é o caminho mais quente — nada de I/O extra nele.
+ */
+async function reach(
+  c: Context,
+  entity: string,
+  access: { god: boolean },
+  expand: ExpandSpec | null,
+  select: SelectSpec | null,
+): Promise<{ reached: ReachedRule[]; expand: ExpandSpec | null }> {
+  if (access.god) return { reached: [], expand };
+  const r = await resolveReached(c, entity, expand, select);
+  return { reached: r.reached, expand: r.expand as ExpandSpec | null };
+}
+
 export async function apiList({ c, params, query }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
@@ -48,8 +65,12 @@ export async function apiList({ c, params, query }: EndpointHandlerArgs): Promis
     const latestPer = parseJson<string[]>(query.latestPer);
     const userWhere = parseJson<WNode>(query.where);
     const where = access.god ? userWhere : andWhere(access.rows, userWhere);
-    const res = await listObjects(entity, page, perPage, where, orderBy, expand, latestPer, select);
-    if (!access.god) res.docs = res.docs.map((d) => prune(d, access.projection));
+    // O scope compõe pela referência: as entities alcançadas por expand/select respondem
+    // pelas regras DELAS (403 sem `read`; projeção própria). Resolve ANTES da query — sem
+    // regra é 403, não vale ir no banco. God NÃO paga nada disso (caminho mais quente).
+    const { reached, expand: effExpand } = await reach(c, entity, access, expand, select);
+    const res = await listObjects(entity, page, perPage, where, orderBy, effExpand, latestPer, select);
+    if (!access.god) res.docs = res.docs.map((d) => pruneReached(prune(d, access.projection), reached));
     return c.json(res);
   } catch (e) {
     return fail(c, e);
@@ -76,19 +97,23 @@ export async function apiAggregate({ c, params }: EndpointHandlerArgs): Promise<
 }
 
 // POST /api/:entity/accumulate — upsert mergeável do tier histórico. Body `{ key, ops }`.
-// É uma escrita keyed (create-or-merge), então exige o verbo `create`; o filtro de linhas
-// do scope não se aplica (não há where — o alvo é a `key`, o unique declarado).
+// É uma escrita keyed (create-or-merge), então exige o verbo `create` — e, como todo write
+// sob scope, passa por WITH CHECK: a linha RESULTANTE (criada ou mergeada) tem que cair no
+// filtro de linhas, senão é write cross-tenant (mergear no rollup do vizinho). O alvo é a
+// `key`, não um `where`, então a checagem é sobre o resultado — ver `Weave.accumulate`.
 export async function apiAccumulate({ c, params }: EndpointHandlerArgs): Promise<Response> {
   try {
     const entity = params.entity ?? "";
-    await resolveAccess(c, entity, "create");
+    const access = await resolveAccess(c, entity, "create");
     const { accumulateObject } = await import("../engine/control-plane/data.js");
     const body = (await c.req.json()) as { key?: WNode; ops?: Record<string, unknown> };
     if (!body || typeof body !== "object" || !body.key || !body.ops) {
       return c.json({ error: "accumulate needs a { key, ops } body." }, 400);
     }
-    const row = await accumulateObject(entity, body.key, body.ops as never);
-    return c.json(row);
+    const check = access.god ? undefined : (access.rows ?? undefined);
+    const row = await accumulateObject(entity, body.key, body.ops as never, check);
+    // inc-and-return: a linha volta pro caller, então respeita a projeção do scope.
+    return c.json(access.god ? row : prune(row, access.projection));
   } catch (e) {
     return fail(c, e);
   }
@@ -100,11 +125,11 @@ export async function apiGetOne({ c, params, query }: EndpointHandlerArgs): Prom
     const access = await resolveAccess(c, entity, "read");
     const { listObjects } = await import("../engine/control-plane/data.js");
     const where = andWhere(access.rows, idEquals(params.id ?? ""));
-    const obj = (
-      await listObjects(entity, 1, 1, where, null, parseJson<ExpandSpec>(query.expand), null, parseJson<SelectSpec>(query.select))
-    ).docs[0];
+    const select = parseJson<SelectSpec>(query.select);
+    const { reached, expand: effExpand } = await reach(c, entity, access, parseJson<ExpandSpec>(query.expand), select);
+    const obj = (await listObjects(entity, 1, 1, where, null, effExpand, null, select)).docs[0];
     if (!obj) return c.json({ error: "Not found." }, 404);
-    return c.json(access.god ? obj : prune(obj, access.projection));
+    return c.json(access.god ? obj : pruneReached(prune(obj, access.projection), reached));
   } catch (e) {
     return fail(c, e);
   }
