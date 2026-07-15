@@ -50,7 +50,7 @@ export WEAVE_KEY=<your api key>
 
 ```ts
 import { createClient } from "@mauroandre/weave-sdk";
-import { product, category } from "./weave/entities";
+import { product, category } from "./weave/entities/index.js";
 
 const weave = createClient({
   url: process.env.WEAVE_URL!,
@@ -66,9 +66,14 @@ const found = await weave.product.findMany(
   { expand: { category: true } },
 );
 
-found[0].price;         // number — inferred
-found[0].category.name; // string — typed, because you expanded it
+found[0].price;          // number | null — `price: int4()` is nullable
+found[0].category?.name; // the object, because you expanded it
 ```
+
+Fields are **nullable by default** — that's why `price` reads as `number | null` and
+`category` needs the `?.`. Add `.notNull()` to a field and both become exact:
+`price: int4().notNull()` reads back as plain `number`. The types never lie about what
+the database allows.
 
 That's the whole loop: objects in, objects out, HTTP and SQL invisible. Next, learn
 how to **[design entities](/docs/entities)**.

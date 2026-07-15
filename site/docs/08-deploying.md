@@ -4,9 +4,9 @@ In production there's often no shell step to run `weave push` — you build a ne
 container image, swap it in, and restart. The schema change has to happen as the
 app comes up: **migrate, then serve**. That's what `pushAll` is for.
 
-`pushAll` is the same project push as the CLI, as a plain function you call from
-your app's boot before it starts serving. It lives in the main SDK entry, next to
-`pushEntities` and `pushScopes`.
+`pushAll` is the project-level push as a plain function you call from your app's boot
+before it starts serving. It lives in the main SDK entry, next to `pushEntities` and
+`pushScopes`.
 
 ## pushAll — push from your boot
 
@@ -34,8 +34,13 @@ and the `scopes` pushed.
 
 A push is one atomic unit of intent: the whole project — entities and scopes — as
 the deploy wants it. Unlike `weave push`, `pushAll` **never writes back to your
-files** (`gen` is a CLI concern; the container is ephemeral). It is the
-programmatic equivalent of `weave push --no-gen` for a whole project.
+files** (`gen` is a CLI concern; the container is ephemeral).
+
+Two differences from the CLI worth knowing. `pushAll` registers a **pending migration**
+the dashboard can resolve (see below) — `weave push --no-gen` does not, so the two are
+not equivalent despite the similar intent. And there is no `renames` option: a field
+rename at boot degrades to drop-and-add and blocks the deploy on a 🔴 gate, so do renames
+from a terminal with `weave push --rename` before shipping the image.
 
 ## Migrate, then serve
 
@@ -84,6 +89,21 @@ Applying releases the deploy: the next `pushAll` in the boot loop sees an empty
 Only the **last** `pushAll` matters. The server keeps a single pending slot, so a
 newer deploy's push replaces whatever the previous one was waiting on — you always
 resolve against the image that's actually trying to come up.
+
+## The server's environment
+
+Your app needs `WEAVE_URL` and `WEAVE_KEY`. The **server** reads these:
+
+| Var | |
+|---|---|
+| `DATABASE_URL` | the Postgres it manages. **Required** — the server won't start without it |
+| `SESSION_SECRET` | signs the dashboard session. **Required, no default** — it used to fall back to a literal, which meant anyone could forge a session; now the server refuses to start instead. Use a long random string (`openssl rand -hex 32`) |
+| `MASTER_USERNAME` / `MASTER_PASSWORD` | the dashboard login. Also what re-seeds the master user after a `reset()` — leave them set, or a reset locks you out of the dashboard |
+| `WEAVE_API_KEY` | optional fixed god key straight from the environment. It survives a `reset()` (dashboard keys don't), which is why test suites use it |
+| `WEAVE_DEV_MODE` | truthy enables `weave.reset()`. **Never set in production** |
+| `WEAVE_ID_TYPE` | `uuid` (default) or `objectId` — see below. Set-once |
+| `PORT` | defaults to `3000` |
+| `PLATFORM_DATABASE_URL` | **overrides `DATABASE_URL` when set.** Only useful if you're pointing the control plane somewhere else; if a deploy reads the wrong database, look here first |
 
 ## Migrating from MongoDB — `WEAVE_ID_TYPE`
 

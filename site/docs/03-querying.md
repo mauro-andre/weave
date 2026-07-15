@@ -22,16 +22,21 @@ The rule is uniform: **`One`** targets the first match (`orderBy` disambiguates)
 returns the object; **`Many`** operates in bulk and returns `{ count }`. To act by id,
 just filter on it — `findOne({ id })`, `updateOne({ id }, patch)`, `deleteOne({ id })`.
 
-`opts` is `{ orderBy?, expand? }` (plus `page` / `perPage` for `paginate`).
+`opts` is `{ orderBy?, expand?, select?, limit?, latestPer? }` (plus `page` / `perPage`
+for `paginate`) — each covered below.
 
 ## where — one object language, with a shorthand
 
-A bare value means `eq`, and `null` means `IS NULL`:
+A bare value means `eq`:
 
 ```ts
-{ status: "paid" }    // ≡ { status: { eq: "paid" } }
-{ deletedAt: null }   // ≡ { deletedAt: { isNull: true } }
+{ status: "paid" }          // ≡ { status: { eq: "paid" } }
+{ deletedAt: { eq: null } } // IS NULL  (≡ { deletedAt: { isNull: true } })
 ```
+
+A **null** is the one value the shorthand doesn't take — write `{ eq: null }` or
+`{ isNull: true }`. (`{ deletedAt: null }` is a type error: the shorthand carries the
+column's own type, and nullability lives in the operator, not in the bare value.)
 
 The same `WhereInput` works in the GUI, in the SDK, and in stored access rules:
 
@@ -44,7 +49,19 @@ await weave.product.findMany({
 ```
 
 Scalar operators: `eq` · `ne` · `gt` · `gte` · `lt` · `lte` · `in` · `notIn` ·
-`isNull` · `like` · `ilike`.
+`isNull`, plus `like` · `ilike` on string columns.
+
+On an **array column** (`text[]`, `int4[]`, …) the operators are different — `has` ·
+`hasSome` · `hasEvery` · `isEmpty` · `some` (any element matches scalar ops):
+
+```ts
+{ keywords: { has: "typescript" } }   // contains this element
+{ scores: { some: { gte: 5 } } }      // some element is >= 5
+```
+
+An operator Weave doesn't know is a **hard error**, never a silent no-match — so a
+Prisma/Mongo reflex like `{ name: { contains: "x" } }` tells you to use `ilike` instead
+of quietly returning nothing.
 
 ### Boolean composition
 
@@ -61,7 +78,7 @@ Scalar operators: `eq` · `ne` · `gt` · `gte` · `lt` · `lte` · `in` · `not
 {
   category: { name: "Books" },          // N:1 traversal
   items: { some: { qty: { gte: 3 } } }, // any item matches
-  tags:  { every: { active: true } },   // all match · none · isEmpty
+  tags:  { every: { active: true } },   // quantifiers: some · every · none
 }
 ```
 
@@ -83,8 +100,12 @@ const orders = await weave.order.findMany();
 
 orders[0].items;         // owned list — already here, nested
 orders[0].customerId;    // N:1 reference — the pointer is here
-orders[0].customer;      // undefined — you didn't expand it
+orders[0].customer;      // ❌ compile error — you didn't expand it
 ```
+
+That last line is the point: a reference you didn't expand **doesn't exist on the type**,
+so you never have to ask at runtime whether a field is an object or a raw id. Expand it
+and it's there, typed. Don't, and the compiler stops you.
 
 **owned is part of you, so it comes hydrated; a reference is someone else, so you get
 the pointer and `expand` to pull the object.** Expand nests to any depth — the owned
@@ -92,14 +113,19 @@ comes for free at every level, references you name.
 
 ## How many rows — `findMany`, `limit`, `paginate`
 
-`findMany` returns **every** matching row — no silent truncation — up to **10 000** by
-default. Cap or raise that with `limit`; for a paged UI use `paginate`:
+`findMany` returns every matching row up to **10 000** by default — a safety net so you
+don't pull a whole table by accident. If more rows matched than you got, it **warns**
+(with both numbers): the cut is never silent. Raise or lower it with `limit`; for a paged
+UI use `paginate`:
 
 ```ts
-await weave.product.findMany({ active: true });                // all matches (≤ 10 000)
-await weave.product.findMany({ active: true }, { limit: 50 }); // at most 50
+await weave.product.findMany({ active: true });                // up to 10 000 — warns if more matched
+await weave.product.findMany({ active: true }, { limit: 50 }); // at most 50 — your call, no warning
 await weave.product.paginate({}, { page: 2, perPage: 100 });   // one page + totals
 ```
+
+Passing `limit` silences the warning: the ceiling is then your decision, not a default
+you didn't know about.
 
 The split: **`findMany`** is "give me the list" (small-to-medium sets, catalogs, seeds);
 **`paginate`** is for large sets / paged UI and returns `{ docs, docsQuantity,
@@ -122,11 +148,12 @@ const orders = await weave.order.findMany(
   { expand: { customer: true, items: { product: true } } },
 );
 
-orders[0].customer.name;          // present & typed — you expanded it
+orders[0].customer;               // present & typed — you expanded it
 orders[0].items[0].product.price; // nested, revived (Dates too), inferred
 ```
 
-No hand-written result types — the shape follows the `expand` you pass.
+No hand-written result types — the shape follows the `expand` you pass. (A nullable
+reference still reads as `Target | null`; `.notNull()` on the reference makes it exact.)
 
 ## Reading a subset — `select`
 
@@ -177,7 +204,9 @@ Every verb above also runs under a **scope** — a named access policy. Derive a
 client with `.as(scope, params?)` and call the *same* methods:
 
 ```ts
-const tenant = weave.as("storefront", { customerId: ctx.user.id });
+import storefront from "./weave/scopes/storefront.js";
+
+const tenant = weave.as(storefront, { customerId: ctx.user.id });
 
 await tenant.product.findMany({ price: { gte: 50 } }); // only rows the scope allows
 await tenant.product.findOne({ id });                  // same shape, one row
@@ -196,9 +225,14 @@ await weave.todo.updateMany({ done: false }, { archived: true }); // → { count
 await weave.todo.deleteMany({ archived: true });                  // → { count }
 ```
 
-A `where` is **required** — an empty one is rejected, so you can never mass-mutate by
-accident. And under a scope, bulk ops are automatically constrained to that scope's
-rows.
+A `where` is **required** on every by-where verb (`updateOne`/`updateMany`/`deleteOne`/
+`deleteMany`) — an empty one is rejected, so you can never mass-mutate by accident. And
+under a scope, bulk ops are automatically constrained to that scope's rows.
+
+Two things worth knowing before you reach for them: a bulk op affects at most **100 000**
+rows per call, and — unlike `createMany`, which is one transaction — `updateMany` and
+`deleteMany` walk the rows one at a time, so a failure midway leaves the earlier ones
+applied.
 
 Next: roll rows up — counts, percentiles, breakdowns — with
 **[aggregation](/docs/aggregation)**, or lock it down with **[scopes](/docs/scopes)**.

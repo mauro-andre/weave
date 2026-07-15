@@ -69,9 +69,11 @@ export default defineEntity("order", {
 
 ## Mirror — snapshot another entity's shape
 
-`mirror(base)` copies another entity's fields into an owned child — a **snapshot**
-that won't change when the base changes. Add local fields alongside it. Like
-`reference`, it takes the entity, not its name:
+`mirror(base)` copies another entity's fields into an owned child. The **rows** are a
+snapshot: an item already written keeps its values even if the base row later changes.
+The **shape** is not — it re-resolves from the live base on every push, so adding a field
+to the base adds it to the mirror too. Add local fields alongside it. Like `reference`,
+it takes the entity, not its name:
 
 ```ts
 import { defineEntity, text, int4, owned, array, mirror } from "@mauroandre/weave-sdk";
@@ -85,9 +87,10 @@ export default defineEntity("order", {
 ```
 
 `owned(mirror(base))` for 1:1, `owned(array(mirror(base)))` for a 1:N set. The item's
-type is the **base's fields ∩ your extras**, so `create({ items: [{ name, price,
-quantity }] })` is fully typed. Use it for line-item snapshots that must stay frozen
-even if the source product later changes.
+type is the **base's fields plus your extras** (on a name collision, your local field
+wins), so `create({ items: [{ name, price, quantity }] })` is fully typed. Use it for
+line-item snapshots whose values must stay frozen even if the source product later
+changes.
 
 ## References — association
 

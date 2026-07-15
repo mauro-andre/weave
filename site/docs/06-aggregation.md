@@ -24,7 +24,7 @@ sum(field) · avg(field)       // over a numeric field
 min(field) · max(field)
 distinct(field)               // count of distinct values
 first(field)                  // one representative per group (earliest by created_at)
-percentile(field, p)          // exact percentile — p is 0..1 (p95 → 0.95)
+percentile(field, p)          // exact percentile — p strictly between 0 and 1 (p95 → 0.95)
 histogram(field, [bounds])    // bucket counts (see below)
 ```
 
@@ -37,6 +37,11 @@ select: {
   errors: count({ where: { status: { gte: 500 } } }),
 }
 ```
+
+This inner `where` is a **reduced** grammar: scalar operators, `and`/`or`/`not`, and
+dot-paths — no `some`/`every`/`none`. It's also the one filter slot that isn't typed
+against the entity, so a typo'd field or an unknown operator surfaces at runtime (loudly)
+rather than at compile time.
 
 `histogram` turns N boundaries into **N+1 buckets** — one per interval plus an overflow
 bucket above the last boundary — and returns the counts as one array value:
@@ -58,8 +63,11 @@ timezone. Omit `groupBy` entirely to aggregate the whole set into a single row.
 
 Group by a **reference** too — it buckets by the target's foreign key. `groupBy:
 ["department", "company"]` groups by `department_id` + `company_id`; you can name the
-reference (`department`) or its id (`departmentId`). The same holds for `latestPer`,
-`having`, and the aggregate's `orderBy` — anywhere a field name is taken.
+reference (`department`) or its id (`departmentId`). `latestPer` takes the reference name.
+
+`having` and the aggregate's `orderBy` are different: they address your **select
+aliases**, not fields. `having: { revenue: { gte: 100 } }` refers to the `revenue` you
+selected — naming a field that isn't an alias is an error.
 
 ## Grouping through relationships — paths
 
@@ -165,9 +173,16 @@ const { rows, facets } = await weave.order.aggregate({
   },
 });
 
-rows[0].revenue;              // the headline
+rows[0].revenue as number;    // the headline
 facets.byCategory;            // [{ category, r }, ...]
 ```
+
+**The values are numbers, the type isn't yet.** A numeric accumulator (`count`, `sum`,
+`avg`, `percentile`, an expression, `min`/`max` over a numeric column) comes back as a
+real `number` — same as a `findMany` on the same column, no `Number(...)` needed. But an
+aggregate row is still typed `Record<string, unknown>`, so annotate at the boundary
+(`as number`) until the select's types are inferred. Group keys are raw JSON — a
+`timeBucket` key is an ISO **string**, not a `Date`.
 
 Each facet is its own aggregate under the parent `where`. The return type **follows
 your input**: with `facets`, you get `{ rows, facets }`; without, a plain array.

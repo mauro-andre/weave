@@ -31,10 +31,37 @@ policy.
 
 - **verbs** — any of `read` · `create` · `update` · `delete`.
 - **where** — the same `WhereInput` you query with. It filters which rows are **visible**
-  (read / update-target / delete-target) **and** what a write may **produce**: a `create`
-  or `update` whose resulting row would fall outside the filter is rejected (`403`). So a
-  scope can never be used to write into — or move a row into — another tenant.
+  (read / update-target / delete-target) **and** what a write may **produce**: a `create`,
+  `update` or `accumulate` whose resulting row would fall outside the filter is rejected
+  (`403`, and rolled back). So a scope can never be used to write into — or move a row
+  into — another tenant.
 - **fields** — `include` or `exclude` a set of paths (dot-paths into owned/refs).
+
+## Reaching an entity through a reference
+
+`expand` and `select` hydrate references, so a read of one entity can reach another.
+Those hops answer to the **reached entity's own rule**:
+
+- **verbs** — expanding an entity your scope can't `read` is a `403`, exactly as if you
+  had queried it directly. An entity with no rule at all is denied.
+- **fields** — the reached entity's projection applies to the expanded object.
+- **where** — **does not travel.** The row filter is only applied to the entity you
+  query. A reference is followed by foreign key, not re-filtered.
+
+That last point is the one to design around. If a rule's `where` is what keeps a tenant
+apart, put it on the entity you **query**; reaching that entity through someone else's
+reference will not re-apply it:
+
+```ts
+scopeRule(user, { verbs: ["read"], where: { active: { eq: true } } });
+
+await tenant.user.findMany();                            // only active users
+await tenant.post.findMany({}, { expand: { author: true } }); // author may be inactive
+```
+
+To hide an entity from a scope entirely, give it **no rule** rather than `read` with a
+narrow `fields`: a denied entity fails loudly if some future `expand` reaches it, while a
+projected one quietly grants read to every row.
 
 ## Parameters
 
