@@ -1,3 +1,6 @@
+---
+description: "Rolling rows up: aggregate with groupBy (fields, dot-paths, timeBucket), accumulators (count/sum/avg/min/max/distinct/first/percentile/histogram), per-accumulator filters, expressions, having, facets, unnest, latestPer, plus accumulate (inc/setOnInsert) and time partitioning for a historical tier. Use when building a metric, chart, dashboard, report, counter, or any grouped total."
+---
 # Aggregation
 
 Roll many rows into numbers — counts, sums, percentiles, breakdowns — in a single

@@ -1,5 +1,5 @@
 /**
- * Spec executável do `agent/AGENTS.md` → "Rules that fail silently".
+ * Spec executável do `packages/sdk/agent/AGENTS.md` → "Rules that fail silently".
  *
  * Cada regra daquela tabela é pinada aqui: o anti-padrão entra, a consequência
  * documentada sai. Estes testes afirmam comportamento QUEBRADO de propósito — é o
@@ -13,7 +13,7 @@
  *
  * Quando um teste daqui falhar, NÃO conserte o teste. Ou algo regrediu, ou o Weave
  * melhorou e o anti-padrão agora funciona — e nesse caso APAGUE a linha do
- * `agent/AGENTS.md` e apague o teste. Regra que avisa de um problema que não existe mais
+ * `packages/sdk/agent/AGENTS.md` e apague o teste. Regra que avisa de um problema que não existe mais
  * é mentira que custa contexto em toda conversa. Isto já aconteceu 3× no primeiro dia:
  * `findMany` truncando em 10k, `aggregate` devolvendo string e o operador desconhecido
  * virando `[object Object]` eram linhas desta tabela — foram consertados e as linhas
@@ -44,22 +44,22 @@ import {
 // O acoplamento com o AGENTS.md
 // ============================================
 
-const AGENTS_MD = fileURLToPath(new URL("../agent/AGENTS.md", import.meta.url));
+const AGENTS_MD = fileURLToPath(new URL("../packages/sdk/agent/AGENTS.md", import.meta.url));
 const SECTION = "Rules that fail silently";
 
 /** A célula "Never write" de cada linha da tabela de falhas silenciosas. */
 function declaredRules(): string[] {
   const md = fs.readFileSync(AGENTS_MD, "utf-8");
   const section = md.split(/^## /m).find((s) => s.startsWith(SECTION));
-  if (!section) throw new Error(`agent/AGENTS.md: seção "## ${SECTION}" não encontrada`);
+  if (!section) throw new Error(`packages/sdk/agent/AGENTS.md: seção "## ${SECTION}" não encontrada`);
 
   const rows = section.split("\n").filter((l) => l.startsWith("|"));
-  if (rows.length < 3) throw new Error(`agent/AGENTS.md: "${SECTION}" não tem linhas de tabela`);
+  if (rows.length < 3) throw new Error(`packages/sdk/agent/AGENTS.md: "${SECTION}" não tem linhas de tabela`);
 
   // `| a | b | c |`.split("|") → ["", " a ", " b ", " c ", ""]
   return rows.slice(2).map((line) => {
     const cells = line.split("|");
-    if (cells.length < 4) throw new Error(`agent/AGENTS.md: linha malformada: ${line}`);
+    if (cells.length < 4) throw new Error(`packages/sdk/agent/AGENTS.md: linha malformada: ${line}`);
     return cells[1]!.trim();
   });
 }

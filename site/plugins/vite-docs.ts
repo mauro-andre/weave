@@ -6,20 +6,53 @@ import { createHighlighter, type Highlighter } from "shiki";
 
 // Docs a partir de markdown: lê `docs/*.md` (numerados → ordem/slug/título),
 // renderiza com marked + shiki, e expõe dois módulos virtuais que o app consome:
-//   virtual:docs-manifest  → lista { slug, title, order, filename }
+//   virtual:docs-manifest  → lista { slug, title, order, filename, description }
 //   virtual:docs-content   → { [slug]: { html, rawMd } }
 // Também emite cada .md como asset baixável.
+//
+// FRONTMATTER: cada doc começa com `---\ndescription: …\n---`. Ele é FONTE ÚNICA — o site
+// usa pra `<meta name="description">`, e o build do SDK usa pra gerar o `SKILL.md` de cada
+// doc (o payload de agente). Mas ele é INVISÍVEL pro site: o `body` é separado no
+// carregamento e TUDO daí pra frente opera sobre o body — html, módulo virtual e o `.md`
+// baixável. O YAML só existe no arquivo do repo e no SKILL.md gerado.
 
 export interface DocEntry {
   slug: string;
   title: string;
   order: number;
   filename: string;
+  /** Do frontmatter — vai pro <meta name="description">, e pro SKILL.md no build do SDK. */
+  description: string;
 }
 
 interface DocData extends DocEntry {
   html: string;
+  /** O markdown SEM o frontmatter — é ele que é renderizado e emitido. */
   rawMd: string;
+}
+
+/**
+ * Separa o frontmatter YAML do corpo. Subset deliberado: `key: value` por linha, um nível,
+ * sem listas nem aninhamento — é tudo que o payload precisa, e evita uma dependência nova
+ * (o site não tem parser de YAML e não vale ganhar um por causa de uma chave).
+ * Sem frontmatter → `{ data: {}, body: <o texto inteiro> }`.
+ */
+export function parseFrontmatter(raw: string): { data: Record<string, string>; body: string } {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
+  if (!match) return { data: {}, body: raw };
+  const data: Record<string, string> = {};
+  for (const line of match[1]!.split(/\r?\n/)) {
+    const sep = line.indexOf(":");
+    if (sep === -1) continue;
+    const key = line.slice(0, sep).trim();
+    let value = line.slice(sep + 1).trim();
+    // aspas opcionais (a description tem `:` no meio, então quase sempre vem citada)
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1);
+    }
+    if (key) data[key] = value;
+  }
+  return { data, body: raw.slice(match[0].length) };
 }
 
 const VIRTUAL_MANIFEST = "virtual:docs-manifest";
@@ -66,14 +99,17 @@ export function docsPlugin(): Plugin {
 
     docs = [];
     for (const file of files) {
-      const rawMd = fs.readFileSync(path.join(docsDir, file), "utf-8");
+      const source = fs.readFileSync(path.join(docsDir, file), "utf-8");
+      // Separa AQUI, uma vez. Daqui pra frente só existe `body` — nenhuma saída do site
+      // (html, módulo virtual, .md baixável) pode conter o YAML.
+      const { data, body: rawMd } = parseFrontmatter(source);
       const orderMatch = file.match(/^(\d+)-/);
       const order = orderMatch ? parseInt(orderMatch[1], 10) : 99;
       const slug = file.replace(/^\d+-/, "").replace(/\.md$/, "");
       const titleMatch = rawMd.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : slug;
       const html = await marked.parse(rawMd);
-      docs.push({ slug, title, order, filename: file, html, rawMd });
+      docs.push({ slug, title, order, filename: file, description: data.description ?? "", html, rawMd });
     }
   }
 
@@ -108,8 +144,8 @@ export function docsPlugin(): Plugin {
       if (docs.length === 0) await loadDocs();
 
       if (id === RESOLVED_MANIFEST) {
-        const manifest: DocEntry[] = docs.map(({ slug, title, order, filename }) => ({
-          slug, title, order, filename,
+        const manifest: DocEntry[] = docs.map(({ slug, title, order, filename, description }) => ({
+          slug, title, order, filename, description,
         }));
         return `export default ${JSON.stringify(manifest)};`;
       }

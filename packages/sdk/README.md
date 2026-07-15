@@ -16,7 +16,7 @@ npm install @mauroandre/weave-sdk
 
 ```ts
 import { createClient } from "@mauroandre/weave-sdk";
-import { product, category } from "./weave/entities";
+import { product, category } from "./weave/entities/index.js";
 
 const weave = createClient({
   url: process.env.WEAVE_URL!,
@@ -32,9 +32,9 @@ const found = await weave.product.findMany(
   { orderBy: { price: "desc" }, expand: { category: true } },
 );
 
-found[0].price;          // number  — inferred
-found[0].createdAt;      // Date    — revived from JSON
-found[0].category.name;  // string  — typed & present, only because you expanded it
+found[0].price;           // number | null — fields are nullable unless you .notNull() them
+found[0].createdAt;       // Date    — revived from JSON
+found[0].category?.name;  // the object — present only because you expanded it
 ```
 
 The verbs per entity: `create` · `createMany` · `findOne` · `findMany` · `paginate` ·
@@ -157,24 +157,35 @@ client. You can author in the GUI **or** in code, mixed.
 
 ## Access control as code
 
-A scope shapes access per entity — which **verbs**, which **rows**, which **fields**.
-You write it by name; the server stores it by stable field-id (rename-proof).
+A scope shapes access per entity — which **verbs**, which **rows**, which **fields**. You
+write it against the entity object; the server stores it by stable field-id (rename-proof)
+and enforces it on every request.
 
 ```ts
 // weave/scopes/storefront.ts
-import { defineScope } from "@mauroandre/weave-sdk";
+import { defineScope, scopeRule } from "@mauroandre/weave-sdk";
+import product from "../entities/product.js";
 
-export default defineScope("storefront", {
-  product: { verbs: ["read"], where: { active: { eq: true } }, fields: { exclude: ["cost"] } },
-});
+export default defineScope("storefront", [
+  scopeRule(product, {
+    verbs: ["read"],
+    where: { company: { id: { eq: { param: "companyId" } } } },
+    fields: { exclude: ["cost"] },
+  }),
+]);
 ```
 
-Act under a scope at request time:
+Param names are **inferred** from the rules, so acting under a scope requires them, typed:
 
 ```ts
-const tenant = weave.as("storefront", { tenantId: ctx.tenant });
-await tenant.product.findMany(); // server enforces the scope's rows + fields
+const tenant = weave.as(storefront, { companyId: ctx.user.companyId });
+await tenant.product.findMany(); // server enforces the scope's verbs, rows and fields
 ```
+
+The row filter governs writes too — a `create` or `update` whose resulting row would fall
+outside it is rejected, so a scope can never write into another tenant. Derive the params
+from the authenticated principal, never from request input: without `weave.as`, the API key
+is god, and it's the real trust boundary.
 
 ## License
 

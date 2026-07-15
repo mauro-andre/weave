@@ -1,3 +1,6 @@
+---
+description: "Reading and writing: findOne/findMany/paginate, create/createMany, updateOne/updateMany, deleteOne/deleteMany, the where language and its operators, expand for references, select for lean reads, orderBy, limit, latestPer, bulk rules, and the Infer* types. Use when fetching, filtering, paginating, loading related objects, or writing a service function over the client."
+---
 # Querying
 
 Every entity exposes the same object verbs. You target rows with a bare **where** —

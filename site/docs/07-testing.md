@@ -1,3 +1,6 @@
+---
+description: "Testing against a real Weave: weave.reset() gated by WEAVE_DEV_MODE, the WEAVE_API_KEY env god-key that survives a wipe, and rebuilding schema plus scopes with pushAll. Use when writing a test suite over Weave or setting up a dev/CI database."
+---
 # Testing
 
 Weave gives your test suite a **factory reset** — the equivalent of "drop every

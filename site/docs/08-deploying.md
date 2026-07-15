@@ -1,3 +1,6 @@
+---
+description: "Going to production: pushAll at boot (the migrate-then-serve loop), resolving gated migrations from the pipeline or the dashboard, the server's env vars, and WEAVE_ID_TYPE for migrating an app off MongoDB. Use when deploying, wiring boot-time schema sync, or moving from MongoDB."
+---
 # Deploying
 
 In production there's often no shell step to run `weave push` — you build a new

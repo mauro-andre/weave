@@ -1,3 +1,6 @@
+---
+description: "The weave CLI: push (diff-based schema sync, --confirm/--fill/--rename/--no-gen), gen (regenerates the client — it deletes and rebuilds weave/entities and weave/scopes), and weave.config.ts. Use when syncing entities-as-code to the server, applying a migration, renaming a field, or regenerating the client."
+---
 # The CLI
 
 The `weave` CLI moves entities and scopes between your code and the server. The

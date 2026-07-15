@@ -1,6 +1,8 @@
 declare module "virtual:docs-manifest" {
   interface DocEntry {
     slug: string;
+    /** Do frontmatter do doc — fonte única, também usada pra gerar o SKILL.md no build do SDK. */
+    description: string;
     title: string;
     order: number;
     filename: string;

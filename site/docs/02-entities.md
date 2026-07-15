@@ -1,3 +1,6 @@
+---
+description: "Modeling data: defineEntity, column types and modifiers (.notNull/.unique/.index/.default), owned vs reference vs mirror, self and circular references, scalar arrays, composite unique/index, camelCase→snake_case naming. Use when creating or changing a model, adding a field or a relationship, or deciding whether something is owned or referenced."
+---
 # Entities
 
 An **entity** is a kind of object you store — `product`, `order`, `customer`. You

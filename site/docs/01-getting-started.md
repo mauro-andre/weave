@@ -1,3 +1,6 @@
+---
+description: "Running the Weave server container, its required env vars, creating an API key, installing the SDK, and the first entity→push→query round-trip. Use when starting a new Weave project, connecting an app to Weave, standing up a local/CI server, or setting WEAVE_URL/WEAVE_KEY."
+---
 # Getting started
 
 Weave is a code-first object abstraction over PostgreSQL. You design **entities**,

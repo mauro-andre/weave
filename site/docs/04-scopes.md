@@ -1,3 +1,6 @@
+---
+description: "Multi-tenancy and access control: defineScope/scopeRule, verbs, row filters with params, field projections, how scopes compose (or don't) across expand, weave.as, the request-scoped client (createScopedClient, runAs/runAsGod), and the principal dispatcher. Use when adding tenants, roles, permissions, per-user data isolation, or anything that must not leak across customers."
+---
 # Scopes
 
 A **scope** is a named access policy. Per entity it decides three things: which
