@@ -83,7 +83,7 @@ export async function applyEntity(input: unknown, opts: ApplyOptions = {}): Prom
   const sql = db();
   const previous = await getEntity(normalized.name);
   const next = ensureFieldIds(normalized, previous);
-  const plan = await probePlan(sql, next, diffEntityIR(previous, next));
+  const plan = await probePlan(sql, previous, next, diffEntityIR(previous, next), opts.fill ?? {});
 
   const confirm = new Set(opts.confirm ?? []);
   const fill = opts.fill ?? {};

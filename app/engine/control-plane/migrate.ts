@@ -14,31 +14,65 @@ type AnyEntity = Entity<string, ShapeRecord>;
 
 // ── Sondagem: refina o plano estrutural contra o dado vivo ─────────────────────
 // Vazio→auto, duplicata→blocked, etc. Mudanças em campos aninhados (dentro de
-// um owned) são adiadas — só o topo é editável na v1.
+// um owned) são adiadas — só o topo é editável na v1. A sonda roda ANTES da
+// migração, então enxerga o banco como o IR ANTERIOR o descreve: nomes físicos
+// são resolvidos por field-id contra `prev` (à prova de rename) e colunas que
+// nascem neste plano são tratadas pelo valor que terão (NULL ou constante).
 export async function probePlan(
   sql: Sql,
+  prev: EntityIR | null,
   next: EntityIR,
   plan: EntityDiff,
+  fill: Record<string, unknown> = {},
 ): Promise<EntityDiff> {
-  if (plan.isNew) return plan;
+  if (plan.isNew || !prev) return plan;
   const changes: FieldChange[] = [];
-  for (const c of plan.changes) changes.push(await probeChange(sql, next, c));
+  for (const c of plan.changes) changes.push(await probeChange(sql, prev, next, plan.changes, c, fill));
   return { ...plan, changes };
 }
 
-async function probeChange(sql: Sql, next: EntityIR, c: FieldChange): Promise<FieldChange> {
+async function probeChange(
+  sql: Sql,
+  prev: EntityIR,
+  next: EntityIR,
+  all: FieldChange[],
+  c: FieldChange,
+  fill: Record<string, unknown>,
+): Promise<FieldChange> {
   if (c.path.includes(".") && c.op !== "addField") {
     return blocked(c, "Editing fields inside a list isn't supported yet.");
   }
   const table = slug(next.name);
-  const col = camelToSnake(c.path);
+  const col = prevColumnName(prev, next, c.path) ?? camelToSnake(c.path);
 
   if (c.op === "addUnique") {
     return (await hasDuplicates(sql, table, col)) ? c : { ...c, risk: "auto" };
   }
   if (c.op === "addCompositeUnique") {
-    const cols = resolveCompositeColumns(next, c.columns ?? []);
-    return (await hasDuplicatesComposite(sql, table, cols)) ? c : { ...c, risk: "auto" };
+    const probeCols: string[] = [];
+    for (const field of c.columns ?? []) {
+      const existing = prevColumnName(prev, next, field);
+      if (existing) {
+        // Vira required com fill neste plano: os NULLs atuais viram a constante
+        // do backfill — sonda o valor que a coluna terá DEPOIS da migração.
+        const mr = all.find((ch) => ch.op === "makeRequired" && ch.path === field);
+        const f = mr ? fill[field] : undefined;
+        probeCols.push(f !== undefined ? `COALESCE(${existing}, ${literal(f)})` : existing);
+        continue;
+      }
+      // Campo NOVO neste plano: sem default nasce NULL em todas as linhas → pela
+      // semântica NULL-distinto do PG, duplicata é impossível. Com default
+      // constante, todas as linhas existentes leem o mesmo valor → não afeta o
+      // agrupamento (some do GROUP BY, não do WHERE).
+      const node = next.fields[field];
+      const d = node?.kind === "column" ? node.default : undefined;
+      if (d === undefined || d === null) return { ...c, risk: "auto" };
+    }
+    if (probeCols.length === 0) {
+      // Grupo todo de colunas novas constantes: qualquer 2+ linhas colidem.
+      return (await count(sql, table)) > 1 ? c : { ...c, risk: "auto" };
+    }
+    return (await hasDuplicatesComposite(sql, table, probeCols)) ? c : { ...c, risk: "auto" };
   }
   if (c.op === "makeRequired") {
     if ((await count(sql, table, `${col} IS NULL`)) === 0) return { ...c, risk: "auto" };
@@ -161,6 +195,20 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
 // ── helpers ───────────────────────────────────────────────────────────────────
 function blocked(c: FieldChange, detail: string): FieldChange {
   return { ...c, risk: "blocked", detail };
+}
+
+// Nome físico da coluna no banco VIVO (antes da migração): casa o field-id contra o
+// IR anterior — à prova de rename no mesmo plano. `null` = campo novo neste plano
+// (a coluna ainda não existe no banco). Reference N:1 vive em `<campo>_id`.
+function prevColumnName(prev: EntityIR, next: EntityIR, field: string): string | null {
+  const node = next.fields[field];
+  if (!node?.id) return null;
+  for (const [prevName, prevNode] of Object.entries(prev.fields)) {
+    if (prevNode.id === node.id) {
+      return prevNode.kind === "reference" ? `${camelToSnake(prevName)}_id` : camelToSnake(prevName);
+    }
+  }
+  return null;
 }
 
 async function count(sql: Sql, table: string, where?: string): Promise<number> {

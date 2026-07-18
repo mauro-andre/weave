@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps, refdrop, refdrop_target, refdropn__tags, refdropn, refdrop_tag CASCADE`;
+        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps, refdrop, refdrop_target, refdropn__tags, refdropn, refdrop_tag, zzprobeb, zzprobeco, zzprobedata, zzprobedef, zzproberen, zzprobefill, zzprobeuq CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -724,6 +724,147 @@ describe("entidades — criar e materializar", () => {
       // os campos do grupo aparecem como chips removíveis (`nome ✕`).
       expect(html).toContain("host ✕");
       expect(html).toContain("route ✕");
+    });
+
+    it("coluna nova (reference) + unique composto no MESMO push aplica sem 42703", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobeco", fields: { name: { kind: "column", type: "text", notNull: true } } });
+      await saveIR({ irVersion: 1, name: "zzprobeb", fields: { slug: { kind: "column", type: "text", notNull: true } } });
+
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzprobeb",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobeb", "slug"), type: "text", notNull: true },
+          company: { kind: "reference", target: "zzprobeco", cardinality: "one", notNull: true },
+        },
+        unique: [["slug", "company"]],
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("zzprobeb_slug_company_id_key")).toBe(true);
+    });
+
+    it("coluna nova nullable (sem default) no grupo: nasce NULL → sem duplicata possível", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobedata", fields: { host: { kind: "column", type: "text", notNull: true } } });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobedata (host) VALUES ('a'), ('a')`; // duplicata que NÃO conflita (env nasce NULL)
+
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzprobedata",
+        fields: {
+          host: { kind: "column", id: await idOf("zzprobedata", "host"), type: "text", notNull: true },
+          env: { kind: "column", type: "text" },
+        },
+        unique: [["host", "env"]],
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("zzprobedata_host_env_key")).toBe(true);
+      // NULL-distinto: outra linha ('a', null) continua permitida
+      await sql`INSERT INTO zzprobedata (host) VALUES ('a')`;
+      // mas linhas completas colidem
+      await sql`INSERT INTO zzprobedata (host, env) VALUES ('b', 'prod')`;
+      await expect(sql`INSERT INTO zzprobedata (host, env) VALUES ('b', 'prod')`).rejects.toThrow();
+    });
+
+    it("coluna nova com default constante: duplicata nas colunas existentes trava (needsReview)", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobedef", fields: { host: { kind: "column", type: "text", notNull: true } } });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobedef (host) VALUES ('dup'), ('dup')`; // tenant nasce 't1' p/ todas → colidem
+
+      const withUnique = async () => ({
+        irVersion: 1,
+        name: "zzprobedef",
+        fields: {
+          host: { kind: "column", id: await idOf("zzprobedef", "host"), type: "text", notNull: true },
+          tenant: { kind: "column", type: "text", notNull: true, default: "t1" },
+        },
+        unique: [["host", "tenant"]],
+      });
+      const blocked = await saveIR(await withUnique());
+      const bj = await blocked.json();
+      expect(bj.status).toBe("needsReview");
+      expect(bj.plan.changes.some((c: { op: string; risk: string }) => c.op === "addCompositeUnique" && c.risk === "blocked")).toBe(true);
+
+      await sql`DELETE FROM zzprobedef WHERE ctid IN (SELECT ctid FROM zzprobedef WHERE host = 'dup' LIMIT 1)`;
+      const ok = await saveIR(await withUnique());
+      expect((await ok.json()).status).toBe("applied");
+      expect(await indexExists("zzprobedef_host_tenant_key")).toBe(true);
+    });
+
+    it("rename de campo do grupo + unique composto no mesmo push sonda pelo nome antigo", async () => {
+      await saveIR({
+        irVersion: 1,
+        name: "zzproberen",
+        fields: {
+          a: { kind: "column", type: "text", notNull: true },
+          b: { kind: "column", type: "text", notNull: true },
+        },
+      });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzproberen (a, b) VALUES ('x', '1'), ('x', '2')`;
+
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzproberen",
+        fields: {
+          a: { kind: "column", id: await idOf("zzproberen", "a"), type: "text", notNull: true },
+          bb: { kind: "column", id: await idOf("zzproberen", "b"), type: "text", notNull: true }, // rename b → bb
+        },
+        unique: [["a", "bb"]],
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("zzproberen_a_bb_key")).toBe(true);
+    });
+
+    it("addUnique (coluna única) + rename no mesmo push sonda pelo nome antigo", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobeuq", fields: { em: { kind: "column", type: "text" } } });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobeuq (em) VALUES ('a@x.dev'), ('b@x.dev')`;
+
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzprobeuq",
+        fields: {
+          email: { kind: "column", id: await idOf("zzprobeuq", "em"), type: "text", unique: true }, // rename em → email + unique
+        },
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await indexExists("zzprobeuq_email_key")).toBe(true);
+    });
+
+    it("makeRequired com fill + unique composto: NULLs viram a constante na sondagem", async () => {
+      await saveIR({
+        irVersion: 1,
+        name: "zzprobefill",
+        fields: {
+          slug: { kind: "column", type: "text", notNull: true },
+          code: { kind: "column", type: "text" }, // nullable, virará required via fill
+        },
+      });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobefill (slug, code) VALUES ('x', null), ('x', null)`; // viram ('x','N/A') × 2 → colidem
+
+      const withUnique = async () => ({
+        irVersion: 1,
+        name: "zzprobefill",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobefill", "slug"), type: "text", notNull: true },
+          code: { kind: "column", id: await idOf("zzprobefill", "code"), type: "text", notNull: true },
+        },
+        unique: [["slug", "code"]],
+      });
+      // com fill: a sonda enxerga a colisão pós-backfill → needsReview (e não um 400 cru no CREATE INDEX)
+      const blocked = await saveIR(await withUnique(), { fill: { code: "N/A" } });
+      const bj = await blocked.json();
+      expect(bj.status).toBe("needsReview");
+      expect(bj.plan.changes.some((c: { op: string; risk: string }) => c.op === "addCompositeUnique" && c.risk === "blocked")).toBe(true);
+
+      await sql`DELETE FROM zzprobefill WHERE ctid IN (SELECT ctid FROM zzprobefill WHERE slug = 'x' LIMIT 1)`;
+      const ok = await saveIR(await withUnique(), { fill: { code: "N/A" } });
+      expect((await ok.json()).status).toBe("applied");
+      expect(await indexExists("zzprobefill_slug_code_key")).toBe(true);
+      const [row] = await sql<{ code: string }[]>`SELECT code FROM zzprobefill WHERE slug = 'x'`;
+      expect(row!.code).toBe("N/A"); // backfill aplicado
     });
   });
 
