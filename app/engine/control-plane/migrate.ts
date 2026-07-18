@@ -60,12 +60,12 @@ async function probeChange(
         probeCols.push(f !== undefined ? `COALESCE(${existing}, ${literal(f)})` : existing);
         continue;
       }
-      // Campo NOVO neste plano: sem default nasce NULL em todas as linhas → pela
-      // semântica NULL-distinto do PG, duplicata é impossível. Com default
-      // constante, todas as linhas existentes leem o mesmo valor → não afeta o
-      // agrupamento (some do GROUP BY, não do WHERE).
+      // Campo NOVO neste plano: o valor que ele terá nas linhas existentes decide.
+      // Fill explícito (reference/escalar required) ou default estático → constante,
+      // não afeta o agrupamento; sem nenhum dos dois nasce NULL em todas as linhas →
+      // pela semântica NULL-distinto do PG, duplicata é impossível.
       const node = next.fields[field];
-      const d = node?.kind === "column" ? node.default : undefined;
+      const d = fill[field] ?? (node?.kind === "column" ? node.default : undefined);
       if (d === undefined || d === null) return { ...c, risk: "auto" };
     }
     if (probeCols.length === 0) {
@@ -84,7 +84,7 @@ async function probeChange(
   }
   if (c.op === "addField" && c.risk === "needsValue") {
     if ((await count(sql, table)) === 0) return { ...c, risk: "auto" };
-    return blocked(c, "Set a default value for the new required field, or add it as optional.");
+    return c; // 🟡 — o gate exige fill; o backfill uniforme resolve na aplicação
   }
   return c;
 }
@@ -124,9 +124,18 @@ export async function applyMigration(tx: Tx, args: MigrationArgs): Promise<void>
 async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<void> {
   const { prev, next, fill } = args;
   const table = slug(next.name);
-  const col = camelToSnake(c.path);
+  const col = nextColumnName(next, c.path);
 
   switch (c.op) {
+    case "addField": {
+      // Com fill: a coluna entrou NULLABLE no aditivo (ver softenNewRequired) —
+      // aqui acontece o backfill uniforme e só depois o SET NOT NULL.
+      const v = fill[c.path];
+      if (v === undefined) return;
+      await tx.unsafe(`UPDATE ${table} SET ${col} = ${literal(v)} WHERE ${col} IS NULL`);
+      await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} SET NOT NULL`);
+      return;
+    }
     case "removeField": {
       const node = prev.fields[c.path];
       if (node?.kind === "owned") {
@@ -209,6 +218,35 @@ function prevColumnName(prev: EntityIR, next: EntityIR, field: string): string |
     }
   }
   return null;
+}
+
+// Nome físico DEPOIS da migração (renames já aplicados no estágio 1): reference N:1
+// vive em `<campo>_id`. Campos removidos não constam em `next` → cai no snake_case.
+function nextColumnName(next: EntityIR, field: string): string {
+  const node = next.fields[field];
+  return node?.kind === "reference" ? `${camelToSnake(field)}_id` : camelToSnake(field);
+}
+
+/**
+ * Versão do IR para o ADITIVO do engine: campos novos required com fill entram como
+ * nullable, pra o `ADD COLUMN` não falhar sobre as linhas existentes — o backfill +
+ * SET NOT NULL acontecem no estágio 3 (`applyAlter`, op `addField`). O metastore
+ * guarda o IR real (required); isto afeta só a materialização desta transação.
+ */
+export function softenNewRequired(prev: EntityIR | null, next: EntityIR, fill: Record<string, unknown>): EntityIR {
+  if (!prev) return next;
+  const prevIds = new Set(Object.values(prev.fields).map((f) => f.id));
+  let out: EntityIR | null = null;
+  for (const [name, node] of Object.entries(next.fields)) {
+    if (node.kind !== "column" && node.kind !== "reference") continue;
+    const isNew = !node.id || !prevIds.has(node.id);
+    const requiredNoDefault = (node.notNull ?? false) && (node.kind !== "column" || node.default === undefined);
+    if (isNew && requiredNoDefault && fill[name] !== undefined) {
+      out ??= { ...next, fields: { ...next.fields } };
+      out.fields[name] = { ...node, notNull: false };
+    }
+  }
+  return out ?? next;
 }
 
 async function count(sql: Sql, table: string, where?: string): Promise<number> {

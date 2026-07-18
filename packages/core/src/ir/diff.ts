@@ -182,6 +182,25 @@ function diffNode(
         title: `Change the reference ${nextName}`,
         detail: "Changing a reference's target or cardinality isn't supported yet.",
       });
+      return;
+    }
+    // N:N vive numa join table (sem coluna própria) — notNull só existe no N:1,
+    // cuja coluna física é `<campo>_id`. Mesmo ciclo de vida do diffColumn.
+    if (prevNode.cardinality === "one") {
+      const wasReq = prevNode.notNull ?? false;
+      const isReq = nextNode.notNull ?? false;
+      if (!wasReq && isReq) {
+        changes.push({
+          risk: "needsValue",
+          op: "makeRequired",
+          path,
+          title: `Make ${nextName} required`,
+          detail: "Empty records need a value.",
+          fillType: "text", // o fill é o id do alvo
+        });
+      } else if (wasReq && !isReq) {
+        changes.push({ risk: "auto", op: "dropRequired", path, title: `Make ${nextName} optional`, detail: "" });
+      }
     }
   }
 }
@@ -255,6 +274,20 @@ function added(node: FieldIR, path: string): FieldChange[] {
         title: `Add required field ${path}`,
         detail: "Existing records need a value.",
         fillType: node.type,
+      },
+    ];
+  }
+  // Reference N:1 required: a coluna FK (`<campo>_id`) não pode nascer NOT NULL sobre
+  // linhas existentes sem backfill — mesmo fluxo do campo escalar (fill = id do alvo).
+  if (node.kind === "reference" && node.cardinality === "one" && (node.notNull ?? false)) {
+    return [
+      {
+        risk: "needsValue",
+        op: "addField",
+        path,
+        title: `Add required reference ${path}`,
+        detail: "Existing records need a value.",
+        fillType: "text",
       },
     ];
   }

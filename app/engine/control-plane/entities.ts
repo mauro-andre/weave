@@ -1,7 +1,7 @@
 import { db } from "./db.js";
 import { validateIR, normalizeEntityIR, ensureFieldIds, resolveMirrors, fromIR, tableize, diffEntityIR, type EntityDiff, type EntityIR } from "@mauroandre/weave-core";
 import { collectTables } from "../ddl/emit.js";
-import { probePlan, applyMigration } from "./migrate.js";
+import { probePlan, applyMigration, softenNewRequired } from "./migrate.js";
 import { setPending, clearPending, type PendingEntry } from "./pending.js";
 
 /** Lista as plantas (IR) guardadas no metastore. */
@@ -93,11 +93,14 @@ export async function applyEntity(input: unknown, opts: ApplyOptions = {}): Prom
     plan.changes.some((c) => c.risk === "needsValue" && fill[c.path] === undefined);
   if (stuck) return { status: "needsReview", name: next.name, plan };
 
-  // Conjunto do engine = todas as entidades, com `next` no lugar (ou somada).
+  // Conjunto do engine = todas as entidades, com `next` no lugar (ou somada). Campos
+  // novos required com fill entram NULLABLE no aditivo (soften) — o backfill e o
+  // SET NOT NULL saem no estágio 3 da migração; o metastore grava o IR real.
+  const additive = softenNewRequired(previous, next, fill);
   const all = await listEntities();
   const merged = all.some((e) => e.name === next.name)
-    ? all.map((e) => (e.name === next.name ? next : e))
-    : [...all, next];
+    ? all.map((e) => (e.name === next.name ? additive : e))
+    : [...all, additive];
   const byName = new Map(merged.map((ir) => [ir.name, ir] as const));
   const entities = fromIR(merged.map((ir) => resolveMirrors(ir, byName)));
 

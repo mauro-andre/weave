@@ -31,7 +31,7 @@ describe("entidades — criar e materializar", () => {
         await setup(); // garante weave_users (+ master) e weave_entities
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps, refdrop, refdrop_target, refdropn__tags, refdropn, refdrop_tag, zzprobeb, zzprobeco, zzprobedata, zzprobedef, zzproberen, zzprobefill, zzprobeuq CASCADE`;
+        await sql`DROP TABLE IF EXISTS products__variants, products, produtos_especiais, pedido__itens, pedido, produto, tarefa, conta__enderecos, conta, cliente, ra, rb, rc, rd, re, rf, thing2__order, thing2, cuq, cureg, custack, delme, delme__items, backup_storages, db_presets__presets, db_presets, stacks, apps, refdrop, refdrop_target, refdropn__tags, refdropn, refdrop_tag, zzprobeb, zzprobeco, zzprobedata, zzprobedef, zzproberen, zzprobefill, zzprobeuq, zzprobeh, zzprobesc, zzprobereq, zzprobereq2, zzprobert CASCADE`;
         await sql`DELETE FROM weave_entities`;
       },
       getSessionCookie: async ({ user }) => {
@@ -865,6 +865,151 @@ describe("entidades — criar e materializar", () => {
       expect(await indexExists("zzprobefill_slug_code_key")).toBe(true);
       const [row] = await sql<{ code: string }[]>`SELECT code FROM zzprobefill WHERE slug = 'x'`;
       expect(row!.code).toBe("N/A"); // backfill aplicado
+    });
+  });
+
+  describe("reference notNull — ciclo de vida (addField + makeRequired)", () => {
+    const saveIR = (ir: object, extra: object = {}) =>
+      app.as({ user: master }).action(action_saveEntity, { body: { ir, ...extra } });
+    const sqlH = async () => (await import("../app/engine/control-plane/db.js")).db();
+    const idOf = async (ent: string, field: string) => {
+      const { getEntity } = await import("../app/engine/control-plane/entities.js");
+      return (await getEntity(ent))!.fields[field]?.id;
+    };
+    const isNullable = async (table: string, col: string) => {
+      const sql = await sqlH();
+      const [r] = await sql<{ is_nullable: string }[]>`
+        SELECT is_nullable FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ${table} AND column_name = ${col}`;
+      return r?.is_nullable === "YES";
+    };
+
+    it("addField de reference notNull em tabela com dados pede fill (🟡), não quebra", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobert", fields: { name: { kind: "column", type: "text", notNull: true } } });
+      await saveIR({ irVersion: 1, name: "zzprobeh", fields: { slug: { kind: "column", type: "text", notNull: true } } });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobeh (slug) VALUES ('d1')`;
+
+      const withCompany = async () => ({
+        irVersion: 1,
+        name: "zzprobeh",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobeh", "slug"), type: "text", notNull: true },
+          company: { kind: "reference", target: "zzprobert", cardinality: "one", notNull: true },
+        },
+      });
+      // sem fill: fica retido pedindo valor (não aplica, não estoura 400)
+      const stuck = await saveIR(await withCompany());
+      const sj = await stuck.json();
+      expect(sj.status).toBe("needsReview");
+      expect(sj.plan.changes.some((c: { op: string; risk: string }) => c.op === "addField" && c.risk === "needsValue")).toBe(true);
+
+      // com fill: backfill uniforme + coluna NOT NULL + FK
+      const [co] = await sql<{ id: string }[]>`INSERT INTO zzprobert (name) VALUES ('acme') RETURNING id`;
+      const ok = await saveIR(await withCompany(), { fill: { company: co!.id } });
+      expect((await ok.json()).status).toBe("applied");
+      expect(await isNullable("zzprobeh", "company_id")).toBe(false);
+      const [row] = await sql<{ company_id: string }[]>`SELECT company_id FROM zzprobeh WHERE slug = 'd1'`;
+      expect(row!.company_id).toBe(co!.id); // backfill aplicado
+      await expect(sql`INSERT INTO zzprobeh (slug) VALUES ('d2')`).rejects.toThrow(); // NOT NULL enforçado
+      await expect(
+        sql`INSERT INTO zzprobeh (slug, company_id) VALUES ('d2', '00000000-0000-0000-0000-000000000000')`,
+      ).rejects.toThrow(); // FK enforçada
+    });
+
+    it("addField de coluna escalar notNull em tabela com dados aplica o fill (paridade)", async () => {
+      await saveIR({ irVersion: 1, name: "zzprobesc", fields: { slug: { kind: "column", type: "text", notNull: true } } });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobesc (slug) VALUES ('s1')`;
+
+      const res = await saveIR(
+        {
+          irVersion: 1,
+          name: "zzprobesc",
+          fields: {
+            slug: { kind: "column", id: await idOf("zzprobesc", "slug"), type: "text", notNull: true },
+            code: { kind: "column", type: "text", notNull: true },
+          },
+        },
+        { fill: { code: "N/A" } },
+      );
+      expect((await res.json()).status).toBe("applied");
+      expect(await isNullable("zzprobesc", "code")).toBe(false);
+      const [row] = await sql<{ code: string }[]>`SELECT code FROM zzprobesc WHERE slug = 's1'`;
+      expect(row!.code).toBe("N/A");
+    });
+
+    it("nullable → notNull em reference: sonda NULLs, pede fill e aplica SET NOT NULL", async () => {
+      await saveIR({
+        irVersion: 1,
+        name: "zzprobereq",
+        fields: {
+          slug: { kind: "column", type: "text", notNull: true },
+          company: { kind: "reference", target: "zzprobert", cardinality: "one" },
+        },
+      });
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobereq (slug) VALUES ('r1')`; // company NULL
+
+      const required = async () => ({
+        irVersion: 1,
+        name: "zzprobereq",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobereq", "slug"), type: "text", notNull: true },
+          company: { kind: "reference", id: await idOf("zzprobereq", "company"), target: "zzprobert", cardinality: "one", notNull: true },
+        },
+      });
+      const stuck = await saveIR(await required());
+      const sj = await stuck.json();
+      expect(sj.status).toBe("needsReview"); // 🟡 — e não 🟢 silencioso
+      expect(sj.plan.changes.some((c: { op: string; risk: string }) => c.op === "makeRequired" && c.risk === "needsValue")).toBe(true);
+
+      const [co] = await sql<{ id: string }[]>`SELECT id FROM zzprobert LIMIT 1`;
+      const ok = await saveIR(await required(), { fill: { company: co!.id } });
+      expect((await ok.json()).status).toBe("applied");
+      expect(await isNullable("zzprobereq", "company_id")).toBe(false); // SET NOT NULL aplicado de verdade
+      await expect(sql`INSERT INTO zzprobereq (slug) VALUES ('r2')`).rejects.toThrow();
+    });
+
+    it("nullable → notNull em reference sem NULLs vira 🟢 (sonda) e aplica", async () => {
+      await saveIR({
+        irVersion: 1,
+        name: "zzprobereq2",
+        fields: {
+          slug: { kind: "column", type: "text", notNull: true },
+          company: { kind: "reference", target: "zzprobert", cardinality: "one" },
+        },
+      });
+      const sql = await sqlH();
+      const [co] = await sql<{ id: string }[]>`SELECT id FROM zzprobert LIMIT 1`;
+      await sql`INSERT INTO zzprobereq2 (slug, company_id) VALUES ('q1', ${co!.id})`; // sem NULLs
+
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzprobereq2",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobereq2", "slug"), type: "text", notNull: true },
+          company: { kind: "reference", id: await idOf("zzprobereq2", "company"), target: "zzprobert", cardinality: "one", notNull: true },
+        },
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await isNullable("zzprobereq2", "company_id")).toBe(false);
+    });
+
+    it("notNull → nullable em reference aplica DROP NOT NULL", async () => {
+      // zzprobereq2 ficou required no teste anterior
+      const res = await saveIR({
+        irVersion: 1,
+        name: "zzprobereq2",
+        fields: {
+          slug: { kind: "column", id: await idOf("zzprobereq2", "slug"), type: "text", notNull: true },
+          company: { kind: "reference", id: await idOf("zzprobereq2", "company"), target: "zzprobert", cardinality: "one" },
+        },
+      });
+      expect((await res.json()).status).toBe("applied");
+      expect(await isNullable("zzprobereq2", "company_id")).toBe(true);
+      const sql = await sqlH();
+      await sql`INSERT INTO zzprobereq2 (slug) VALUES ('q2')`; // grava NULL sem erro
     });
   });
 
