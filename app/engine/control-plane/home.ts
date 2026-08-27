@@ -2,7 +2,7 @@ import { db } from "./db.js";
 import { listEntities } from "./entities.js";
 import { listApiKeys } from "./api-keys.js";
 import { listScopes } from "./scopes.js";
-import { fromIR, resolveMirrors, camelize } from "@mauroandre/weave-core";
+import { fromIR, resolveMirrors, camelize, qi } from "@mauroandre/weave-core";
 import { collectTables } from "../ddl/emit.js";
 
 // Dados do dashboard da Home: o overview de objetos (entities + contagens) e a
@@ -102,7 +102,7 @@ export async function homeStats(): Promise<HomeStats> {
     // Contagem de objetos (tabela raiz; particionada varre as partições). Resiliente.
     let objects = 0;
     try {
-      const r = await one(sql, `SELECT count(*)::bigint AS n FROM ${ir.name}`);
+      const r = await one(sql, `SELECT count(*)::bigint AS n FROM ${qi(ir.name)}`);
       objects = Number(r?.n ?? 0);
     } catch {
       objects = 0;

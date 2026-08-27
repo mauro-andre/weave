@@ -1,7 +1,9 @@
-// Palavras reservadas do PostgreSQL que não podem ser usadas como identificador
-// "pelado" (sem aspas). Como o Weave nunca escreve/mostra SQL e não faz quote de
-// identificadores, esses nomes são bloqueados na validação com uma mensagem
-// amigável — em vez de deixar estourar um erro de sintaxe SQL cru no usuário.
+// Palavras mais reservadas do PostgreSQL, bloqueadas na validação com mensagem
+// amigável. HOJE toda a SQL do Weave cita identificadores (`qi` — um campo `join`
+// funciona sem renomear), então esta lista não é mais a barreira técnica: é defesa
+// em profundidade contra os nomes mais confusos de se ver em mensagens, GUI e
+// storage (`where`, `order`, `select`…). Palavras fora dela (ex.: `join`, `left`)
+// seguem funcionando graças ao quoting.
 const RESERVED: ReadonlySet<string> = new Set([
   "all", "analyse", "analyze", "and", "any", "array", "as", "asc", "asymmetric",
   "both", "case", "cast", "check", "collate", "column", "constraint", "create",

@@ -110,8 +110,8 @@ describe("emitChanges", () => {
     );
     const { statements } = emitChanges(cs);
     expect(statements).toEqual([
-      "ALTER TABLE users ADD COLUMN age integer;",
-      "CREATE INDEX users_age_idx ON users (age);",
+      'ALTER TABLE "users" ADD COLUMN "age" integer;',
+      'CREATE INDEX "users_age_idx" ON "users" ("age");',
     ]);
   });
 });

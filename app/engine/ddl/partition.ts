@@ -8,6 +8,8 @@
  * telemetria.
  */
 
+import { qi } from "@mauroandre/weave-core";
+
 /** "1d"→86400 · "30d"→2592000 · "5min"→300 · "30s"→30 · "1h"→3600. Serve interval E retention. */
 export function parseDuration(spec: string): number {
   const m = /^(\d+)(s|min|h|d)$/.exec(spec.trim());
@@ -50,12 +52,12 @@ export function renderCreatePartition(
 ): string {
   const start = new Date(startEpochSec * 1000).toISOString();
   const end = new Date((startEpochSec + intervalSec) * 1000).toISOString();
-  return `CREATE TABLE IF NOT EXISTS ${name} PARTITION OF ${parent} FOR VALUES FROM ('${start}') TO ('${end}');`;
+  return `CREATE TABLE IF NOT EXISTS ${qi(name)} PARTITION OF ${qi(parent)} FOR VALUES FROM ('${start}') TO ('${end}');`;
 }
 
 /** `DROP TABLE IF EXISTS <partição>` — o drop de uma partição inteira (não `DELETE`). */
 export function renderDropPartition(name: string): string {
-  return `DROP TABLE IF EXISTS ${name};`;
+  return `DROP TABLE IF EXISTS ${qi(name)};`;
 }
 
 /**

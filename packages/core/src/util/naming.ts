@@ -4,6 +4,16 @@
 
 import { lastSegment } from "./inflect.js";
 
+/**
+ * Cita um identificador para SQL (`join` → `"join"`): aspas duplas + escape de
+ * aspas internas. Toda a SQL emitida pelo Weave cita identificadores — assim um
+ * campo chamado `join`/`left`/etc. funciona sem renomear. Para os nomes snake_case
+ * usuais é um no-op semântico (`"foo"` ≡ `foo`).
+ */
+export function qi(ident: string): string {
+  return `"${ident.replace(/"/g, '""')}"`;
+}
+
 /** Limite de identificador do Postgres (NAMEDATALEN-1). Acima disso, o PG trunca em silêncio. */
 const MAX_IDENT = 63;
 

@@ -26,7 +26,10 @@ function baseExpr(node: FieldIR, ctx: GenCtx, self: string): string {
     if (node.array) {
       ctx.builders.add("array");
       let s = `array(${node.type}())`;
-      if (node.notNull === false) s += ".nullable()"; // arrays são notNull por padrão
+      // IR canônico omite optionals falsos: array default sai { array, notNull,
+      // default: [] }; array NULLABLE sai pelado ({ array }) — e é o que o engine
+      // materializa. Sem o `.nullable()` aqui o gen corromperia o schema no re-push.
+      if (!node.notNull) s += ".nullable()";
       if (node.unique) s += ".unique()";
       if (node.index) s += ".index()";
       return s;

@@ -11,7 +11,7 @@
  * drop+add in a diff, so they surface as drift too.
  */
 
-import { byName } from "@mauroandre/weave-core";
+import { byName, qi } from "@mauroandre/weave-core";
 import {
   renderColumnDef,
   renderCreateTable,
@@ -144,7 +144,7 @@ export function emitChanges(cs: ChangeSet): { statements: string[]; warnings: st
     statements.push(renderCreateTable(spec), ...renderIndexes(spec), ...renderComposites(spec));
   }
   for (const { table, column } of cs.addColumns) {
-    statements.push(`ALTER TABLE ${table} ADD COLUMN ${renderColumnDef(column)};`);
+    statements.push(`ALTER TABLE ${qi(table)} ADD COLUMN ${renderColumnDef(column)};`);
   }
   for (const { table, index } of cs.addIndexes) {
     statements.push(renderIndexStmt(table, index));

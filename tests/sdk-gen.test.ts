@@ -18,7 +18,9 @@ describe("SDK codegen — irToSource", () => {
     fields: {
       name: { kind: "column", id: "fid-name", type: "text", notNull: true },
       price: { kind: "column", id: "fid-price", type: "int4" },
-      tags: { kind: "column", id: "fid-tags", type: "text", array: true },
+      // IR canônico do `array(text())` default (toIR emite notNull+default);
+      // o pelado `{ array: true }` é um array NULLABLE (ver teste abaixo).
+      tags: { kind: "column", id: "fid-tags", type: "text", array: true, notNull: true, default: [] },
       category: { kind: "reference", id: "fid-cat", target: "category", cardinality: "one" },
       items: {
         kind: "owned",
@@ -48,6 +50,18 @@ describe("SDK codegen — irToSource", () => {
     expect(src).toContain('tags: array(text()).$id("fid-tags"),');
     expect(src).toContain('category: reference(category).$id("fid-cat"),');
     expect(src).toContain('owned(array({ qty: int4().notNull().$id("fid-qty") })).$id("fid-items")');
+  });
+
+  it("scalar array nullable: IR pelado `{ array: true }` → `.nullable()` (round-trip fiel)", () => {
+    // toIR(array(int4()).nullable()) = { array: true } — sem notNull, sem default
+    // (optionals falsos omitidos). O engine já o materializa NULLABLE; o gen
+    // precisa devolver o `.nullable()` ou um push do output corromperia o schema.
+    const src = irToSource({
+      irVersion: 1,
+      name: "x",
+      fields: { ghi: { kind: "column", type: "int4", array: true } },
+    } as never);
+    expect(src).toContain("ghi: array(int4()).nullable(),");
   });
 
   it("mirror: gera owned(array(mirror(Base, { extras }))) + importa a base + sem aviso", () => {
@@ -206,8 +220,8 @@ describe("SDK codegen — genProject / weave gen", () => {
         await setup();
         const { db } = await import("../app/engine/control-plane/db.js");
         const sql = db();
-        await sql`DROP TABLE IF EXISTS genprod, gencat CASCADE`;
-        await sql`DELETE FROM weave_entities WHERE name IN ('genprod','gencat')`;
+        await sql`DROP TABLE IF EXISTS genprod, gencat, genrad CASCADE`;
+        await sql`DELETE FROM weave_entities WHERE name IN ('genprod','gencat','genrad')`;
         await sql`DELETE FROM weave_api_keys`;
         const { applyEntity } = await import("../app/engine/control-plane/entities.js");
         await applyEntity({ irVersion: 1, name: "gencat", fields: { name: { kind: "column", type: "text", notNull: true } } });
@@ -218,6 +232,12 @@ describe("SDK codegen — genProject / weave gen", () => {
             name: { kind: "column", type: "text", notNull: true },
             category: { kind: "reference", target: "gencat", cardinality: "one" },
           },
+        });
+        // Array NULLABLE: IR canônico do `array(int4()).nullable()` (sem notNull/default).
+        await applyEntity({
+          irVersion: 1,
+          name: "genrad",
+          fields: { ghi: { kind: "column", type: "int4", array: true } },
         });
       },
       getSessionCookie: async ({ user }) => {
@@ -280,6 +300,23 @@ describe("SDK codegen — genProject / weave gen", () => {
     // projeto COM scope (genstaff) → exporta scopedWeave (base compartilhada) + o import.
     expect(files["index.ts"]).toContain('import { createClient, createScopedClient } from "@mauroandre/weave-sdk";');
     expect(files["index.ts"]).toContain("export const scopedWeave = createScopedClient(weave);");
+  });
+
+  it("genProject: array nullable do servidor volta com .nullable() (push → gen round-trip)", async () => {
+    // Prova do estado no Postgres: o push honrou o nullable (coluna sem NOT NULL).
+    const { db } = await import("../app/engine/control-plane/db.js");
+    const sql = db();
+    const [col] = await sql<{ is_nullable: string }[]>`
+      SELECT is_nullable FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'genrad' AND column_name = 'ghi'`;
+    expect(col!.is_nullable).toBe("YES");
+
+    // O gen precisa devolver o `.nullable()` — senão commitar o output e dar push
+    // num banco virgem nasceria NOT NULL DEFAULT '{}' (corrupção silenciosa).
+    const { files } = await genProject({ url: "http://localhost", key, fetch: (r) => app.hono.fetch(r) });
+    expect(files["entities/genrad.ts"]).toContain("ghi: array(int4()).nullable()");
+    // … e o output do gen é idempotente: toIR do source gerado reproduz o mesmo IR.
+    expect(files["entities/genrad.ts"]).not.toContain(".default(");
   });
 
   it("runCli gen: limpa as pastas e escreve a árvore na pasta do config", async () => {

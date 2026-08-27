@@ -6,7 +6,7 @@
 import type postgres from "postgres";
 import { weave } from "../index.js";
 import { emitChanges } from "../ddl/diff.js";
-import { camelToSnake, ownedChildTable, joinTableName, indexName, compositeIndexName, slug, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
+import { camelToSnake, ownedChildTable, joinTableName, indexName, compositeIndexName, slug, qi, type Entity, type ShapeRecord, type EntityDiff, type FieldChange, type ColumnIR, type EntityIR } from "@mauroandre/weave-core";
 
 type Sql = postgres.Sql;
 type Tx = postgres.TransactionSql;
@@ -46,7 +46,7 @@ async function probeChange(
   const col = prevColumnName(prev, next, c.path) ?? camelToSnake(c.path);
 
   if (c.op === "addUnique") {
-    return (await hasDuplicates(sql, table, col)) ? c : { ...c, risk: "auto" };
+    return (await hasDuplicates(sql, table, qi(col))) ? c : { ...c, risk: "auto" };
   }
   if (c.op === "addCompositeUnique") {
     const probeCols: string[] = [];
@@ -57,7 +57,7 @@ async function probeChange(
         // do backfill — sonda o valor que a coluna terá DEPOIS da migração.
         const mr = all.find((ch) => ch.op === "makeRequired" && ch.path === field);
         const f = mr ? fill[field] : undefined;
-        probeCols.push(f !== undefined ? `COALESCE(${existing}, ${literal(f)})` : existing);
+        probeCols.push(f !== undefined ? `COALESCE(${qi(existing)}, ${literal(f)})` : qi(existing));
         continue;
       }
       // Campo NOVO neste plano: o valor que ele terá nas linhas existentes decide.
@@ -75,7 +75,7 @@ async function probeChange(
     return (await hasDuplicatesComposite(sql, table, probeCols)) ? c : { ...c, risk: "auto" };
   }
   if (c.op === "makeRequired") {
-    if ((await count(sql, table, `${col} IS NULL`)) === 0) return { ...c, risk: "auto" };
+    if ((await count(sql, table, `${qi(col)} IS NULL`)) === 0) return { ...c, risk: "auto" };
     const node = next.fields[c.path];
     if (node?.kind === "column" && node.unique) {
       return blocked(c, "Each empty record needs its own value (unique field).");
@@ -107,7 +107,7 @@ export async function applyMigration(tx: Tx, args: MigrationArgs): Promise<void>
   for (const c of args.changes) {
     if (c.op === "renameField" && c.from) {
       await tx.unsafe(
-        `ALTER TABLE ${slug(next.name)} RENAME COLUMN ${camelToSnake(c.from)} TO ${camelToSnake(c.path)}`,
+        `ALTER TABLE ${qi(slug(next.name))} RENAME COLUMN ${qi(camelToSnake(c.from))} TO ${qi(camelToSnake(c.path))}`,
       );
     }
   }
@@ -132,52 +132,52 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
       // aqui acontece o backfill uniforme e só depois o SET NOT NULL.
       const v = fill[c.path];
       if (v === undefined) return;
-      await tx.unsafe(`UPDATE ${table} SET ${col} = ${literal(v)} WHERE ${col} IS NULL`);
-      await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} SET NOT NULL`);
+      await tx.unsafe(`UPDATE ${qi(table)} SET ${qi(col)} = ${literal(v)} WHERE ${qi(col)} IS NULL`);
+      await tx.unsafe(`ALTER TABLE ${qi(table)} ALTER COLUMN ${qi(col)} SET NOT NULL`);
       return;
     }
     case "removeField": {
       const node = prev.fields[c.path];
       if (node?.kind === "owned") {
         const child = ownedChildTable(table, col, node.table);
-        await tx.unsafe(`DROP TABLE IF EXISTS ${child} CASCADE`);
+        await tx.unsafe(`DROP TABLE IF EXISTS ${qi(child)} CASCADE`);
       } else if (node?.kind === "reference" && node.cardinality === "many") {
         // N:N — a ligação é uma TABELA de junção, não uma coluna no pai.
-        await tx.unsafe(`DROP TABLE IF EXISTS ${joinTableName(table, col)} CASCADE`);
+        await tx.unsafe(`DROP TABLE IF EXISTS ${qi(joinTableName(table, col))} CASCADE`);
       } else if (node?.kind === "reference") {
         // N:1 — a coluna FK é `<campo>_id`, não `<campo>`.
-        await tx.unsafe(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${col}_id`);
+        await tx.unsafe(`ALTER TABLE ${qi(table)} DROP COLUMN IF EXISTS ${qi(`${col}_id`)}`);
       } else {
-        await tx.unsafe(`ALTER TABLE ${table} DROP COLUMN IF EXISTS ${col}`);
+        await tx.unsafe(`ALTER TABLE ${qi(table)} DROP COLUMN IF EXISTS ${qi(col)}`);
       }
       return;
     }
     case "makeRequired": {
       const v = fill[c.path];
       if (v !== undefined) {
-        await tx.unsafe(`UPDATE ${table} SET ${col} = ${literal(v)} WHERE ${col} IS NULL`);
+        await tx.unsafe(`UPDATE ${qi(table)} SET ${qi(col)} = ${literal(v)} WHERE ${qi(col)} IS NULL`);
       }
-      await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} SET NOT NULL`);
+      await tx.unsafe(`ALTER TABLE ${qi(table)} ALTER COLUMN ${qi(col)} SET NOT NULL`);
       return;
     }
     case "dropRequired":
-      await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} DROP NOT NULL`);
+      await tx.unsafe(`ALTER TABLE ${qi(table)} ALTER COLUMN ${qi(col)} DROP NOT NULL`);
       return;
     case "addUnique":
-      await tx.unsafe(`ALTER TABLE ${table} ADD CONSTRAINT ${table}_${col}_key UNIQUE (${col})`);
+      await tx.unsafe(`ALTER TABLE ${qi(table)} ADD CONSTRAINT ${qi(`${table}_${col}_key`)} UNIQUE (${qi(col)})`);
       return;
     case "dropUnique":
-      await tx.unsafe(`ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS ${table}_${col}_key`);
+      await tx.unsafe(`ALTER TABLE ${qi(table)} DROP CONSTRAINT IF EXISTS ${qi(`${table}_${col}_key`)}`);
       return;
     case "dropIndex":
-      await tx.unsafe(`DROP INDEX IF EXISTS ${indexName(table, col)}`);
+      await tx.unsafe(`DROP INDEX IF EXISTS ${qi(indexName(table, col))}`);
       return;
     case "addCompositeUnique":
     case "addCompositeIndex": {
       const uq = c.op === "addCompositeUnique";
       const cols = resolveCompositeColumns(next, c.columns ?? []);
       const name = compositeIndexName(table, cols, uq);
-      await tx.unsafe(`CREATE ${uq ? "UNIQUE " : ""}INDEX ${name} ON ${table} (${cols.join(", ")})`);
+      await tx.unsafe(`CREATE ${uq ? "UNIQUE " : ""}INDEX ${qi(name)} ON ${qi(table)} (${cols.map(qi).join(", ")})`);
       return;
     }
     case "dropCompositeUnique":
@@ -185,15 +185,15 @@ async function applyAlter(tx: Tx, args: MigrationArgs, c: FieldChange): Promise<
       const uq = c.op === "dropCompositeUnique";
       // O grupo removido vive no IR ANTERIOR — resolve as colunas por lá.
       const cols = resolveCompositeColumns(prev, c.columns ?? []);
-      await tx.unsafe(`DROP INDEX IF EXISTS ${compositeIndexName(table, cols, uq)}`);
+      await tx.unsafe(`DROP INDEX IF EXISTS ${qi(compositeIndexName(table, cols, uq))}`);
       return;
     }
     case "changeDefault": {
       const node = next.fields[c.path] as ColumnIR | undefined;
       if (!node || node.default === undefined) {
-        await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} DROP DEFAULT`);
+        await tx.unsafe(`ALTER TABLE ${qi(table)} ALTER COLUMN ${qi(col)} DROP DEFAULT`);
       } else {
-        await tx.unsafe(`ALTER TABLE ${table} ALTER COLUMN ${col} SET DEFAULT ${literal(node.default)}`);
+        await tx.unsafe(`ALTER TABLE ${qi(table)} ALTER COLUMN ${qi(col)} SET DEFAULT ${literal(node.default)}`);
       }
       return;
     }
@@ -251,14 +251,14 @@ export function softenNewRequired(prev: EntityIR | null, next: EntityIR, fill: R
 
 async function count(sql: Sql, table: string, where?: string): Promise<number> {
   const rows = (await sql.unsafe(
-    `SELECT count(*)::int AS n FROM ${table}${where ? ` WHERE ${where}` : ""}`,
+    `SELECT count(*)::int AS n FROM ${qi(table)}${where ? ` WHERE ${where}` : ""}`,
   )) as unknown as { n: number }[];
   return rows[0]?.n ?? 0;
 }
 
 async function hasDuplicates(sql: Sql, table: string, col: string): Promise<boolean> {
   const rows = (await sql.unsafe(
-    `SELECT 1 FROM ${table} WHERE ${col} IS NOT NULL GROUP BY ${col} HAVING count(*) > 1 LIMIT 1`,
+    `SELECT 1 FROM ${qi(table)} WHERE ${col} IS NOT NULL GROUP BY ${col} HAVING count(*) > 1 LIMIT 1`,
   )) as unknown as unknown[];
   return rows.length > 0;
 }
@@ -275,10 +275,11 @@ function resolveCompositeColumns(ir: EntityIR, group: string[]): string[] {
 
 // Duplicatas que violariam um UNIQUE composto. Linhas com QUALQUER coluna NULL não
 // conflitam (semântica do Postgres: NULL é distinto), então só contamos as completas.
+// `cols` chegam como expressões SQL PRONTAS (identificador citado ou COALESCE).
 async function hasDuplicatesComposite(sql: Sql, table: string, cols: string[]): Promise<boolean> {
   const notNull = cols.map((c) => `${c} IS NOT NULL`).join(" AND ");
   const rows = (await sql.unsafe(
-    `SELECT 1 FROM ${table} WHERE ${notNull} GROUP BY ${cols.join(", ")} HAVING count(*) > 1 LIMIT 1`,
+    `SELECT 1 FROM ${qi(table)} WHERE ${notNull} GROUP BY ${cols.join(", ")} HAVING count(*) > 1 LIMIT 1`,
   )) as unknown as unknown[];
   return rows.length > 0;
 }

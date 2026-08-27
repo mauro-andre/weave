@@ -44,18 +44,18 @@ describe("where com campo camelCase → coluna snake_case no SQL", () => {
   it("{ firstName: 'Ada' } (shorthand) filtra pela coluna first_name", () => {
     const { text: sql, params } = compileFind(person, { where: { firstName: "Ada" } });
     const line = sql.split("\n").find((l) => l.startsWith("WHERE")) ?? "";
-    expect(line).toBe("WHERE person.first_name = $1");
+    expect(line).toBe('WHERE "person"."first_name" = $1');
     expect(params).toEqual(["Ada"]);
   });
 
   it("{ phoneNumber: { ilike } } → phone_number ILIKE", () => {
     const { text: sql } = compileFind(person, { where: { phoneNumber: { ilike: "%55%" } } });
-    expect(sql).toContain("person.phone_number ILIKE");
+    expect(sql).toContain('"person"."phone_number" ILIKE');
   });
 
   it("orderBy por campo camelCase também vai pra coluna snake", () => {
     const { text: sql } = compileFind(person, { orderBy: { firstName: "desc" } });
-    expect(sql).toContain("ORDER BY person.first_name DESC");
+    expect(sql).toContain('ORDER BY "person"."first_name" DESC');
   });
 });
 

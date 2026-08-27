@@ -38,14 +38,14 @@ const sqlOf = (input: Parameters<typeof compileAggregate<typeof req>>[1]) => com
 describe("compileAggregate — count/sum + groupBy + orderBy", () => {
   it("count + groupBy campo + orderBy por alias", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { total: count() }, orderBy: { total: "desc" } });
-    expect(sql).toContain(`SELECT appreq.route AS "route", (count(*))::float8 AS "total"`);
-    expect(sql).toContain("GROUP BY appreq.route");
+    expect(sql).toContain(`SELECT "appreq"."route" AS "route", (count(*))::float8 AS "total"`);
+    expect(sql).toContain('GROUP BY "appreq"."route"');
     expect(sql).toContain(`ORDER BY "total" DESC`);
   });
 
   it("sum de coluna camelCase → coluna snake", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { dur: sum("durationMs") } });
-    expect(sql).toContain(`(sum(appreq.duration_ms))::float8 AS "dur"`);
+    expect(sql).toContain(`(sum("appreq"."duration_ms"))::float8 AS "dur"`);
   });
 
   it("timeBucket 5min (epoch-floor UTC) — a query de aceitação", () => {
@@ -55,7 +55,7 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
       select: { requests: count() },
       orderBy: { ts: "asc" },
     });
-    const bucket = `to_timestamp(floor(extract(epoch from appreq.ts) / 300) * 300)`;
+    const bucket = `to_timestamp(floor(extract(epoch from "appreq"."ts") / 300) * 300)`;
     expect(sql).toContain(`${bucket} AS "ts"`);
     expect(sql).toContain(`GROUP BY ${bucket}`);
     expect(sql).toContain(`ORDER BY "ts" ASC`);
@@ -71,12 +71,12 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
 
   it("distinct → count(distinct col)", () => {
     const { text: sql } = sqlOf({ groupBy: ["route"], select: { hosts: distinct("host") } });
-    expect(sql).toContain(`(count(distinct appreq.host))::float8 AS "hosts"`);
+    expect(sql).toContain(`(count(distinct "appreq"."host"))::float8 AS "hosts"`);
   });
 
   it("percentile → percentile_cont WITHIN GROUP, p bindado", () => {
     const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { p95: percentile("durationMs", 0.95) } });
-    expect(sql).toMatch(/\(percentile_cont\(\$1\) WITHIN GROUP \(ORDER BY appreq\.duration_ms\)\)::float8 AS "p95"/);
+    expect(sql).toMatch(/\(percentile_cont\(\$1\) WITHIN GROUP \(ORDER BY "appreq"\."duration_ms"\)\)::float8 AS "p95"/);
     expect(params[0]).toBe(0.95);
   });
 
@@ -93,13 +93,13 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
       },
     });
     expect(sql).toContain(`(count(*))::float8 AS "total"`);
-    expect(sql).toMatch(/\(count\(\*\) FILTER \(WHERE appreq\.status >= \$1\)\)::float8 AS "errors"/);
+    expect(sql).toMatch(/\(count\(\*\) FILTER \(WHERE "appreq"\."status" >= \$1\)\)::float8 AS "errors"/);
     expect(params[0]).toBe(500);
   });
 
   it("histogram → N fronteiras viram N+1 baldes (< b0 · [b0,b1) · >= b1), bindadas", () => {
     const { text: sql, params } = sqlOf({ groupBy: ["route"], select: { bars: histogram("durationMs", [100, 300]) } });
-    const col = "appreq.duration_ms";
+    const col = `"appreq"."duration_ms"`;
     expect(sql).toContain(
       `array[count(*) FILTER (WHERE ${col} < $1), ` +
         `count(*) FILTER (WHERE ${col} >= $1 AND ${col} < $2), ` +
@@ -112,10 +112,10 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     const { text: sql, params } = sqlOf({
       select: { bars: histogram("durationMs", [100], { where: { status: 200 } }) },
     });
-    const col = "appreq.duration_ms";
+    const col = `"appreq"."duration_ms"`;
     expect(sql).toContain(
-      `array[count(*) FILTER (WHERE ${col} < $1 AND (appreq.status = $2)), ` +
-        `count(*) FILTER (WHERE ${col} >= $1 AND (appreq.status = $2))]`,
+      `array[count(*) FILTER (WHERE ${col} < $1 AND ("appreq"."status" = $2)), ` +
+        `count(*) FILTER (WHERE ${col} >= $1 AND ("appreq"."status" = $2))]`,
     );
     expect(params).toEqual([100, 200]);
   });
@@ -168,7 +168,7 @@ describe("compileAggregate — count/sum + groupBy + orderBy", () => {
     expect(params).toEqual([500, "h", 3]);
   });
 
-  const RATE = `((count(*) FILTER (WHERE appreq.status >= $1))::numeric / nullif((count(*)), 0))`;
+  const RATE = `((count(*) FILTER (WHERE "appreq"."status" >= $1))::numeric / nullif((count(*)), 0))`;
 
   it("expressão div('errors','total') → inlina os aliases + nullif + cast numeric", () => {
     const { text: sql, params } = sqlOf({
@@ -266,35 +266,35 @@ const aggpaths = defineEntity("aggpaths", {
     }),
   }),
 });
-const ANCHORS = "aggpaths__manager_result__career_anchor_analysis__anchors";
+const ANCHORS = '"aggpaths__manager_result__career_anchor_analysis__anchors"';
 const pathsOf = (input: Parameters<typeof compileAggregate<typeof aggpaths>>[1]) => compileAggregate(aggpaths, input);
 
 describe("compileAggregate — dot-paths (Pedido 2)", () => {
   it("groupBy por path reference→escalar → LEFT JOIN no alvo, agrupa pela coluna dele", () => {
     const { text: sql } = pathsOf({ groupBy: ["respondent.departmentSlug"], select: { n: count() } });
-    expect(sql).toMatch(/LEFT JOIN aggresp2 (\w+) ON \1\.id = aggpaths\.respondent_id/);
-    expect(sql).toMatch(/\w+\.department_slug AS "respondent\.departmentSlug"/);
-    expect(sql).toMatch(/GROUP BY \w+\.department_slug/);
+    expect(sql).toMatch(/LEFT JOIN "aggresp2" "(\w+)" ON "\1"."id" = "aggpaths"."respondent_id"/);
+    expect(sql).toMatch(/"_a\d+"\."department_slug" AS "respondent\.departmentSlug"/);
+    expect(sql).toMatch(/GROUP BY "_a\d+"\."department_slug"/);
   });
 
   it("avg por path owned-1:1 → LEFT JOIN na tabela filha, coluna snake", () => {
     const { text: sql } = pathsOf({ select: { fit: avg("managerResult.cargoFitFitScore") } });
-    expect(sql).toMatch(/LEFT JOIN aggpaths__manager_result (\w+) ON \1\.aggpaths_id = aggpaths\.id/);
-    expect(sql).toMatch(/avg\(\w+\.cargo_fit_fit_score\)/);
+    expect(sql).toMatch(/LEFT JOIN "aggpaths__manager_result" "(\w+)" ON "\1"."aggpaths_id" = "aggpaths"."id"/);
+    expect(sql).toMatch(/avg\("_a\d+"\."cargo_fit_fit_score"\)/);
   });
 
   it("groupBy por reference MULTI-HOP → JOINs encadeados, agrupa pela FK do alvo final", () => {
     const { text: sql } = pathsOf({ groupBy: ["respondent.jobPosition.department"], select: { n: count() } });
-    expect(sql).toContain("LEFT JOIN aggresp2 ");
-    expect(sql).toContain("LEFT JOIN aggjob ");
-    expect(sql).toMatch(/GROUP BY \w+\.department_id/); // folha é reference → FK
+    expect(sql).toContain('LEFT JOIN "aggresp2" ');
+    expect(sql).toContain('LEFT JOIN "aggjob" ');
+    expect(sql).toMatch(/GROUP BY "_a\d+"\."department_id"/); // folha é reference → FK
   });
 
   it("prefixo compartilhado: dois campos do mesmo owned reusam UM join", () => {
     const { text: sql } = pathsOf({
       select: { a: avg("managerResult.cargoFitFitScore"), b: sum("managerResult.cargoFitFitScore") },
     });
-    expect(sql.match(/JOIN aggpaths__manager_result /g)).toHaveLength(1); // dedup por prefixo
+    expect(sql.match(/JOIN "aggpaths__manager_result" /g)).toHaveLength(1); // dedup por prefixo
   });
 
   it("guard: agregar através de owned LIST sem unnest → erro", () => {
@@ -319,22 +319,22 @@ describe("compileAggregate — unnest owned-array (Pedido 1)", () => {
 
   it("a lista vira INNER JOIN (fan-out), os hops 1:1 intermediários são LEFT JOIN", () => {
     const { text: sql } = agg();
-    expect(sql).toContain(`\nJOIN ${ANCHORS} `); // fan-out: bare JOIN
+    expect(sql).toContain(`\nJOIN ${ANCHORS} `); // fan-out: INNER JOIN
     expect(sql).not.toContain(`LEFT JOIN ${ANCHORS} `); // não é LEFT
-    expect(sql).toContain("LEFT JOIN aggpaths__manager_result "); // 1:1 intermediário
+    expect(sql).toContain('LEFT JOIN "aggpaths__manager_result" '); // 1:1 intermediário
   });
 
   it("groupBy/avg/FILTER/first resolvem contra a coluna do ELEMENTO", () => {
     const { text: sql, params } = agg();
-    expect(sql).toMatch(/GROUP BY \w+\.name/);
-    expect(sql).toMatch(/avg\(\w+\.anchor_average\)/);
+    expect(sql).toMatch(/GROUP BY "_a\d+"\."name"/);
+    expect(sql).toMatch(/avg\("_a\d+"\."anchor_average"\)/);
     // band = count FILTER com condição DIRETA na coluna do elemento (field vs const), sem EXISTS
-    expect(sql).toMatch(/count\(\*\) FILTER \(WHERE \w+\.alignment = \$\d\)/);
+    expect(sql).toMatch(/count\(\*\) FILTER \(WHERE "_a\d+"\."alignment" = \$\d\)/);
     expect(sql).not.toContain("EXISTS");
     // first = representante determinístico por created_at do elemento
-    expect(sql).toMatch(/\(array_agg\(\w+\.manager_description ORDER BY \w+\.created_at\)\)\[1\]/);
+    expect(sql).toMatch(/\(array_agg\("_a\d+"\."manager_description" ORDER BY "_a\d+"\."created_at"\)\)\[1\]/);
     // where do pai continua no root (filtra os pais, não os elementos)
-    expect(sql).toMatch(/WHERE aggpaths\.is_finalized/);
+    expect(sql).toMatch(/WHERE "aggpaths"\."is_finalized"/);
     expect(params).toContain("high");
   });
 

@@ -51,12 +51,12 @@ describe("partition — nome e sufixo", () => {
 describe("partition — DDL nativa", () => {
   it("CREATE … IF NOT EXISTS PARTITION OF … FOR VALUES (idempotente)", () => {
     const sql = renderCreatePartition("app_request", "app_request_2026_07_02", jul2, DAY);
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS app_request_2026_07_02 PARTITION OF app_request");
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS "app_request_2026_07_02" PARTITION OF "app_request"');
     expect(sql).toContain("FROM ('2026-07-02T00:00:00.000Z') TO ('2026-07-03T00:00:00.000Z')");
   });
 
   it("DROP de partição inteira (não DELETE)", () => {
-    expect(renderDropPartition("app_request_2026_06_01")).toBe("DROP TABLE IF EXISTS app_request_2026_06_01;");
+    expect(renderDropPartition("app_request_2026_06_01")).toBe('DROP TABLE IF EXISTS "app_request_2026_06_01";');
   });
 
   it("upperBoundEpoch extrai o TO do relpartbound", () => {

@@ -17,7 +17,12 @@
  * Phase 3.
  */
 
-import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { type WhereInput, type OrderByInput, type AggregateInput, type Accumulator, type GroupExpr, type Expr, type ExprOperand, Column, type InferColumn, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, qi } from "@mauroandre/weave-core";
+
+// Ref completo tabela/alias + coluna, ambos citados (`"tabela"."coluna"`). Toda a
+// SQL emitida cita identificadores — um campo `join` funciona sem renomear. Alias
+// internos (`_rN`, `_aN`) também são citados: no-op semântico, um caminho só.
+const ref = (table: string, col: string): string => `${qi(table)}.${qi(col)}`;
 
 
 export interface FindOptions<E> {
@@ -67,7 +72,7 @@ function buildObject(
   select: SelectMap | undefined,
   uid: { n: number },
 ): string {
-  const parts: string[] = [`'id', ${table}.id`]; // id always present
+  const parts: string[] = [`'id', ${ref(table, "id")}`]; // id always present
   const wants = (key: string): boolean => select === undefined || Boolean(select[key]);
 
   for (const [field, value] of Object.entries(shape)) {
@@ -80,18 +85,18 @@ function buildObject(
       const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
       const fk = ownedFkColumn(prefix);
       const childObj = buildObject(childTable, childTable, value.shape, childExpand, childSelect, uid);
-      const correlate = `${childTable}.${fk} = ${table}.id`;
+      const correlate = `${ref(childTable, fk)} = ${ref(table, "id")}`;
       const sub =
         value.cardinality === "many"
-          ? `(SELECT coalesce(json_agg(${childObj} ORDER BY ${childTable}.created_at), '[]'::json) ` +
-            `FROM ${childTable} WHERE ${correlate})`
-          : `(SELECT ${childObj} FROM ${childTable} WHERE ${correlate} LIMIT 1)`;
+          ? `(SELECT coalesce(json_agg(${childObj} ORDER BY ${ref(childTable, "created_at")}), '[]'::json) ` +
+            `FROM ${qi(childTable)} WHERE ${correlate})`
+          : `(SELECT ${childObj} FROM ${qi(childTable)} WHERE ${correlate} LIMIT 1)`;
       parts.push(`'${field}', ${sub}`);
     } else if (value instanceof Reference && value.cardinality === "one") {
       const fkCol = `${camelToSnake(field)}_id`;
       // FK id: always in expand mode; only if selected in select mode.
       if (select === undefined ? true : Boolean(select[`${field}Id`])) {
-        parts.push(`'${field}Id', ${table}.${fkCol}`);
+        parts.push(`'${field}Id', ${ref(table, fkCol)}`);
       }
       const wantObj = select ? select[field] : expand?.[field];
       if (wantObj) {
@@ -101,7 +106,7 @@ function buildObject(
         const real = value.target.name;
         const a = `_r${uid.n++}`;
         const targetObj = buildObject(a, real, value.target.columns, childExpand, childSelect, uid);
-        parts.push(`'${field}', (SELECT ${targetObj} FROM ${real} AS ${a} WHERE ${a}.id = ${table}.${fkCol} LIMIT 1)`);
+        parts.push(`'${field}', (SELECT ${targetObj} FROM ${qi(real)} AS ${qi(a)} WHERE ${ref(a, "id")} = ${ref(table, fkCol)} LIMIT 1)`);
       }
     } else if (value instanceof Reference) {
       // N:N — aggregate linked targets via the join table, on expand/select.
@@ -117,18 +122,18 @@ function buildObject(
         const targetFk = joinTargetFk(camelToSnake(field));
         const targetObj = buildObject(a, real, value.target.columns, childExpand, childSelect, uid);
         parts.push(
-          `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${a}.created_at), '[]'::json) ` +
-            `FROM ${real} AS ${a} JOIN ${join} AS ${j} ON ${j}.${targetFk} = ${a}.id WHERE ${j}.${owningFk} = ${table}.id)`,
+          `'${field}', (SELECT coalesce(json_agg(${targetObj} ORDER BY ${ref(a, "created_at")}), '[]'::json) ` +
+            `FROM ${qi(real)} AS ${qi(a)} JOIN ${qi(join)} AS ${qi(j)} ON ${ref(j, targetFk)} = ${ref(a, "id")} WHERE ${ref(j, owningFk)} = ${ref(table, "id")})`,
         );
       }
     } else if (value instanceof Column) {
-      if (wants(field)) parts.push(`'${field}', ${table}.${camelToSnake(field)}`);
+      if (wants(field)) parts.push(`'${field}', ${ref(table, camelToSnake(field))}`);
     }
   }
 
   // Timestamps: always in expand mode; only if selected in select mode.
-  if (select === undefined || select["createdAt"]) parts.push(`'createdAt', ${table}.created_at`);
-  if (select === undefined || select["updatedAt"]) parts.push(`'updatedAt', ${table}.updated_at`);
+  if (select === undefined || select["createdAt"]) parts.push(`'createdAt', ${ref(table, "created_at")}`);
+  if (select === undefined || select["updatedAt"]) parts.push(`'updatedAt', ${ref(table, "updated_at")}`);
   return `json_build_object(${parts.join(", ")})`;
 }
 
@@ -330,22 +335,22 @@ function compileWhere(
       continue;
     }
     if (key === "id") {
-      conds.push(compileFieldFilter(`${table}.id`, val, params));
+      conds.push(compileFieldFilter(ref(table, "id"), val, params));
       continue;
     }
     // Campos gerenciados (não estão no shape, mas existem em toda tabela).
     if (key === "createdAt") {
-      conds.push(compileFieldFilter(`${table}.created_at`, val, params));
+      conds.push(compileFieldFilter(ref(table, "created_at"), val, params));
       continue;
     }
     if (key === "updatedAt") {
-      conds.push(compileFieldFilter(`${table}.updated_at`, val, params));
+      conds.push(compileFieldFilter(ref(table, "updated_at"), val, params));
       continue;
     }
 
     const field = shape[key];
     if (field instanceof Column) {
-      const col = `${table}.${camelToSnake(key)}`;
+      const col = ref(table, camelToSnake(key));
       // `unknown` = json/jsonb (schemaless) — lá um objeto é VALOR, não operador torto.
       const jsonish = field.config.pgType.tsLabel === "unknown";
       conds.push(
@@ -354,29 +359,29 @@ function compileWhere(
     } else if (field instanceof Owned) {
       const childTable = ownedChildTable(prefix, camelToSnake(key), field.options.table);
       const fk = ownedFkColumn(prefix);
-      const correlate = `${childTable}.${fk} = ${table}.id`;
+      const correlate = `${ref(childTable, fk)} = ${ref(table, "id")}`;
       if (field.cardinality === "many") {
-        conds.push(compileQuantifier(childTable, childTable, childTable, field.shape, val, params, correlate));
+        conds.push(compileQuantifier(qi(childTable), childTable, childTable, field.shape, val, params, correlate));
       } else {
         const inner = compileWhere(childTable, childTable, field.shape, val as Record<string, unknown>, params);
-        conds.push(existsClause(childTable, correlate, inner, false));
+        conds.push(existsClause(qi(childTable), correlate, inner, false));
       }
     } else if (field instanceof Reference && field.cardinality === "one") {
       const t = field.target.name;
       const inner = compileWhere(t, t, field.target.columns, val as Record<string, unknown>, params);
-      conds.push(existsClause(t, `${t}.id = ${table}.${camelToSnake(key)}_id`, inner, false));
+      conds.push(existsClause(qi(t), `${ref(t, "id")} = ${ref(table, `${camelToSnake(key)}_id`)}`, inner, false));
     } else if (field instanceof Reference) {
       const t = field.target.name;
       const join = joinTableName(prefix, camelToSnake(key));
-      const from = `${t} JOIN ${join} ON ${join}.${joinTargetFk(camelToSnake(key))} = ${t}.id`;
-      const correlate = `${join}.${ownedFkColumn(prefix)} = ${table}.id`;
+      const from = `${qi(t)} JOIN ${qi(join)} ON ${ref(join, joinTargetFk(camelToSnake(key)))} = ${ref(t, "id")}`;
+      const correlate = `${ref(join, ownedFkColumn(prefix))} = ${ref(table, "id")}`;
       conds.push(compileQuantifier(from, t, t, field.target.columns, val, params, correlate));
     } else if (key.endsWith("Id")) {
       // `<field>Id` — filter a reference's FK directly, without a join.
       const base = key.slice(0, -2);
-      const ref = shape[base];
-      if (ref instanceof Reference && ref.cardinality === "one") {
-        conds.push(compileFieldFilter(`${table}.${camelToSnake(base)}_id`, val, params));
+      const ref$ = shape[base];
+      if (ref$ instanceof Reference && ref$.cardinality === "one") {
+        conds.push(compileFieldFilter(ref(table, `${camelToSnake(base)}_id`), val, params));
       } else {
         throw new Error(`weave: unknown filter field '${key}'.`);
       }
@@ -412,7 +417,7 @@ export function compileFind<E extends Entity<string, ShapeRecord>>(
   const userOrder = compileOrderBy(table, table, entity.columns, options.orderBy);
   const orderBody = distinctExprs ? `${distinctExprs.join(", ")}, ${userOrder}` : userOrder;
 
-  const lines = [`SELECT ${distinctOn}${obj} AS data`, `FROM ${table}`];
+  const lines = [`SELECT ${distinctOn}${obj} AS data`, `FROM ${qi(table)}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
   lines.push(`ORDER BY ${orderBody}`);
   if (options.limit != null) lines.push(`LIMIT ${bind(params, options.limit)}`);
@@ -434,7 +439,7 @@ function compileOrderBy(
   orderBy: Record<string, unknown> | undefined,
 ): string {
   const entries = Object.entries(orderBy ?? {});
-  if (entries.length === 0) return `${table}.created_at`;
+  if (entries.length === 0) return ref(table, "created_at");
   return entries
     .map(([key, val]) => {
       const { expr, dir } = orderScalar(table, prefix, shape, key, val);
@@ -452,12 +457,12 @@ function orderScalar(
   val: unknown,
 ): { expr: string; dir: "ASC" | "DESC" } {
   const dir = (): "ASC" | "DESC" => (val === "desc" ? "DESC" : "ASC");
-  if (key === "id") return { expr: `${table}.id`, dir: dir() };
-  if (key === "createdAt") return { expr: `${table}.created_at`, dir: dir() };
-  if (key === "updatedAt") return { expr: `${table}.updated_at`, dir: dir() };
+  if (key === "id") return { expr: ref(table, "id"), dir: dir() };
+  if (key === "createdAt") return { expr: ref(table, "created_at"), dir: dir() };
+  if (key === "updatedAt") return { expr: ref(table, "updated_at"), dir: dir() };
 
   const field = shape[key];
-  if (field instanceof Column) return { expr: `${table}.${camelToSnake(key)}`, dir: dir() };
+  if (field instanceof Column) return { expr: ref(table, camelToSnake(key)), dir: dir() };
 
   // Aninhado: o valor é um sub-orderby `{ <subKey>: ... }` (single-branch).
   const [subKey, subVal] = Object.entries((val ?? {}) as Record<string, unknown>)[0] ?? [];
@@ -467,7 +472,7 @@ function orderScalar(
     const t = field.target.name;
     const inner = orderScalar(t, t, field.target.columns, subKey, subVal);
     return {
-      expr: `(SELECT ${inner.expr} FROM ${t} WHERE ${t}.id = ${table}.${camelToSnake(key)}_id LIMIT 1)`,
+      expr: `(SELECT ${inner.expr} FROM ${qi(t)} WHERE ${ref(t, "id")} = ${ref(table, `${camelToSnake(key)}_id`)} LIMIT 1)`,
       dir: inner.dir,
     };
   }
@@ -476,7 +481,7 @@ function orderScalar(
     const fk = ownedFkColumn(prefix);
     const inner = orderScalar(childTable, childTable, field.shape, subKey, subVal);
     return {
-      expr: `(SELECT ${inner.expr} FROM ${childTable} WHERE ${childTable}.${fk} = ${table}.id LIMIT 1)`,
+      expr: `(SELECT ${inner.expr} FROM ${qi(childTable)} WHERE ${ref(childTable, fk)} = ${ref(table, "id")} LIMIT 1)`,
       dir: inner.dir,
     };
   }
@@ -503,7 +508,7 @@ export function compileCount<E extends Entity<string, ShapeRecord>>(
     latestPer && latestPer.length
       ? `count(DISTINCT (${latestPer.map((k) => aggCol(table, entity.columns, k)).join(", ")}))::int`
       : "count(*)::int";
-  let text = `SELECT ${cnt} AS n FROM ${table}`;
+  let text = `SELECT ${cnt} AS n FROM ${qi(table)}`;
   if (whereSql) text += ` WHERE ${whereSql}`;
   return { text, params };
 }
@@ -527,19 +532,19 @@ function safeAlias(alias: string): string {
  *  (barreira anti-injection). Reference N:1 agrupa pela coluna FK `<campo>_id` — mesma
  *  resolução do `where` (aceita `respondent` OU `respondentId`). */
 function aggCol(table: string, shape: ShapeRecord | OwnedShape, key: string): string {
-  if (key === "id") return `${table}.id`;
-  if (key === "createdAt") return `${table}.created_at`;
-  if (key === "updatedAt") return `${table}.updated_at`;
+  if (key === "id") return ref(table, "id");
+  if (key === "createdAt") return ref(table, "created_at");
+  if (key === "updatedAt") return ref(table, "updated_at");
   const node = (shape as Record<string, unknown>)[key];
-  if (node instanceof Column) return `${table}.${camelToSnake(key)}`;
+  if (node instanceof Column) return ref(table, camelToSnake(key));
   // Reference N:1 → agrupa/ordena pela FK `<campo>_id` (uuid). groupBy/latestPer/distinct
   // por reference (department, company, respondent) — o hotspot de stats do consumidor.
-  if (node instanceof Reference && node.cardinality === "one") return `${table}.${camelToSnake(key)}_id`;
+  if (node instanceof Reference && node.cardinality === "one") return ref(table, `${camelToSnake(key)}_id`);
   // Forma `<campo>Id` — o FK direto, como o `where` aceita.
   if (key.endsWith("Id")) {
     const base = key.slice(0, -2);
-    const ref = (shape as Record<string, unknown>)[base];
-    if (ref instanceof Reference && ref.cardinality === "one") return `${table}.${camelToSnake(base)}_id`;
+    const refNode = (shape as Record<string, unknown>)[base];
+    if (refNode instanceof Reference && refNode.cardinality === "one") return ref(table, `${camelToSnake(base)}_id`);
   }
   throw new Error(`weave: unknown field '${key}' in aggregate.`);
 }
@@ -634,12 +639,12 @@ class AggPaths {
     const alias = `_a${this.n++}`;
     if (field instanceof Reference && field.cardinality === "one") {
       const t = field.target.name;
-      this.joins.push(`LEFT JOIN ${t} ${alias} ON ${alias}.id = ${parent.alias}.${segSnake}_id`);
+      this.joins.push(`LEFT JOIN ${qi(t)} ${qi(alias)} ON ${ref(alias, "id")} = ${ref(parent.alias, `${segSnake}_id`)}`);
       return { alias, naming: t, shape: field.target.columns };
     }
     if (field instanceof Owned && field.cardinality === "one") {
       const child = ownedChildTable(parent.naming, segSnake, field.options.table);
-      this.joins.push(`LEFT JOIN ${child} ${alias} ON ${alias}.${ownedFkColumn(parent.naming)} = ${parent.alias}.id`);
+      this.joins.push(`LEFT JOIN ${qi(child)} ${qi(alias)} ON ${ref(alias, ownedFkColumn(parent.naming))} = ${ref(parent.alias, "id")}`);
       return { alias, naming: child, shape: field.shape };
     }
     if (field instanceof Owned && field.cardinality === "many") {
@@ -648,7 +653,7 @@ class AggPaths {
       }
       const child = ownedChildTable(parent.naming, segSnake, field.options.table);
       // INNER JOIN: the fan-out. A parent with no elements contributes nothing (like `$unwind`).
-      this.joins.push(`JOIN ${child} ${alias} ON ${alias}.${ownedFkColumn(parent.naming)} = ${parent.alias}.id`);
+      this.joins.push(`JOIN ${qi(child)} ${qi(alias)} ON ${ref(alias, ownedFkColumn(parent.naming))} = ${ref(parent.alias, "id")}`);
       return { alias, naming: child, shape: field.shape };
     }
     throw new Error(`weave: cannot aggregate through '${key}'.`);
@@ -765,7 +770,7 @@ function accSql(paths: AggPaths, acc: Accumulator, params: unknown[]): string {
       break;
     case "first":
       // One representative per group, deterministic by the element's created_at.
-      base = `(array_agg(${paths.col(acc.field)} ORDER BY ${paths.aliasOf(acc.field)}.created_at))[1]`;
+      base = `(array_agg(${paths.col(acc.field)} ORDER BY ${ref(paths.aliasOf(acc.field), "created_at")}))[1]`;
       break;
     case "percentile": {
       const p = acc.p;
@@ -931,7 +936,7 @@ export function compileAggregate<E extends Entity<string, ShapeRecord>>(
     havingConds.push(compileFieldFilter(expr, cond, params));
   }
 
-  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${table}${paths.joinSql()}`];
+  const lines = [`SELECT ${cols.join(", ")}`, `FROM ${qi(table)}${paths.joinSql()}`];
   if (whereSql) lines.push(`WHERE ${whereSql}`);
   if (groups.length) lines.push(`GROUP BY ${groups.map((g) => g.expr).join(", ")}`);
   if (havingConds.length) lines.push(`HAVING ${havingConds.join(" AND ")}`);

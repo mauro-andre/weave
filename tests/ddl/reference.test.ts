@@ -43,17 +43,17 @@ describe("reference DDL", () => {
 describe("reference read compile", () => {
   it("includes <field>Id by default, no join", () => {
     const sql = compileFind(user).text;
-    expect(sql).toContain("'cityId', users.city_id");
-    expect(sql).not.toContain("FROM cities");
+    expect(sql).toContain(`'cityId', "users"."city_id"`);
+    expect(sql).not.toContain('FROM "cities"');
   });
 
   it("adds the expanded object subquery when expanded", () => {
     const sql = compileFind(user, { expand: { city: true } }).text;
-    expect(sql).toContain("'cityId', users.city_id");
+    expect(sql).toContain(`'cityId', "users"."city_id"`);
     expect(sql).toContain(
-      "'city', (SELECT json_build_object('id', _r0.id, 'name', _r0.name, " +
-        "'createdAt', _r0.created_at, 'updatedAt', _r0.updated_at) " +
-        "FROM cities AS _r0 WHERE _r0.id = users.city_id LIMIT 1)",
+      `'city', (SELECT json_build_object('id', "_r0"."id", 'name', "_r0"."name", ` +
+        `'createdAt', "_r0"."created_at", 'updatedAt', "_r0"."updated_at") ` +
+        `FROM "cities" AS "_r0" WHERE "_r0"."id" = "users"."city_id" LIMIT 1)`,
     );
   });
 
@@ -62,7 +62,7 @@ describe("reference read compile", () => {
       addresses: owned(array({ city: reference(city) })),
     });
     const sql = compileFind(u, { expand: { addresses: { city: true } } }).text;
-    expect(sql).toContain("'cityId', users__addresses.city_id");
-    expect(sql).toContain("FROM cities AS _r0 WHERE _r0.id = users__addresses.city_id LIMIT 1");
+    expect(sql).toContain(`'cityId', "users__addresses"."city_id"`);
+    expect(sql).toContain(`FROM "cities" AS "_r0" WHERE "_r0"."id" = "users__addresses"."city_id" LIMIT 1`);
   });
 });

@@ -16,21 +16,21 @@ function whereOf(opts: Parameters<typeof compileFind<typeof user>>[1]) {
 describe("scalar operators", () => {
   it("bare value is eq", () => {
     expect(whereOf({ where: { name: "Mauro" } })).toEqual({
-      where: "users.name = $1",
+      where: '"users"."name" = $1',
       params: ["Mauro"],
     });
   });
 
   it("comparison operators", () => {
     expect(whereOf({ where: { age: { gte: 18, lt: 65 } } })).toEqual({
-      where: "users.age >= $1 AND users.age < $2",
+      where: '"users"."age" >= $1 AND "users"."age" < $2',
       params: [18, 65],
     });
   });
 
   it("in / notIn expand to placeholder lists", () => {
     expect(whereOf({ where: { age: { in: [1, 2, 3] } } })).toEqual({
-      where: "users.age IN ($1, $2, $3)",
+      where: '"users"."age" IN ($1, $2, $3)',
       params: [1, 2, 3],
     });
   });
@@ -42,21 +42,21 @@ describe("scalar operators", () => {
 
   it("like / ilike (string only)", () => {
     expect(whereOf({ where: { name: { ilike: "%mau%" } } })).toEqual({
-      where: "users.name ILIKE $1",
+      where: '"users"."name" ILIKE $1',
       params: ["%mau%"],
     });
   });
 
   it("isNull renders IS [NOT] NULL with no param", () => {
     expect(whereOf({ where: { age: { isNull: true } } })).toEqual({
-      where: "users.age IS NULL",
+      where: '"users"."age" IS NULL',
       params: [],
     });
-    expect(whereOf({ where: { age: { isNull: false } } }).where).toBe("users.age IS NOT NULL");
+    expect(whereOf({ where: { age: { isNull: false } } }).where).toBe('"users"."age" IS NOT NULL');
   });
 
   it("eq null becomes IS NULL", () => {
-    expect(whereOf({ where: { age: { eq: null } } }).where).toBe("users.age IS NULL");
+    expect(whereOf({ where: { age: { eq: null } } }).where).toBe('"users"."age" IS NULL');
   });
 });
 
@@ -65,17 +65,17 @@ describe("logical operators", () => {
     const { where, params } = whereOf({
       where: { or: [{ name: "A" }, { age: { gt: 30 } }] },
     });
-    expect(where).toBe("(users.name = $1 OR users.age > $2)");
+    expect(where).toBe('("users"."name" = $1 OR "users"."age" > $2)');
     expect(params).toEqual(["A", 30]);
   });
 
   it("not negates", () => {
-    expect(whereOf({ where: { not: { name: "A" } } }).where).toBe("NOT (users.name = $1)");
+    expect(whereOf({ where: { not: { name: "A" } } }).where).toBe('NOT ("users"."name" = $1)');
   });
 
   it("top-level keys are AND-combined", () => {
     expect(whereOf({ where: { name: "A", age: { gt: 1 } } }).where).toBe(
-      "users.name = $1 AND users.age > $2",
+      '"users"."name" = $1 AND "users"."age" > $2',
     );
   });
 });

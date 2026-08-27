@@ -18,7 +18,7 @@
  * Ler deriva a média (`sum/count`) na leitura; nunca se guarda média pronta (§0).
  */
 
-import { Column, Reference, camelToSnake, type Entity, type ShapeRecord, type AccumulateOp } from "@mauroandre/weave-core";
+import { Column, Reference, camelToSnake, qi, type Entity, type ShapeRecord, type AccumulateOp } from "@mauroandre/weave-core";
 import { generateId } from "../id.js";
 
 export interface CompiledAccumulate {
@@ -97,11 +97,11 @@ function opInsertValue(op: AccumulateOp): unknown {
 function mergeExpr(table: string, col: string, op: AccumulateOp): string | null {
   switch (op.op) {
     case "inc":
-      return `${col} = ${table}.${col} + excluded.${col}`;
+      return `${qi(col)} = ${qi(table)}.${qi(col)} + excluded.${qi(col)}`;
     case "max":
-      return `${col} = greatest(${table}.${col}, excluded.${col})`;
+      return `${qi(col)} = greatest(${qi(table)}.${qi(col)}, excluded.${qi(col)})`;
     case "min":
-      return `${col} = least(${table}.${col}, excluded.${col})`;
+      return `${qi(col)} = least(${qi(table)}.${qi(col)}, excluded.${qi(col)})`;
     case "setOnInsert":
       return null;
   }
@@ -144,7 +144,7 @@ export function compileAccumulate<E extends Entity<string, ShapeRecord>>(
   updates.push("updated_at = now()"); // toca a linha mesmo quando só há setOnInsert
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
   const text =
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ` +
-    `ON CONFLICT (${keyCols.join(", ")}) DO UPDATE SET ${updates.join(", ")} RETURNING *`;
+    `INSERT INTO ${qi(table)} (${columns.map(qi).join(", ")}) VALUES (${placeholders}) ` +
+    `ON CONFLICT (${keyCols.map(qi).join(", ")}) DO UPDATE SET ${updates.join(", ")} RETURNING *`;
   return { text, params };
 }

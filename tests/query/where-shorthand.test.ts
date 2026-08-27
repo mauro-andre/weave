@@ -83,19 +83,19 @@ describe("where shorthand — SQL concreto", () => {
   it("{ id: '123abc' } → product.id = $1 com o param certo", () => {
     const { text: sql, params } = of({ id: "123abc" });
     const line = sql.split("\n").find((l) => l.startsWith("WHERE")) ?? "";
-    expect(line).toBe("WHERE product.id = $1");
+    expect(line).toBe('WHERE "product"."id" = $1');
     expect(params).toEqual(["123abc"]);
   });
 
   it("{ price: null } → IS NULL, sem param", () => {
     const { text: sql, params } = of({ price: null });
-    expect(sql).toContain("WHERE product.price IS NULL");
+    expect(sql).toContain('WHERE "product"."price" IS NULL');
     expect(params).toEqual([]);
   });
 
   it("{ name: 'x', price: 5 } → dois eqs AND-combinados", () => {
     const { text: sql, params } = of({ name: "x", price: 5 });
-    expect(sql).toContain("WHERE product.name = $1 AND product.price = $2");
+    expect(sql).toContain('WHERE "product"."name" = $1 AND "product"."price" = $2');
     expect(params).toEqual(["x", 5]);
   });
 });

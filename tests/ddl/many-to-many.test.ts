@@ -42,10 +42,10 @@ describe("N:N DDL", () => {
   it("renders the composite primary key (FK NÃO inline — vai como ALTER)", () => {
     expect(renderCreateTable(specs[1]!)).toBe(
       [
-        "CREATE TABLE posts__tags (",
-        "  posts_id uuid NOT NULL,",
-        "  tags_id uuid NOT NULL,",
-        "  PRIMARY KEY (posts_id, tags_id)",
+        'CREATE TABLE "posts__tags" (',
+        '  "posts_id" uuid NOT NULL,',
+        '  "tags_id" uuid NOT NULL,',
+        '  PRIMARY KEY ("posts_id", "tags_id")',
         ");",
       ].join("\n"),
     );
@@ -53,10 +53,10 @@ describe("N:N DDL", () => {
 
   it("as FKs da join saem como ALTER … ADD CONSTRAINT (ambas cascade)", () => {
     expect(renderForeignKeys(specs[1]!)).toEqual([
-      "ALTER TABLE posts__tags ADD CONSTRAINT posts__tags_posts_id_fkey " +
-        "FOREIGN KEY (posts_id) REFERENCES posts(id) ON DELETE CASCADE;",
-      "ALTER TABLE posts__tags ADD CONSTRAINT posts__tags_tags_id_fkey " +
-        "FOREIGN KEY (tags_id) REFERENCES tags(id) ON DELETE CASCADE;",
+      'ALTER TABLE "posts__tags" ADD CONSTRAINT "posts__tags_posts_id_fkey" ' +
+        'FOREIGN KEY ("posts_id") REFERENCES "posts"("id") ON DELETE CASCADE;',
+      'ALTER TABLE "posts__tags" ADD CONSTRAINT "posts__tags_tags_id_fkey" ' +
+        'FOREIGN KEY ("tags_id") REFERENCES "tags"("id") ON DELETE CASCADE;',
     ]);
   });
 });
@@ -71,9 +71,9 @@ describe("N:N read compile", () => {
   it("aggregates linked targets via the join table on expand", () => {
     const sql = compileFind(post, { expand: { tags: true } }).text;
     expect(sql).toContain(
-      "'tags', (SELECT coalesce(json_agg(json_build_object('id', _r0.id, 'label', _r0.label, " +
-        "'createdAt', _r0.created_at, 'updatedAt', _r0.updated_at) ORDER BY _r0.created_at), '[]'::json) " +
-        "FROM tags AS _r0 JOIN posts__tags AS _r1 ON _r1.tags_id = _r0.id WHERE _r1.posts_id = posts.id)",
+      `'tags', (SELECT coalesce(json_agg(json_build_object('id', "_r0"."id", 'label', "_r0"."label", ` +
+        `'createdAt', "_r0"."created_at", 'updatedAt', "_r0"."updated_at") ORDER BY "_r0"."created_at"), '[]'::json) ` +
+        `FROM "tags" AS "_r0" JOIN "posts__tags" AS "_r1" ON "_r1"."tags_id" = "_r0"."id" WHERE "_r1"."posts_id" = "posts"."id")`,
     );
   });
 });

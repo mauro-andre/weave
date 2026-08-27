@@ -16,42 +16,42 @@ function objOf(opts: Parameters<typeof compileFind<typeof post>>[1]) {
 describe("select projection", () => {
   it("emits only id + selected columns (no timestamps)", () => {
     expect(objOf({ select: { title: true } })).toBe(
-      "json_build_object('id', posts.id, 'title', posts.title)",
+      `json_build_object('id', "posts"."id", 'title', "posts"."title")`,
     );
   });
 
   it("can opt timestamps back in", () => {
     expect(objOf({ select: { title: true, createdAt: true } })).toBe(
-      "json_build_object('id', posts.id, 'title', posts.title, 'createdAt', posts.created_at)",
+      `json_build_object('id', "posts"."id", 'title', "posts"."title", 'createdAt', "posts"."created_at")`,
     );
   });
 
   it("prunes an owned child to selected sub-fields", () => {
     expect(objOf({ select: { comments: { body: true } } })).toBe(
-      "json_build_object('id', posts.id, 'comments', (SELECT coalesce(json_agg(" +
-        "json_build_object('id', posts__comments.id, 'body', posts__comments.body) " +
-        "ORDER BY posts__comments.created_at), '[]'::json) " +
-        "FROM posts__comments WHERE posts__comments.posts_id = posts.id))",
+      `json_build_object('id', "posts"."id", 'comments', (SELECT coalesce(json_agg(` +
+        `json_build_object('id', "posts__comments"."id", 'body', "posts__comments"."body") ` +
+        `ORDER BY "posts__comments"."created_at"), '[]'::json) ` +
+        `FROM "posts__comments" WHERE "posts__comments"."posts_id" = "posts"."id"))`,
     );
   });
 
   it("select on a reference brings the pruned target (no FK unless selected)", () => {
     expect(objOf({ select: { author: { name: true } } })).toBe(
-      "json_build_object('id', posts.id, 'author', (SELECT json_build_object(" +
-        "'id', _r0.id, 'name', _r0.name) FROM authors AS _r0 WHERE _r0.id = posts.author_id LIMIT 1))",
+      `json_build_object('id', "posts"."id", 'author', (SELECT json_build_object(` +
+        `'id', "_r0"."id", 'name', "_r0"."name") FROM "authors" AS "_r0" WHERE "_r0"."id" = "posts"."author_id" LIMIT 1))`,
     );
   });
 
   it("can select the raw FK via <field>Id", () => {
     expect(objOf({ select: { authorId: true } })).toBe(
-      "json_build_object('id', posts.id, 'authorId', posts.author_id)",
+      `json_build_object('id', "posts"."id", 'authorId', "posts"."author_id")`,
     );
   });
 
   it("select: true on owned brings the full child", () => {
     expect(objOf({ select: { comments: true } })).toContain(
-      "json_build_object('id', posts__comments.id, 'body', posts__comments.body, " +
-        "'createdAt', posts__comments.created_at, 'updatedAt', posts__comments.updated_at)",
+      `json_build_object('id', "posts__comments"."id", 'body', "posts__comments"."body", ` +
+        `'createdAt', "posts__comments"."created_at", 'updatedAt', "posts__comments"."updated_at")`,
     );
   });
 });

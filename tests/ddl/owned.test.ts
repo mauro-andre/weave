@@ -75,34 +75,34 @@ describe("emitEntity (owned tree)", () => {
   it("matches the PRD canonical DDL", () => {
     expect(emitEntity(user)).toBe(
       [
-        "CREATE TABLE users (",
-        "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
-        "  name text NOT NULL,",
-        "  email text NOT NULL UNIQUE,",
-        "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
-        "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
+        'CREATE TABLE "users" (',
+        '  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),',
+        '  "name" text NOT NULL,',
+        '  "email" text NOT NULL UNIQUE,',
+        '  "created_at" timestamp with time zone NOT NULL DEFAULT now(),',
+        '  "updated_at" timestamp with time zone NOT NULL DEFAULT now()',
         ");",
-        "CREATE TABLE users__addresses (",
-        "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
-        "  users_id uuid NOT NULL,",
-        "  street text NOT NULL,",
-        "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
-        "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
+        'CREATE TABLE "users__addresses" (',
+        '  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),',
+        '  "users_id" uuid NOT NULL,',
+        '  "street" text NOT NULL,',
+        '  "created_at" timestamp with time zone NOT NULL DEFAULT now(),',
+        '  "updated_at" timestamp with time zone NOT NULL DEFAULT now()',
         ");",
-        "CREATE INDEX users__addresses_users_id_idx ON users__addresses (users_id);",
-        "CREATE TABLE users__addresses__landmarks (",
-        "  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),",
-        "  addresses_id uuid NOT NULL,",
-        "  label text NOT NULL,",
-        "  created_at timestamp with time zone NOT NULL DEFAULT now(),",
-        "  updated_at timestamp with time zone NOT NULL DEFAULT now()",
+        'CREATE INDEX "users__addresses_users_id_idx" ON "users__addresses" ("users_id");',
+        'CREATE TABLE "users__addresses__landmarks" (',
+        '  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),',
+        '  "addresses_id" uuid NOT NULL,',
+        '  "label" text NOT NULL,',
+        '  "created_at" timestamp with time zone NOT NULL DEFAULT now(),',
+        '  "updated_at" timestamp with time zone NOT NULL DEFAULT now()',
         ");",
-        "CREATE INDEX users__addresses__landmarks_addresses_id_idx ON users__addresses__landmarks (addresses_id);",
+        'CREATE INDEX "users__addresses__landmarks_addresses_id_idx" ON "users__addresses__landmarks" ("addresses_id");',
         // FKs por último (ALTER), ordem entre tabelas irrelevante:
-        "ALTER TABLE users__addresses ADD CONSTRAINT users__addresses_users_id_fkey " +
-          "FOREIGN KEY (users_id) REFERENCES users(id) ON DELETE CASCADE;",
-        "ALTER TABLE users__addresses__landmarks ADD CONSTRAINT users__addresses__landmarks_addresses_id_fkey " +
-          "FOREIGN KEY (addresses_id) REFERENCES users__addresses(id) ON DELETE CASCADE;",
+        'ALTER TABLE "users__addresses" ADD CONSTRAINT "users__addresses_users_id_fkey" ' +
+          'FOREIGN KEY ("users_id") REFERENCES "users"("id") ON DELETE CASCADE;',
+        'ALTER TABLE "users__addresses__landmarks" ADD CONSTRAINT "users__addresses__landmarks_addresses_id_fkey" ' +
+          'FOREIGN KEY ("addresses_id") REFERENCES "users__addresses"("id") ON DELETE CASCADE;',
       ].join("\n"),
     );
   });

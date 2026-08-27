@@ -14,7 +14,7 @@
  * `reference` is not handled here (Phase 3).
  */
 
-import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { Column, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, qi } from "@mauroandre/weave-core";
 import { generateId } from "../id.js";
 
 /** Minimal transactional executor (satisfied by postgres.js `TransactionSql`). */
@@ -25,10 +25,10 @@ export interface Executor {
 /** `INSERT ... RETURNING id` for the given columns (or `DEFAULT VALUES` if none). */
 export function renderInsert(table: string, columns: string[]): string {
   if (columns.length === 0) {
-    return `INSERT INTO ${table} DEFAULT VALUES RETURNING id`;
+    return `INSERT INTO ${qi(table)} DEFAULT VALUES RETURNING id`;
   }
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-  return `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) RETURNING id`;
+  return `INSERT INTO ${qi(table)} (${columns.map(qi).join(", ")}) VALUES (${placeholders}) RETURNING id`;
 }
 
 /**
@@ -39,12 +39,12 @@ export function renderUpsert(table: string, columns: string[]): string {
   const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
   const dataColumns = columns.slice(1);
   const updates = [
-    ...dataColumns.map((c) => `${c} = excluded.${c}`),
+    ...dataColumns.map((c) => `${qi(c)} = excluded.${qi(c)}`),
     "updated_at = now()",
   ].join(", ");
   return (
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders}) ` +
-    `ON CONFLICT (id) DO UPDATE SET ${updates} RETURNING id`
+    `INSERT INTO ${qi(table)} (${columns.map(qi).join(", ")}) VALUES (${placeholders}) ` +
+    `ON CONFLICT (${qi("id")}) DO UPDATE SET ${updates} RETURNING id`
   );
 }
 
@@ -97,7 +97,7 @@ async function writeNode(
       // Owned children: replace (delete then re-insert from the object).
       const childTable = ownedChildTable(prefix, camelToSnake(field), value.options.table);
       const fkColumn = ownedFkColumn(prefix);
-      await exec.unsafe(`DELETE FROM ${childTable} WHERE ${fkColumn} = $1`, [id]);
+      await exec.unsafe(`DELETE FROM ${qi(childTable)} WHERE ${qi(fkColumn)} = $1`, [id]);
 
       const raw = input[field];
       const childInputs =
@@ -124,13 +124,13 @@ async function writeNode(
       const join = joinTableName(prefix, camelToSnake(field));
       const owningFk = ownedFkColumn(prefix);
       const targetFk = joinTargetFk(camelToSnake(field));
-      await exec.unsafe(`DELETE FROM ${join} WHERE ${owningFk} = $1`, [id]);
+      await exec.unsafe(`DELETE FROM ${qi(join)} WHERE ${qi(owningFk)} = $1`, [id]);
 
       const ids = input[`${field}Ids`];
       if (Array.isArray(ids)) {
         for (const targetId of ids) {
           await exec.unsafe(
-            `INSERT INTO ${join} (${owningFk}, ${targetFk}) VALUES ($1, $2)`,
+            `INSERT INTO ${qi(join)} (${qi(owningFk)}, ${qi(targetFk)}) VALUES ($1, $2)`,
             [id, targetId],
           );
         }

@@ -17,7 +17,7 @@
  * `timestamp with time zone NOT NULL DEFAULT now()`; column names are snake_case.
  */
 
-import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, fkConstraintName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk } from "@mauroandre/weave-core";
+import { Column, type ColumnConfig, type Entity, type ShapeRecord, Owned, type OwnedShape, Reference, camelToSnake, indexName, compositeIndexName, fkConstraintName, ownedChildTable, ownedFkColumn, joinTableName, joinTargetFk, qi } from "@mauroandre/weave-core";
 import { idType, idSqlType } from "../id.js";
 
 const TIMESTAMP_SQL = "timestamp with time zone";
@@ -250,14 +250,14 @@ export function collectTables(entity: Entity<string, ShapeRecord>): TableSpec[] 
 /** `CREATE [UNIQUE] INDEX` para os compostos de uma tabela (vazio se não houver). */
 export function renderComposites(spec: TableSpec): string[] {
   return (spec.composites ?? []).map(
-    (c) => `CREATE ${c.unique ? "UNIQUE " : ""}INDEX ${c.name} ON ${spec.name} (${c.columns.join(", ")});`,
+    (c) => `CREATE ${c.unique ? "UNIQUE " : ""}INDEX ${qi(c.name)} ON ${qi(spec.name)} (${c.columns.map(qi).join(", ")});`,
   );
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 function renderColumnSpec(c: ColumnSpec): string {
-  const parts = [c.name, c.sqlType];
+  const parts = [qi(c.name), c.sqlType];
   if (c.primaryKey) parts.push("PRIMARY KEY");
   else if (c.notNull) parts.push("NOT NULL");
   if (c.default !== undefined) parts.push(`DEFAULT ${c.default}`);
@@ -277,8 +277,8 @@ export function renderForeignKey(table: string, c: ColumnSpec): string | null {
   if (!c.references) return null;
   const cascade = c.references.cascade ? " ON DELETE CASCADE" : "";
   return (
-    `ALTER TABLE ${table} ADD CONSTRAINT ${fkConstraintName(table, c.name)} ` +
-    `FOREIGN KEY (${c.name}) REFERENCES ${c.references.table}(id)${cascade};`
+    `ALTER TABLE ${qi(table)} ADD CONSTRAINT ${qi(fkConstraintName(table, c.name))} ` +
+    `FOREIGN KEY (${qi(c.name)}) REFERENCES ${qi(c.references.table)}(${qi("id")})${cascade};`
   );
 }
 
@@ -290,9 +290,9 @@ export function renderForeignKeys(spec: TableSpec): string[] {
 /** Render the `CREATE TABLE` for a single spec. */
 export function renderCreateTable(spec: TableSpec): string {
   const lines = spec.columns.map((c) => `  ${renderColumnSpec(c)}`);
-  if (spec.primaryKey) lines.push(`  PRIMARY KEY (${spec.primaryKey.join(", ")})`);
-  const partition = spec.partitionBy ? ` PARTITION BY RANGE (${spec.partitionBy.column})` : "";
-  return `CREATE TABLE ${spec.name} (\n${lines.join(",\n")}\n)${partition};`;
+  if (spec.primaryKey) lines.push(`  PRIMARY KEY (${spec.primaryKey.map(qi).join(", ")})`);
+  const partition = spec.partitionBy ? ` PARTITION BY RANGE (${qi(spec.partitionBy.column)})` : "";
+  return `CREATE TABLE ${qi(spec.name)} (\n${lines.join(",\n")}\n)${partition};`;
 }
 
 /** Render a single column definition (for `CREATE TABLE` / `ALTER TABLE ADD COLUMN`). */
@@ -302,7 +302,7 @@ export function renderColumnDef(c: ColumnSpec): string {
 
 /** Render one `CREATE INDEX` statement. */
 export function renderIndexStmt(table: string, index: IndexSpec): string {
-  return `CREATE INDEX ${index.name} ON ${table} (${index.column});`;
+  return `CREATE INDEX ${qi(index.name)} ON ${qi(table)} (${qi(index.column)});`;
 }
 
 /** Render the `CREATE INDEX`es for a single spec. */

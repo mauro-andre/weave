@@ -20,21 +20,21 @@ function whereOf(opts: Parameters<typeof compileFind<typeof post>>[1]) {
 describe("array column operators", () => {
   it("has → = ANY", () => {
     expect(whereOf({ where: { keywords: { has: "ts" } } })).toEqual({
-      where: "$1 = ANY(posts.keywords)",
+      where: '$1 = ANY("posts"."keywords")',
       params: ["ts"],
     });
   });
   it("hasSome → && ARRAY, hasEvery → @> ARRAY", () => {
     expect(whereOf({ where: { keywords: { hasSome: ["a", "b"] } } }).where).toBe(
-      "posts.keywords && ARRAY[$1, $2]",
+      '"posts"."keywords" && ARRAY[$1, $2]',
     );
     expect(whereOf({ where: { keywords: { hasEvery: ["a"] } } }).where).toBe(
-      "posts.keywords @> ARRAY[$1]",
+      '"posts"."keywords" @> ARRAY[$1]',
     );
   });
   it("isEmpty → cardinality", () => {
     expect(whereOf({ where: { keywords: { isEmpty: true } } }).where).toBe(
-      "cardinality(posts.keywords) = 0",
+      'cardinality("posts"."keywords") = 0',
     );
   });
 });
@@ -42,12 +42,12 @@ describe("array column operators", () => {
 describe("reference N:1 nested filter", () => {
   it("nested → EXISTS on target", () => {
     expect(whereOf({ where: { author: { name: { ilike: "mau%" } } } }).where).toBe(
-      "EXISTS (SELECT 1 FROM authors WHERE authors.id = posts.author_id AND authors.name ILIKE $1)",
+      'EXISTS (SELECT 1 FROM "authors" WHERE "authors"."id" = "posts"."author_id" AND "authors"."name" ILIKE $1)',
     );
   });
   it("<field>Id filters the FK directly, no join", () => {
     expect(whereOf({ where: { authorId: "a-1" } })).toEqual({
-      where: "posts.author_id = $1",
+      where: '"posts"."author_id" = $1',
       params: ["a-1"],
     });
   });
@@ -56,17 +56,17 @@ describe("reference N:1 nested filter", () => {
 describe("owned 1:N quantifiers", () => {
   it("some → EXISTS", () => {
     expect(whereOf({ where: { comments: { some: { approved: "yes" } } } }).where).toBe(
-      "EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id AND posts__comments.approved = $1)",
+      'EXISTS (SELECT 1 FROM "posts__comments" WHERE "posts__comments"."posts_id" = "posts"."id" AND "posts__comments"."approved" = $1)',
     );
   });
   it("none → NOT EXISTS", () => {
     expect(whereOf({ where: { comments: { none: {} } } }).where).toBe(
-      "NOT EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id)",
+      'NOT EXISTS (SELECT 1 FROM "posts__comments" WHERE "posts__comments"."posts_id" = "posts"."id")',
     );
   });
   it("every → NOT EXISTS(... AND NOT ...)", () => {
     expect(whereOf({ where: { comments: { every: { approved: "yes" } } } }).where).toBe(
-      "NOT EXISTS (SELECT 1 FROM posts__comments WHERE posts__comments.posts_id = posts.id AND NOT (posts__comments.approved = $1))",
+      'NOT EXISTS (SELECT 1 FROM "posts__comments" WHERE "posts__comments"."posts_id" = "posts"."id" AND NOT ("posts__comments"."approved" = $1))',
     );
   });
 });
@@ -74,8 +74,8 @@ describe("owned 1:N quantifiers", () => {
 describe("reference N:N quantifier", () => {
   it("some → EXISTS over join", () => {
     expect(whereOf({ where: { tags: { some: { label: "sql" } } } }).where).toBe(
-      "EXISTS (SELECT 1 FROM tags JOIN posts__tags ON posts__tags.tags_id = tags.id " +
-        "WHERE posts__tags.posts_id = posts.id AND tags.label = $1)",
+      'EXISTS (SELECT 1 FROM "tags" JOIN "posts__tags" ON "posts__tags"."tags_id" = "tags"."id" ' +
+        'WHERE "posts__tags"."posts_id" = "posts"."id" AND "tags"."label" = $1)',
     );
   });
 });
@@ -88,8 +88,8 @@ describe("recursion + composition", () => {
       },
     });
     expect(where).toBe(
-      "(posts.title ILIKE $1 AND EXISTS (SELECT 1 FROM tags JOIN posts__tags " +
-        "ON posts__tags.tags_id = tags.id WHERE posts__tags.posts_id = posts.id AND tags.label = $2))",
+      '("posts"."title" ILIKE $1 AND EXISTS (SELECT 1 FROM "tags" JOIN "posts__tags" ' +
+        'ON "posts__tags"."tags_id" = "tags"."id" WHERE "posts__tags"."posts_id" = "posts"."id" AND "tags"."label" = $2))',
     );
   });
 });
