@@ -6,3 +6,6 @@ dist
 
 # gerado pelo prepack do SDK a partir de site/docs/ (fonte única: o frontmatter dos docs)
 packages/sdk/agent/skills/
+
+# worktrees das fatias do método (bit-cubo harness)
+.worktrees/
