@@ -1,6 +1,6 @@
 {
   "name": "@mauroandre/weave-sdk",
-  "version": "0.0.0",
+  "version": "0.0.48",
   "description": "Weave SDK — typed object client over the Weave HTTP API. The glue: entities-as-code in, objects out, HTTP/JSON invisible.",
   "type": "module",
   "license": "MIT",
