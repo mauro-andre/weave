@@ -14,7 +14,7 @@ type Cond = { path: string[]; op: string; value?: unknown };
 const TEXT = new Set(["text", "varchar", "bpchar"]);
 const NUMERIC = new Set(["int2", "int4", "int8", "numeric", "float4", "float8"]);
 const DATE = new Set(["timestamptz", "timestamp", "date", "time"]);
-const NO_VALUE = new Set(["isEmpty", "isTrue", "isFalse"]);
+export const NO_VALUE = new Set(["isEmpty", "isNotEmpty", "isTrue", "isFalse"]);
 
 // Campos gerenciados (não estão no shape, mas existem em toda entidade).
 const MANAGED: Record<string, { label: string; type: string }> = {
@@ -26,7 +26,7 @@ function fieldLabel(name: string): string {
   return MANAGED[name]?.label ?? name;
 }
 
-const OP_LABEL: Record<string, string> = {
+export const OP_LABEL: Record<string, string> = {
   contains: "contains",
   startsWith: "starts with",
   equals: "equals",
@@ -41,6 +41,7 @@ const OP_LABEL: Record<string, string> = {
   isTrue: "is true",
   isFalse: "is false",
   isEmpty: "is empty",
+  isNotEmpty: "is not empty",
 };
 
 /**
@@ -268,9 +269,10 @@ function buildLeaf(cond: Cond, shapes: Shapes, root: string): WNode {
 /**
  * Operador da UI → objeto de operador WhereInput (curinga automático em
  * contains/startsWith). Em coluna array, o operador escalar é embrulhado em
- * `{ some: … }` ("algum elemento casa") — exceto `isEmpty`.
+ * `{ some: … }` ("algum elemento casa") — exceto `isEmpty`/`isNotEmpty`, que são
+ * nulidade da coluna escalar (`isNotEmpty` só é oferecido em campo escalar).
  */
-function leafFilter(node: FieldIR | undefined, op: string, value: unknown): WNode {
+export function leafFilter(node: FieldIR | undefined, op: string, value?: unknown): WNode {
   const isArray = node?.kind === "column" && node.array === true;
   const t = node?.kind === "column" ? node.type : "";
   const v = NUMERIC.has(t) ? Number(value) : value;
@@ -311,6 +313,8 @@ function leafFilter(node: FieldIR | undefined, op: string, value: unknown): WNod
       break;
     case "isEmpty":
       return isArray ? { isEmpty: true } : { isNull: true };
+    case "isNotEmpty":
+      return { isNull: false };
     default:
       sc = { eq: v };
   }
@@ -318,7 +322,7 @@ function leafFilter(node: FieldIR | undefined, op: string, value: unknown): WNod
 }
 
 /** Decodifica um WhereInput (saída desta barra) de volta em linhas + match. */
-function decode(active: WNode | null, shapes: Shapes, root: string): { match: "all" | "any"; conditions: Cond[] } {
+export function decode(active: WNode | null, shapes: Shapes, root: string): { match: "all" | "any"; conditions: Cond[] } {
   if (!active) return { match: "all", conditions: [] };
   if (Array.isArray(active["and"])) {
     return { match: "all", conditions: (active["and"] as WNode[]).map((n) => decodeBranch(n, shapes, root)) };
@@ -376,7 +380,8 @@ function decodeLeaf(val: WNode, leaf: ColumnIR): { op: string; value?: unknown }
   if ("gte" in val) return { op: "gte", value: val["gte"] };
   if ("lt" in val) return { op: isDate ? "before" : "lt", value: val["lt"] };
   if ("lte" in val) return { op: "lte", value: val["lte"] };
-  if ("isNull" in val || "isEmpty" in val) return { op: "isEmpty" };
+  if ("isNull" in val) return val["isNull"] === false ? { op: "isNotEmpty" } : { op: "isEmpty" };
+  if ("isEmpty" in val) return val["isEmpty"] === false ? { op: "isNotEmpty" } : { op: "isEmpty" };
   return { op: "equals" };
 }
 
@@ -422,22 +427,22 @@ function kindLabel(node: FieldIR): string {
   return node.array ? `${node.type}[]` : node.type;
 }
 
-function operatorsFor(node: ColumnIR): SelectOption[] {
+export function operatorsFor(node: ColumnIR): SelectOption[] {
   const t = node.type;
   let ops: [string, string][];
   if (TEXT.has(t)) {
-    ops = [["contains", "contains"], ["equals", "equals"], ["startsWith", "starts with"], ["isEmpty", "is empty"]];
+    ops = [["contains", "contains"], ["equals", "equals"], ["startsWith", "starts with"], ["isEmpty", "is empty"], ["isNotEmpty", "is not empty"]];
   } else if (NUMERIC.has(t)) {
-    ops = [["equals", "="], ["notEquals", "≠"], ["gt", ">"], ["gte", "≥"], ["lt", "<"], ["lte", "≤"], ["isEmpty", "is empty"]];
+    ops = [["equals", "="], ["notEquals", "≠"], ["gt", ">"], ["gte", "≥"], ["lt", "<"], ["lte", "≤"], ["isEmpty", "is empty"], ["isNotEmpty", "is not empty"]];
   } else if (t === "bool") {
     ops = [["isTrue", "is true"], ["isFalse", "is false"]];
   } else if (DATE.has(t)) {
-    ops = [["on", "on"], ["before", "before"], ["after", "after"], ["isEmpty", "is empty"]];
+    ops = [["on", "on"], ["before", "before"], ["after", "after"], ["isEmpty", "is empty"], ["isNotEmpty", "is not empty"]];
   } else {
-    ops = [["equals", "equals"], ["isEmpty", "is empty"]];
+    ops = [["equals", "equals"], ["isEmpty", "is empty"], ["isNotEmpty", "is not empty"]];
   }
   if (node.array) {
-    ops = ops.filter(([k]) => k !== "isEmpty").map(([k, l]) => [k, `any ${l}`]);
+    ops = ops.filter(([k]) => k !== "isEmpty" && k !== "isNotEmpty").map(([k, l]) => [k, `any ${l}`]);
   }
   return ops.map(([value, label]) => ({ value, label }));
 }
