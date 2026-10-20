@@ -1,6 +1,6 @@
 {
   "name": "@mauroandre/weave",
-  "version": "0.0.0",
+  "version": "0.0.48",
   "description": "Code-first object abstraction over PostgreSQL: think in nested objects, never write SQL.",
   "type": "module",
   "workspaces": [
