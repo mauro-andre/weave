@@ -1,0 +1,2838 @@
+[
+  {
+    "name": "scopeRule — where param-aware (2b) + fields dot-path (2c) > where: literal + param + multi-hop tipados",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "scopeRule — where param-aware (2b) + fields dot-path (2c) > fields: dot-paths válidos de E (folha, aninhado, subárvore)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "scopeRule — where param-aware (2b) + fields dot-path (2c) > path inexistente em fields → erro de compilação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "scopeRule — where param-aware (2b) + fields dot-path (2c) > valor de tipo errado numa coluna → erro de compilação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "weave.as — params inferidos (2d) > exige o objeto de params tipado (union das regras)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "weave.as — params inferidos (2d) > param faltando → erro de compilação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "weave.as — params inferidos (2d) > param inexistente → erro de compilação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "weave.as — params inferidos (2d) > scope sem params → .as dispensa o objeto",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "weave.as — params inferidos (2d) > pushAll aceita scope COM params (ScopeDef<'x'>, não só <never>)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope.test-d.ts"
+  },
+  {
+    "name": "column inference > nullable by default, notNull narrows",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/infer.test-d.ts"
+  },
+  {
+    "name": "column inference > array is string[] (never null by default)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/infer.test-d.ts"
+  },
+  {
+    "name": "column inference > array().nullable() widens to string[] | null",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/infer.test-d.ts"
+  },
+  {
+    "name": "column inference > carries the element TS type",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/infer.test-d.ts"
+  },
+  {
+    "name": "entity inference > produces system columns + user shape with correct nullability",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/infer.test-d.ts"
+  },
+  {
+    "name": "InferInsert > marks notNull-without-default as required, the rest optional",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/insert.test-d.ts"
+  },
+  {
+    "name": "InferInsert > nests owned insert types with optional id and no timestamps",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/insert.test-d.ts"
+  },
+  {
+    "name": "int8 (bigint-backed) — default & write value = number | bigint > valor de escrita do int8 é number | bigint (required e opcionais)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/insert.test-d.ts"
+  },
+  {
+    "name": "int8 (bigint-backed) — default & write value = number | bigint > int4 continua estrito em number (não aceita bigint)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/insert.test-d.ts"
+  },
+  {
+    "name": "N:1 lazy (thunk) — mesma inferência do eager > InferInsert expõe <field>Id preciso (thunk == eager na base/insert)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "N:1 lazy (thunk) — mesma inferência do eager > base InferEntity: categoryId preciso (string|null); colunas irmãs intactas",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "ciclo mútuo (thunk nas duas direções, módulos separados) — infere os FKs > company: name é string, consultantId é string|null (nullable)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "ciclo mútuo (thunk nas duas direções, módulos separados) — infere os FKs > users: email é string, companyId é string (notNull)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "self-ref (self()) — compila sem ciclo de inferência de const > base é limpa (só o FK id do N:1, N:N não vem por default)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "self-ref (self()) — compila sem ciclo de inferência de const > InferInsert expõe directManagersIds e managerId",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/lazy-reference.test-d.ts"
+  },
+  {
+    "name": "N:N inference > brings nothing by default (no ids field)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/many-to-many.test-d.ts"
+  },
+  {
+    "name": "N:N inference > exposes an array of targets when expanded",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/many-to-many.test-d.ts"
+  },
+  {
+    "name": "N:N inference > writes the link set via <field>Ids (optional)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/many-to-many.test-d.ts"
+  },
+  {
+    "name": "nested reference expand (depth-capped recursion) > expands a reference chain to the requested depth",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/many-to-many.test-d.ts"
+  },
+  {
+    "name": "nested filter typing > accepts array, nested ref, FK id, and quantifiers",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/nested-filter.test-d.ts"
+  },
+  {
+    "name": "nested filter typing > rejects an unknown field",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/nested-filter.test-d.ts"
+  },
+  {
+    "name": "owned inference > nests 1:1 owned as an object and 1:N as an array, recursively",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/owned.test-d.ts"
+  },
+  {
+    "name": "owned inference > owned sub-entities carry their own id/timestamps",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/owned.test-d.ts"
+  },
+  {
+    "name": "projection result typing > find through a projection returns the pruned type",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/projection.test-d.ts"
+  },
+  {
+    "name": "projection result typing > the hidden field is a compile error (permission boundary)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/projection.test-d.ts"
+  },
+  {
+    "name": "reference read inference > exposes <field>Id always, target only via expand",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/reference.test-d.ts"
+  },
+  {
+    "name": "reference read inference > adds the expanded object (nullable mirrors the FK) when expanded",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/reference.test-d.ts"
+  },
+  {
+    "name": "reference insert inference > sets references via <field>Id; notNull → required",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/reference.test-d.ts"
+  },
+  {
+    "name": "reference insert inference > never accepts the target object on write",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/reference.test-d.ts"
+  },
+  {
+    "name": "InferSelect prunes the type > only id + selected fields",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "InferSelect prunes the type > nested owned + reference selection",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "InferSelect prunes the type > select: true brings the full sub-entity",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "InferSelect prunes the type > a non-selected field is absent from the type",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "client findMany/findOne — select dirige o retorno (ReadResult) > com select → InferSelect (só o nomeado + id)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "client findMany/findOne — select dirige o retorno (ReadResult) > com select aninhado → estreita owned + reference",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "client findMany/findOne — select dirige o retorno (ReadResult) > SEM select → InferRead cheio (owned automático, timestamps sempre)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/select.test-d.ts"
+  },
+  {
+    "name": "type inference > maps PG types to the agreed TS types",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/infer.test-d.ts"
+  },
+  {
+    "name": "type inference > preserves the literal name as a discriminant",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/infer.test-d.ts"
+  },
+  {
+    "name": "SDK query type aliases (o gap de DX do PodCubo) > InferWhere: shorthand, operadores e or/and",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/sdk-query-types.test-d.ts"
+  },
+  {
+    "name": "SDK query type aliases (o gap de DX do PodCubo) > InferPatch: parcial, inclusive setar nullable pra null",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/sdk-query-types.test-d.ts"
+  },
+  {
+    "name": "SDK query type aliases (o gap de DX do PodCubo) > InferOrderBy: por campo (asc|desc)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/sdk-query-types.test-d.ts"
+  },
+  {
+    "name": "SDK query type aliases (o gap de DX do PodCubo) > helpers de service tipados na fronteira, sem as never / Parameters<>",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/sdk-query-types.test-d.ts"
+  },
+  {
+    "name": "accumulate — reference na chave única > a key com FK-shorthand (a ÚNICA forma que o tipo oferece) funciona",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/accumulate-ref-key.test.ts"
+  },
+  {
+    "name": "accumulate — reference na chave única > acumula na MESMA linha (ON CONFLICT casa pela FK), não cria outra",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/accumulate-ref-key.test.ts"
+  },
+  {
+    "name": "accumulate — reference na chave única > a reference faz PARTE da chave: mesma `day`, company diferente → linha separada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/accumulate-ref-key.test.ts"
+  },
+  {
+    "name": "accumulate — reference na chave única > o nome do CAMPO na key (`company`) também é aceito — mesmo campo, mesma linha",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/accumulate-ref-key.test.ts"
+  },
+  {
+    "name": "accumulate — reference na chave única > key que não casa nenhum unique segue estourando (e sem sugerir beco sem saída)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/accumulate-ref-key.test.ts"
+  },
+  {
+    "name": "API de admin — /admin/push + /admin/pending > 401 sem API key",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin-push.test.ts"
+  },
+  {
+    "name": "API de admin — /admin/push + /admin/pending > push segura o destrutivo, aplica o resto, e persiste o pending",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin-push.test.ts"
+  },
+  {
+    "name": "API de admin — /admin/push + /admin/pending > resolver com confirm aplica e limpa o pending",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin-push.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > 401 sem API key",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > cria entidade via PUT, lista, lê — e a entidade é real (data API)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > GET entidade inexistente → 404",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > 🟡 edição needsReview → fill → applied (tornar obrigatório com vazios)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > ⛔ mudança bloqueada (mudar tipo) → 409 mesmo com confirm",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > 🔴 remover campo → needsReview → confirm → applied",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > DELETE remove a entidade do metastore",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "API de admin (/admin) > CRUD de scope via admin (PUT/GET/DELETE) e enforcement aplica",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/admin.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > count/distinct → number",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > sum → number, em toda coluna numérica (int4/int8/numeric/float8)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > avg/percentile → number",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > min/max de coluna numérica → number (inclusive numeric)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > expressão (div) → number",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > min/max/first de coluna NÃO numérica seguem intocados (text/date)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate — saída numérica (paridade com o findMany) > paridade com o findMany: mesma coluna, mesmo tipo dos dois lados",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-numeric.test.ts"
+  },
+  {
+    "name": "aggregate/latestPer por REFERENCE (agrupa pela FK) > groupBy por reference → conta por respondent (agrupa pela FK)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-reference.test.ts"
+  },
+  {
+    "name": "aggregate/latestPer por REFERENCE (agrupa pela FK) > latestPer por reference → uma linha por respondent (a mais recente)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-reference.test.ts"
+  },
+  {
+    "name": "aggregate/latestPer por REFERENCE (agrupa pela FK) > `respondentId` também funciona (forma FK direta)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-reference.test.ts"
+  },
+  {
+    "name": "aggregate sobre owned aninhado — dot-path (Pedido 2) + unnest (Pedido 1) > Pedido 1 — unnest anchors: band por âncora sobre os finalizados (o where filtra os PAIS)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-unnest.test.ts"
+  },
+  {
+    "name": "aggregate sobre owned aninhado — dot-path (Pedido 2) + unnest (Pedido 1) > Pedido 2 — groupBy por reference→escalar + avg por owned-1:1 (sem fan-out, conta os pais)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/agg-unnest.test.ts"
+  },
+  {
+    "name": "anti-pattern: <field>Ids como `connect` > `tagsIds: [novo]` no update APAGA os links que você omitiu",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "anti-pattern: <field>Ids como `connect` > a forma certa (ler o conjunto e escrever inteiro) preserva — controle",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "anti-pattern: código à mão em weave/entities|scopes > `weave gen` apaga o arquivo escrito à mão e sai com código 0",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "anti-pattern: coluna sem .notNull() > `int4()` aceita create SEM o campo e grava null",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "anti-pattern: confiar no `where` do scope de uma entity expandida > o filtro de linhas da entity expandida é ignorado (verbo e projeção não são)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "anti-pattern: confiar no `where` do scope de uma entity expandida > verbo e projeção COMPÕEM pela referência — controle (o que a regra NÃO diz)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "agent/AGENTS.md ↔ este arquivo > pina exatamente as regras que a tabela declara — nem mais, nem menos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "agent/AGENTS.md ↔ este arquivo > toda regra declarada é única, pra uma linha não ser pinada por acidente",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/anti-patterns.test.ts"
+  },
+  {
+    "name": "API REST + API keys > a key criada pela action autentica a API",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "API REST + API keys > 401 sem key ou com key inválida",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "API REST + API keys > CRUD completo via REST",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "API REST + API keys > filtro via query string",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "API REST + API keys > 404 entidade desconhecida",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "API REST + API keys > revogar a key invalida o acesso (key → 200 → revoga → 401)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/api.test.ts"
+  },
+  {
+    "name": "auth > fundação do painel > login com o master → ok + cookie de sessão",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > fundação do painel > login com senha errada → erro, sem cookie",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > fundação do painel > rota protegida sem sessão → redireciona /login",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > fundação do painel > rota protegida com sessão → 200",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > algoritmo: casa com os vetores do RFC 6238 (HMAC-SHA1, 6 dígitos)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > begin: secret de 32 chars base32, URI otpauth com issuer/username e QR SVG",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > pendente NÃO muda o login: sem código ainda entra (critério 3)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > confirm com código do passo ANTERIOR ativa (drift −1) e mostra 10 recovery codes UMA vez",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > banco: secret cifrado e recovery apenas em hashes (critério 8)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > login com 2FA ativo: senha certa SEM código → requires2fa, nenhuma sessão",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > login: senha certa + código ERRADO → erro genérico, sem cookie",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > login: senha ERRADA (com ou sem código) → idêntico ao comportamento de hoje",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > login: senha + TOTP do passo atual → sessão como hoje (critério 4b)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > anti-replay: o MESMO código não vale duas vezes enquanto a janela o cobre",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > drift futuro: código do passo +1 é aceito na janela",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > recovery code: aceito UMA vez; o segundo uso do mesmo código falha",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > disable SEM código válido → recusado; a sessão sozinha não desliga o fator",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > disable COM recovery code → desliga; login volta a ser senha-only",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > re-enable: revoga TODOS os recovery anteriores e gera novos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > restart (setup de novo): migração idempotente e o estado do 2FA sobrevive",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "auth > TOTP 2FA > GUI: /settings com sessão renderiza o card; sem sessão → /login; /login pública",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/auth.test.ts"
+  },
+  {
+    "name": "Data — colunas de lista (text[] / int4[]) round-trip > escreve text[] (com vírgula e \\n) e int4[], lê de volta idêntico",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-array.test.ts"
+  },
+  {
+    "name": "Data — colunas de lista (text[] / int4[]) round-trip > lista vazia trafega como [] (não null)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-array.test.ts"
+  },
+  {
+    "name": "Data — colunas de lista (text[] / int4[]) round-trip > PATCH substitui a lista inteira",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-array.test.ts"
+  },
+  {
+    "name": "Data — N:N update via <field>Ids (replace/clear/preserve) > create grava o set N:N via careerAnchorsIds",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "Data — N:N update via <field>Ids (replace/clear/preserve) > updateOne troca o set (replace) — o bug",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "Data — N:N update via <field>Ids (replace/clear/preserve) > updateOne cresce o set",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "Data — N:N update via <field>Ids (replace/clear/preserve) > updateOne com [] LIMPA o set",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "Data — N:N update via <field>Ids (replace/clear/preserve) > updateOne SEM careerAnchorsIds preserva o set (omissão ≠ limpar)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "SDK client — N:N update via careerAnchorsIds (replace/clear) > updateOne pelo SDK troca e limpa o set N:N",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data-nn-update.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > lista objetos com owned aninhado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > expande a reference (mostra os dados do alvo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > cria um objeto novo (escalares + owned)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > edita um objeto: atualiza escalar e SUBSTITUI o owned",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > preserva a reference (read-only) ao editar um escalar",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > cria objeto novo com reference informando o id",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > SSR: /data?entity=blog renderiza os objetos (estado na URL)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > SSR: /data sem entity não auto-seleciona nada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > serializa colunas int8 (BigInt) sem quebrar",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > 🚩 orders cujo user tem ALGUM address com city ~ (ref → owned → texto)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > reference N:1 direta (buyer.name)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > owned direto (addresses.city)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > coluna-array de texto: algum elemento contains",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > coluna-array de número: algum elemento >= 5",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > escalar de topo (equals)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > AND combina condições (match all)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > AND sem interseção retorna vazio",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > OR une condições (match any)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > árvore complexa: (b AND O2) OR O1",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > filtra por campo gerenciado (id equals)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > filtro por caminho aninhado > SSR: filtro na URL renderiza só o resultado (refresh-safe)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > ordenação > ordena por escalar de topo (desc)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > ordenação > ordena por caminho aninhado N:1 (buyer.name asc)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > ordenação > múltiplas chaves (title asc, year asc)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > ordenação > ordena por campo gerenciado (created at)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > delete > deleta um objeto",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "data browser — leitura de objetos > delete > bloqueia delete de objeto referenciado (mensagem amigável)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/data.test.ts"
+  },
+  {
+    "name": "owned aninhado profundo sob nome longo — clamp de 63 chars end-to-end > a árvore de tabelas subiu (a do nível 4 clampou, sem colisão)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/deep-nesting-data.test.ts"
+  },
+  {
+    "name": "owned aninhado profundo sob nome longo — clamp de 63 chars end-to-end > cria um objeto aninhado 4 níveis e lê de volta idêntico (nomes consistentes)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/deep-nesting-data.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > salva o IR e materializa as tabelas (products + products__variants)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > a tela de nova entidade renderiza com a seção Index (SSR)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > a tela de edição carrega uma entidade existente (SSR)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > normaliza nomes de entidade e campos (acentos/espaços/maiúsculas)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > owned espelhado (mirror) materializa com a forma da entidade base",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > mirror + campos locais: espelha a base E acrescenta os extras (quantidade)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > materializa valores default por tipo (text/int4/bool)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > garante um id estável em todo campo (recursivo no owned)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > mantém o id num re-save sem ids (fallback por nome)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > rename preserva o id (mesmo id, nome novo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > cria o baseline do diff",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > 🟢 rename (mesmo id, nome novo) é auto",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > 🟢 adicionar campo opcional é auto",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > 🔴 remover campo pede confirmação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > 🟡 tornar obrigatório precisa de um valor",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > ⛔ tornar único é bloqueado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > ⛔ mudar tipo é bloqueado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > sem id, um rename vira remover + adicionar (drop+add)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > plano de edição > entidade nova não tem mudanças a revisar (isNew)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🟢 rename preserva o dado da linha",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🔴 remover campo: sem confirmação não aplica; com confirmação dropa",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🔴 remover um campo REFERENCE dropa a coluna `<campo>_id` (não `<campo>`)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🔴 remover um campo N:N dropa a tabela de junção",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🟡 obrigatório com vazios: trava sem valor, aplica com backfill",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > 🟢 obrigatório sem vazios aplica direto (auto, sem valor)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > aplicação do plano > ⛔ único com duplicatas trava; sem duplicatas aplica",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > rejeita nome de entidade reservado (order)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > rejeita coluna escalar com nome reservado (select)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > permite 'user'/'order' como reference/owned (viram _id e pai__filho)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > rejeita IR inválido (tipo fora do catálogo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > owned-array com scalar *Id agora materializa (FK plural não colide com o singular)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > entidade nova com unique composto materializa o índice e barra a duplicata",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > unique composto com reference resolve pra <campo>_id e é enforçado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > adicionar unique composto: com duplicata trava (needsReview), sem duplicata aplica",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > o designer renderiza o composto de uma entidade existente (SSR)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > coluna nova (reference) + unique composto no MESMO push aplica sem 42703",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > coluna nova nullable (sem default) no grupo: nasce NULL → sem duplicata possível",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > coluna nova com default constante: duplicata nas colunas existentes trava (needsReview)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > rename de campo do grupo + unique composto no mesmo push sonda pelo nome antigo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > addUnique (coluna única) + rename no mesmo push sonda pelo nome antigo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > único/índice composto (aplicação) > makeRequired com fill + unique composto: NULLs viram a constante na sondagem",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > reference notNull — ciclo de vida (addField + makeRequired) > addField de reference notNull em tabela com dados pede fill (🟡), não quebra",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > reference notNull — ciclo de vida (addField + makeRequired) > addField de coluna escalar notNull em tabela com dados aplica o fill (paridade)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > reference notNull — ciclo de vida (addField + makeRequired) > nullable → notNull em reference: sonda NULLs, pede fill e aplica SET NOT NULL",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > reference notNull — ciclo de vida (addField + makeRequired) > nullable → notNull em reference sem NULLs vira 🟢 (sonda) e aplica",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > reference notNull — ciclo de vida (addField + makeRequired) > notNull → nullable em reference aplica DROP NOT NULL",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > delete de entity > dropa as tabelas (raiz + owned) e limpa o metastore",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > delete de entity > botão Delete: presente na entity existente, ausente na nova (SSR)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > delete de entity > designer exibe a entity em camelCase (nome lógico) + tabela snake no preview (SSR)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "entidades — criar e materializar > delete de entity > deletar uma entity REFERENCIADA não trava as operações seguintes (ref pendurada tolerada)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entities.test.ts"
+  },
+  {
+    "name": "EntityDesigner — compostos IR ↔ model > irToModel lê os grupos mapeando nome→id; toIR reproduz por nome",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — compostos IR ↔ model > round-trip estável: toIR(irToModel(ir)) reproduz os grupos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — compostos IR ↔ model > rename-proof: renomear um campo do grupo re-emite com o NOME NOVO (id preservado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — compostos IR ↔ model > elegibilidade: um campo que virou owned some do grupo (toIR filtra)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — compostos IR ↔ model > grupo vazio (nenhum campo elegível) é omitido do IR",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > irToModel liga a partição, mapeia o campo→id e separa o bucket/retenção",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > round-trip estável reproduz partitionBy + retention",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > partitionBy sem retention → keepForever (modo 2), e volta sem retention",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > rename-proof: renomear o campo de tempo re-emite o partitionBy com o nome novo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > campo não-elegível (não é timestamptz notNull) não emite partitionBy",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — partição IR ↔ model > desligada → sem partitionBy/retention no IR",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — self-ref (sentinela $self) > irToModel: target == nome próprio → $self (N:1 e N:N)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — self-ref (sentinela $self) > toIR: $self → nome atual da entity",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — self-ref (sentinela $self) > round-trip estável: toIR(irToModel(ir)) reproduz o self-ref",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — self-ref (sentinela $self) > cross-ref (alvo != próprio) NÃO vira $self",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — self-ref (sentinela $self) > rename-safe: renomear a entity re-resolve o $self pro novo nome",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "EntityDesigner — previewTables bate com o DDL (clamp incluso) > preview do designer == nomes de tabela do collectTables, com o nível 4 clampado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-designer-model.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > nenhum id fornecido → o servidor cunha UUID em todo campo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > todos os ids fornecidos → o servidor preserva exatamente (inclusive ids legíveis)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > misto → preserva os fornecidos e cunha só onde falta",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > owned aninhado misto → respeita/cunha em qualquer profundidade",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > id duplicado na entidade → rejeitado (mesmo entre topo e owned aninhado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > id vazio/ inválido → rejeitado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "ids fornecidos pelo client na criação da entidade > uma vez criada com ids, re-salvar sem mexer mantém os mesmos ids (segue como hoje)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/entity-ids.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > oferece \"is not empty\" logo após \"is empty\" nos quatro grupos escalares",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > booleano não ganha operadores de nulidade",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > array não ganha empty e mantém o prefixo any nos escalares",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > \"is not empty\" é operador sem valor com rótulo próprio",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > emite a nulidade negada do escalar (`isNull: false`), nada além",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "filter bar — operadores \"is (not) empty\" > decode reconhece as formas negadas sem degradar para \"is empty\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/filter-bar.test.ts"
+  },
+  {
+    "name": "findMany devolve a lista inteira (fim do cap silencioso de 20) > findMany() devolve TODAS as 250 (não trunca em 20 nem em 100)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-all.test.ts"
+  },
+  {
+    "name": "findMany devolve a lista inteira (fim do cap silencioso de 20) > findMany com limit devolve exatamente o pedido",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-all.test.ts"
+  },
+  {
+    "name": "findMany devolve a lista inteira (fim do cap silencioso de 20) > paginate com perPage > 100 funciona (cap duro removido)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-all.test.ts"
+  },
+  {
+    "name": "findMany — o teto default avisa quando corta > corta no teto default, mas AVISA (com os dois números)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-limit.test.ts"
+  },
+  {
+    "name": "findMany — o teto default avisa quando corta > `limit` explícito acima do total → devolve tudo, sem avisar",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-limit.test.ts"
+  },
+  {
+    "name": "findMany — o teto default avisa quando corta > `limit` explícito ABAIXO do total → corta calado (a escolha é sua)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-limit.test.ts"
+  },
+  {
+    "name": "findMany — o teto default avisa quando corta > resultado dentro do teto → nada de aviso",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-limit.test.ts"
+  },
+  {
+    "name": "findMany — o teto default avisa quando corta > paginate não é afetado (quem manda é o perPage)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/findmany-limit.test.ts"
+  },
+  {
+    "name": "GUI → partição (fluxo do designer + data browser) > o toIR do designer emite partitionBy + retention",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/gui-partition.test.ts"
+  },
+  {
+    "name": "GUI → partição (fluxo do designer + data browser) > action_saveEntity cria a tabela PARTICIONADA (partstrat='r'), ainda sem partições",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/gui-partition.test.ts"
+  },
+  {
+    "name": "GUI → partição (fluxo do designer + data browser) > inserir pelo data browser (action_saveObject) cria a partição do dia (lazy)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/gui-partition.test.ts"
+  },
+  {
+    "name": "GUI → partição (fluxo do designer + data browser) > inserir outro dia cria a segunda partição",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/gui-partition.test.ts"
+  },
+  {
+    "name": "homeStats — overview + engine room > conta objetos e tabelas por entity (owned e partição contam no total físico)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/home.test.ts"
+  },
+  {
+    "name": "homeStats — overview + engine room > engine room do Postgres: versão, tamanho, tabelas, uptime, conexões",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/home.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > eager N:1 continua resolvendo pro nome do alvo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > thunk N:1 (() => other) resolve pro nome do alvo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > thunk N:N (array(() => other)) resolve pro nome, cardinality many",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > self() N:1 → alvo = a própria entity",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > self() N:N → alvo = a própria entity, cardinality many",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > thunk N:1 com .notNull() preserva notNull ao resolver",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "toIR — resolução de reference eager / thunk / self > thunk que devolve o NAMESPACE do módulo (import circular via jiti) desembrulha o default",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — detecção de ciclo (buildLazyRefPredicate) > acíclico → nenhuma aresta é lazy (PodCubo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — detecção de ciclo (buildLazyRefPredicate) > ciclo mútuo → as DUAS arestas são lazy",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — detecção de ciclo (buildLazyRefPredicate) > ciclo transitivo (3 saltos) → todas as arestas do ciclo são lazy",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — detecção de ciclo (buildLazyRefPredicate) > misto: aresta acíclica fica eager, cíclica fica lazy, na mesma entity",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — detecção de ciclo (buildLazyRefPredicate) > reference DENTRO de owned também conta pro ciclo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — irToSource emite eager / lazy / self > sem predicado → cross-ref fica eager (chamada avulsa)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — irToSource emite eager / lazy / self > predicado true → cross-ref vira thunk lazy, mantendo o import",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — irToSource emite eager / lazy / self > N:N cíclico → reference(array(() => other))",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — irToSource emite eager / lazy / self > self-ref N:N → reference(array(self())), SEM auto-import",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "gen — irToSource emite eager / lazy / self > self-ref N:1 → reference(self()) (com .notNull())",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/lazy-reference.test.ts"
+  },
+  {
+    "name": "mirror trazendo reference dentro de owned (via actions) > salva pedido com item que tem category (reference dentro de owned) e lê de volta",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/mirror-nested-ref.test.ts"
+  },
+  {
+    "name": "ciclo mútuo (FK diferida + reconciliação) — end-to-end > as DUAS FKs do ciclo existem (reconciliadas)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/mutual-cycle-data.test.ts"
+  },
+  {
+    "name": "ciclo mútuo (FK diferida + reconciliação) — end-to-end > a coluna adiada (company.consultant_id) foi criada na reconciliação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/mutual-cycle-data.test.ts"
+  },
+  {
+    "name": "ciclo mútuo (FK diferida + reconciliação) — end-to-end > insert respeita o ciclo: company → user → aponta consultant de volta",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/mutual-cycle-data.test.ts"
+  },
+  {
+    "name": "ciclo mútuo (FK diferida + reconciliação) — end-to-end > a FK é IMPOSTA: user com company inexistente falha",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/mutual-cycle-data.test.ts"
+  },
+  {
+    "name": "naming e2e — camelCase no código ↔ snake_case no PG > a coluna no Postgres é snake_case (first_name / phone_number)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming-e2e.test.ts"
+  },
+  {
+    "name": "naming e2e — camelCase no código ↔ snake_case no PG > create/read: firstName sobrevive o round-trip (chave camelCase bate)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming-e2e.test.ts"
+  },
+  {
+    "name": "naming e2e — camelCase no código ↔ snake_case no PG > where/update por campo camelCase (shorthand + snake por baixo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming-e2e.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"firstName\" → \"firstName\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"First Name\" → \"firstName\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"first_name\" → \"firstName\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"first-name\" → \"firstName\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"nome do campo\" → \"nomeDoCampo\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"nomeDoCampo\" → \"nomeDoCampo\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"Preço Médio\" → \"precoMedio\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"  espaços  extras \" → \"espacosExtras\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"já_camel\" → \"jaCamel\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize — qualquer estilo converge pro mesmo camelCase > \"2fast\" → \"_2fast\"",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize → camelToSnake = coluna snake_case > mapeia camelCase → snake_case",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "camelize → camelToSnake = coluna snake_case > estilos diferentes → MESMO campo → MESMA coluna (convergência)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "where com campo camelCase → coluna snake_case no SQL > { firstName: 'Ada' } (shorthand) filtra pela coluna first_name",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "where com campo camelCase → coluna snake_case no SQL > { phoneNumber: { ilike } } → phone_number ILIKE",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "where com campo camelCase → coluna snake_case no SQL > orderBy por campo camelCase também vai pra coluna snake",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "normalizeEntityIR — campo = camelize, entidade = slug > entidade vira slug (tabela); campos viram camelCase",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "normalizeEntityIR — campo = camelize, entidade = slug > owned aninhado também cameliza os campos internos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/naming.test.ts"
+  },
+  {
+    "name": "WEAVE_ID_TYPE=objectId — cutover end-to-end > a coluna id (e a FK) é char(24), não uuid",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid-cutover.test.ts"
+  },
+  {
+    "name": "WEAVE_ID_TYPE=objectId — cutover end-to-end > migração: insert preservando os ObjectIds → id mantido e FK bate (link intacto)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid-cutover.test.ts"
+  },
+  {
+    "name": "WEAVE_ID_TYPE=objectId — cutover end-to-end > linha nova sem id → gera um ObjectId (24 hex)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid-cutover.test.ts"
+  },
+  {
+    "name": "objectId() — 24-hex ObjectId-compatible id > is 24 lowercase hex chars (passes ObjectId.isValid shape)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid.test.ts"
+  },
+  {
+    "name": "objectId() — 24-hex ObjectId-compatible id > is unique across a large batch",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid.test.ts"
+  },
+  {
+    "name": "objectId() — 24-hex ObjectId-compatible id > embeds the second timestamp in the first 4 bytes (Mongo layout)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid.test.ts"
+  },
+  {
+    "name": "objectId() — 24-hex ObjectId-compatible id > per-process random (bytes 4..8) is stable; counter (last 3 bytes) increments by 1",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/objectid.test.ts"
+  },
+  {
+    "name": "applyProject + pending (slot único) > multi-entidade: a limpa aplica, a retida vira review + é persistida no pending",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/pending.test.ts"
+  },
+  {
+    "name": "applyProject + pending (slot único) > resolver com confirm aplica e LIMPA o slot",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/pending.test.ts"
+  },
+  {
+    "name": "identificadores reservados — campo `join` > push, CRUD, filtro, ordenação e agregação sobre o campo `join`",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/reserved-ident.test.ts"
+  },
+  {
+    "name": "factory reset — trava por WEAVE_DEV_MODE + wipe/rebuild > WEAVE_DEV_MODE OFF → reset responde 403 e NÃO apaga nada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/reset.test.ts"
+  },
+  {
+    "name": "factory reset — trava por WEAVE_DEV_MODE + wipe/rebuild > WEAVE_DEV_MODE ON → reset zera tudo; push reconstrói; findMany=[]; partição renasce lazy",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/reset.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — accumulate cross-tenant negado > accumulate DENTRO do tenant → ok (insert e merge)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-accumulate.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — accumulate cross-tenant negado > accumulate MERGEANDO na linha de outro tenant → 403, e o valor não muda",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-accumulate.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — accumulate cross-tenant negado > accumulate criando linha FORA do filtro (sem company) → 403, e nada persiste",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-accumulate.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — accumulate cross-tenant negado > accumulate criando linha de OUTRO tenant → 403",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-accumulate.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — accumulate cross-tenant negado > god (sem scope) acumula em qualquer linha",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-accumulate.test.ts"
+  },
+  {
+    "name": "scope designer (GUI) > SSR: /scopes/new renderiza",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-designer.test.ts"
+  },
+  {
+    "name": "scope designer (GUI) > salva e relê um scope (action → control-plane), e o editor carrega",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-designer.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > controle: leitura DIRETA da entity poda o campo excluído",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > expand aplica a projeção da entity EXPANDIDA (não vaza o excluído)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > select também aplica a projeção da entity expandida",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > expandir entity SEM regra no scope → 403 (igual ao acesso direto)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > findOne por id também compõe (mesmo caminho de leitura)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > dot-path na regra da RAIZ continua podando (não regrediu)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > AUTO-expand (ninguém pediu) não vira 403 — só não expande o proibido",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope × expand — a regra da entity expandida vale > god (sem scope) não é afetado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-expand.test.ts"
+  },
+  {
+    "name": "scope where: colunas de sistema + FK-shorthand (multi-tenancy) > FK-shorthand: where { companyId: { eq: { param } } } filtra pelo tenant",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-system-cols.test.ts"
+  },
+  {
+    "name": "scope where: colunas de sistema + FK-shorthand (multi-tenancy) > traversal até o id de SISTEMA: where { company: { id: { eq: { param } } } }",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-system-cols.test.ts"
+  },
+  {
+    "name": "scope where: colunas de sistema + FK-shorthand (multi-tenancy) > coluna de sistema na RAIZ: where { id: { eq: { param } } }",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-system-cols.test.ts"
+  },
+  {
+    "name": "scope where: colunas de sistema + FK-shorthand (multi-tenancy) > nome de entidade MULTI-PALAVRA: campos declarados resolvem no push (não 'desconhecido')",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-system-cols.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — write cross-tenant negado (create + update) > create DENTRO do tenant → ok",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-with-check.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — write cross-tenant negado (create + update) > create CROSS-tenant → 403, e nada persiste (rollback)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-with-check.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — write cross-tenant negado (create + update) > update DENTRO do tenant → ok",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-with-check.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — write cross-tenant negado (create + update) > update MOVENDO pra outro tenant (patch no FK) → 403, linha não migra",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-with-check.test.ts"
+  },
+  {
+    "name": "scope WITH CHECK — write cross-tenant negado (create + update) > bulk createMany com UMA linha cross-tenant → 403 atômico (nem a válida persiste)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scope-with-check.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > base compartilhada: createScopedClient(weave) → scopedWeave.god === weave",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > FORA de runAs → DENY (WeaveScopeError, fail-closed) — nunca god silencioso",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > runAs escopa o callback (só a company do param)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > runAsGod → acesso total no callback",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > scopedWeave.god → acesso total em qualquer ponto (auth pré-scope / boot)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > ALS propaga através de await (handler async, inclusive setTimeout)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > aninhado: runAsGod dentro de runAs, e o escopo externo RESTAURA depois",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > dispatcher: first-match deriva scope + params do principal (sem if-chain)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > dispatcher: nenhum when casa → deny (WeaveScopeError, fail-closed)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scoped client — runAs / runAsGod / god + fail-closed > dispatcher: overlap resolve por ORDEM (mais específico primeiro vence)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scoped.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > god (sem scope) vê tudo, com todos os campos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > admin filtra por companyId e esconde cost",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > manager lê várias empresas (IN)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > verbo fora do scope → 403",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > scope inexistente → 403",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > param faltando → 400",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > filtro de linhas ANINHADO (emp via dept.companyId)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > projeção aninhada esconde campo dentro do owned",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "scopes (enforcement na API) > 🚩 renomear o campo NÃO quebra o scope (guardado por id)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/scopes.test.ts"
+  },
+  {
+    "name": "SDK accumulate — tier histórico (upsert mergeável) > 1ª chamada INSERE e devolve a linha (inc-and-return)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-accumulate.test.ts"
+  },
+  {
+    "name": "SDK accumulate — tier histórico (upsert mergeável) > 2ª chamada na MESMA chave MERGEIA: contador soma, pico sobe, vale desce, setOnInsert preserva",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-accumulate.test.ts"
+  },
+  {
+    "name": "SDK accumulate — tier histórico (upsert mergeável) > 3ª chamada com valor MENOR: o pico se mantém, o vale afunda",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-accumulate.test.ts"
+  },
+  {
+    "name": "SDK accumulate — tier histórico (upsert mergeável) > chave diferente (outro bucket) = OUTRA linha; a série coexiste",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-accumulate.test.ts"
+  },
+  {
+    "name": "SDK accumulate — tier histórico (upsert mergeável) > chave que não casa com o unique declarado → erro (não escreve nada)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-accumulate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > createMany: devolve as linhas na ordem de entrada, revividas",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > série temporal: timeBucket('ts','5min') + count(), ordenada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > groupBy host: count + sum + avg (durationMs → duration_ms)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > conjunto inteiro (sem groupBy): uma linha agregada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > where filtra antes de agregar (status = 200)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > distinct: hosts únicos no conjunto (a, b → 2)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > percentile exato: p50 de [50,100,200,300] → 150 (mediana interpolada)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > acumulador com { where } → FILTER: total vs errors numa passada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > having: só grupos com count >= 2 (host a; b fica de fora)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > expressões: errorRate = errors/total, ordenável server-side pela taxa",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > expressões: having sobre a taxa filtra server-side (só quem falha)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > facets: números de manchete + breakdowns independentes numa passada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > facets: limit → top-N por faceta (pressupõe orderBy)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > facets herdam o where do pai (status=200 → host b some do breakdown)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > sem facets → AggregateRow[] pelado (auto-tipado, backward-compat)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > histogram: barras de latência [<100, [100,200), >=200] sobre [50,100,200,300]",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > latestPer: o req MAIS RECENTE por host (DISTINCT ON — métricas vivas)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK aggregate (F-agg) — groupBy + acumuladores + timeBucket > top-N paginado: host mais movimentado (orderBy desc + perPage 1)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-aggregate.test.ts"
+  },
+  {
+    "name": "SDK CLI (F3) — parseArgs + weave push > parseArgs: --confirm / --fill / --rename / --config",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-cli.test.ts"
+  },
+  {
+    "name": "SDK CLI (F3) — parseArgs + weave push > parseArgs: --confirm all liga confirmAll (e ainda aceita granular junto)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-cli.test.ts"
+  },
+  {
+    "name": "SDK CLI (F3) — parseArgs + weave push > discoverEntities: lê a pasta e chaveia pelo nome da entidade (default export)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-cli.test.ts"
+  },
+  {
+    "name": "SDK CLI (F3) — weave push integração > weave push: empurra entidades + scopes (ordem de dep) e re-sincroniza via gen",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-cli.test.ts"
+  },
+  {
+    "name": "SDK CLI (F3) — weave push integração > weave push --no-gen: aplica no server mas NÃO toca nos arquivos locais",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-cli.test.ts"
+  },
+  {
+    "name": "SDK CLI — weave push --confirm all (+ --fill) > remove 2 + torna 1 obrigatório; `--confirm all --fill` aplica tudo num comando",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-confirm-all.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > IR → source defineEntity (sem $id por padrão)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > withId: emite .$id(...) em cada campo (inclusive aninhados)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > scalar array nullable: IR pelado `{ array: true }` → `.nullable()` (round-trip fiel)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > mirror: gera owned(array(mirror(Base, { extras }))) + importa a base + sem aviso",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > mirror 1:1 puro (sem extras) → owned(mirror(Base))",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > partitionBy/retention → emite timeBucket no 3º arg + importa timeBucket",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — irToSource > importa `array` quando SÓ um owned(array({…})) usa (sem scalar-array pra mascarar)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — scopeToSource > storage por-id → defineScope por-nome (where + projeção)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — scopeToSource > resolve caminho aninhado via reference e param",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — scopeToSource > resolve coluna de sistema (@id) e FK-shorthand (ref como folha)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — genProject / weave gen > genProject: entidades com $id, barrels, scope resolvido e client",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — genProject / weave gen > genProject: array nullable do servidor volta com .nullable() (push → gen round-trip)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK codegen — genProject / weave gen > runCli gen: limpa as pastas e escreve a árvore na pasta do config",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-gen.test.ts"
+  },
+  {
+    "name": "SDK int8 — write com number e bigint + default > create com number no int8 (era impossível antes)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-int8.test.ts"
+  },
+  {
+    "name": "SDK int8 — write com number e bigint + default > create com bigint no int8 (SDK coage p/ number no fio, não lança)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-int8.test.ts"
+  },
+  {
+    "name": "SDK int8 — write com number e bigint + default > omitir o int8 usa o default(0)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-int8.test.ts"
+  },
+  {
+    "name": "SDK partition retention — tier recente cru (append-only) > a tabela pai é particionada por RANGE (ts)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-partition.test.ts"
+  },
+  {
+    "name": "SDK partition retention — tier recente cru (append-only) > dias distintos → partições distintas (ensure lazy pela ts do evento)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-partition.test.ts"
+  },
+  {
+    "name": "SDK partition retention — tier recente cru (append-only) > leitura atravessa as partições (pruning transparente)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-partition.test.ts"
+  },
+  {
+    "name": "SDK partition retention — tier recente cru (append-only) > createMany pula as linhas além da retenção (>7d), insere as frescas",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-partition.test.ts"
+  },
+  {
+    "name": "SDK partition retention — tier recente cru (append-only) > dropa a partição expirada no rollover",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-partition.test.ts"
+  },
+  {
+    "name": "pushAll — push de projeto (entities + scopes) em modo objeto > empurra entities (topo-ordenadas) e scopes, devolve estruturado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push-all.test.ts"
+  },
+  {
+    "name": "pushAll — push de projeto (entities + scopes) em modo objeto > re-push idempotente: mesmos objetos → nada a fazer, sem review",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push-all.test.ts"
+  },
+  {
+    "name": "pushAll — push de projeto (entities + scopes) em modo objeto > scopes ausente → pula o push de scopes (no-op)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push-all.test.ts"
+  },
+  {
+    "name": "SDK push — ciclo mútuo (thunk) + self-ref > push resolve o thunk `() => other` (não estoura 'target must be a string')",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push-cycle.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > aplica em ordem de dependência (reference) e devolve applied",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > único composto via pushEntities: cria o índice no servidor (reference → _id) e enforça pelo SDK",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > nome multi-palavra: lógico camelCase / tabela snake / accessor camelCase resolve",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > gen: arquivo/barrel/arg usam o nome lógico camelCase",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > owned(array): push (SDK) → materializa raiz+child → cria com array aninhado → lê de volta → gen importa `array`",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > updateOne troca/limpa FK de reference que já tem valor (múltiplas refs pro mesmo alvo)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > mirror(entity): push (SDK) → materializa a base + extras no child → CRUD → gen round-trip",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > re-push idempotente (nada a mudar) → applied, zero review",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > rename: injeta o id do campo antigo → o servidor vê RENAME (dado preservado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK entities push (F3) > 🟡 mudança que precisa de valor → review com plano; fill → applied",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-push.test.ts"
+  },
+  {
+    "name": "SDK scope-as-code (F4b) — defineScope + pushScopes > defineScope por nome → pushScopes (by-id) → weave.as impõe linhas + projeção + verbo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope-as-code.test.ts"
+  },
+  {
+    "name": "SDK scope-as-code (F4b) — defineScope + pushScopes > multi-chave no where = AND implícito — não dropa condição (furo de auth fechado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope-as-code.test.ts"
+  },
+  {
+    "name": "SDK scope-as-code (F4b) — defineScope + pushScopes > bare value no where (1:1 com a query): { company: 8 } ≡ { eq: 8 }, e { param } bare",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope-as-code.test.ts"
+  },
+  {
+    "name": "SDK weave.as — acesso escopado (F4a) > god (sem scope) vê tudo; escopado vê só as linhas permitidas + projeção",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope.test.ts"
+  },
+  {
+    "name": "SDK weave.as — acesso escopado (F4a) > verbo não permitido (create num scope read-only) → WeaveScopeError 403",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope.test.ts"
+  },
+  {
+    "name": "SDK weave.as — acesso escopado (F4a) > param faltando → erro do scope (não vaza dado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-scope.test.ts"
+  },
+  {
+    "name": "SDK select — leitura enxuta (whitelist de owned/colunas) > SEM select: owned vem 100% hidratado (default preservado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-select.test.ts"
+  },
+  {
+    "name": "SDK select — leitura enxuta (whitelist de owned/colunas) > COM select: só o nomeado hidrata; owned/coluna não-selecionados somem",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-select.test.ts"
+  },
+  {
+    "name": "SDK select — leitura enxuta (whitelist de owned/colunas) > timestamps entram no select se pedidos (e o revive os vira Date)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-select.test.ts"
+  },
+  {
+    "name": "SDK select — leitura enxuta (whitelist de owned/colunas) > select parcial de subárvore owned (só um campo do item)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk-select.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > create + findOne por id (shorthand { id }); createdAt vira Date",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > findMany / findOne por where cru (shorthand eq)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > createMany: lote com reference (normaliza refs por item) + array vazio",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > expand no 2º arg (opts): o retorno se auto-tipa",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > sem expand: reference vem só como id",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > where com operadores + orderBy (opts)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > updateOne por where faz merge e devolve o objeto; null se não casa",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > updateMany por where → { count } e aplica em todos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > deleteOne devolve o objeto deletado; null se não casa",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > deleteMany por where → { count }",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > update/delete exigem where (guarda contra mutação em massa acidental)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > paginate(where, { perPage })",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "SDK client (F1) — CRUD tipado via app.hono.fetch > erro tipado: key inválida → 401",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/sdk.test.ts"
+  },
+  {
+    "name": "self-ref N:N (reference(array(self()))) — end-to-end > a join table self-ref foi criada (DDL aceita self N:N)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/self-ref-data.test.ts"
+  },
+  {
+    "name": "self-ref N:N (reference(array(self()))) — end-to-end > cria, linka e lê via expand pelo SDK (revive resolve o self())",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/self-ref-data.test.ts"
+  },
+  {
+    "name": "self-ref N:N (reference(array(self()))) — end-to-end > updateOne troca o set self-ref (o fix N:N vale pra self também)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/self-ref-data.test.ts"
+  },
+  {
+    "name": "self-ref N:N (reference(array(self()))) — end-to-end > genProject emite reference(array(self())) sem auto-import",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/self-ref-data.test.ts"
+  },
+  {
+    "name": "SESSION_SECRET — sem default > sem a env → estoura, dizendo o que fazer",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/session-secret.test.ts"
+  },
+  {
+    "name": "SESSION_SECRET — sem default > verificar token sem a env também estoura (não cai em 'inválido' silencioso)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/session-secret.test.ts"
+  },
+  {
+    "name": "SESSION_SECRET — sem default > nenhum segredo previsível é aceito: o antigo default não assina mais nada",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/session-secret.test.ts"
+  },
+  {
+    "name": "SESSION_SECRET — sem default > com a env, o round-trip funciona",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/session-secret.test.ts"
+  },
+  {
+    "name": "toIR — round-trip IR → fromIR → toIR > reproduz uma coluna notNull + unique",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "toIR — round-trip IR → fromIR → toIR > reproduz colunas (nullable/default), reference N:1 e N:N",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "toIR — round-trip IR → fromIR → toIR > reproduz owned 1:N com reference aninhada dentro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "toIR — round-trip IR → fromIR → toIR > preserva `table` override em owned",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "toIR — a partir do builder real (defineEntity) > serializa o schema-as-code do dev no IR esperado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "toIR — a partir do builder real (defineEntity) > não emite `id` (cunhado no servidor) nem timestamps managed",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "composite unique / index — to/from IR + normalize + diff > toIR carrega os grupos; fromIR reconstrói options; round-trip estável",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "composite unique / index — to/from IR + normalize + diff > normalizeEntityIR cameliza os membros dos grupos (alinha com os campos)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "composite unique / index — to/from IR + normalize + diff > diffEntityIR: add unique composto = blocked; drop = auto; reorder = drop+add",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "mirror() builder → IR (owned que espelha outra entity) > owned(mirror(base)) 1:1 puro → { owned, mirror, sem shape }",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "mirror() builder → IR (owned que espelha outra entity) > owned(array(mirror(base, { extras }))) 1:N → mirror + só os campos LOCAIS no shape",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "mirror() builder → IR (owned que espelha outra entity) > mirror pega o nome do ENTITY-alvo (não string)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/to-ir.test.ts"
+  },
+  {
+    "name": "where — operador desconhecido estoura (não vira predicado falso) > reflexo do Prisma no where → erro nomeando o operador",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/where-unknown-op.test.ts"
+  },
+  {
+    "name": "where — operador desconhecido estoura (não vira predicado falso) > operador VÁLIDO ao lado de um desconhecido → erro (antes o válido era descartado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/where-unknown-op.test.ts"
+  },
+  {
+    "name": "where — operador desconhecido estoura (não vira predicado falso) > o slot { where } do acumulador (sem tipagem) também estoura",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/where-unknown-op.test.ts"
+  },
+  {
+    "name": "where — operador desconhecido estoura (não vira predicado falso) > json/jsonb: objeto é VALOR, continua filtrando",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/where-unknown-op.test.ts"
+  },
+  {
+    "name": "where — operador desconhecido estoura (não vira predicado falso) > os operadores de verdade seguem funcionando",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/where-unknown-op.test.ts"
+  },
+  {
+    "name": "parseArgs > parses a command with --flag value and --flag=value",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/cli/cli.test.ts"
+  },
+  {
+    "name": "parseArgs > defaults to help with no args",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/cli/cli.test.ts"
+  },
+  {
+    "name": "runCommand (integration) > status reports pending changes for an evolved shape",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/cli/cli.test.ts"
+  },
+  {
+    "name": "runCommand (integration) > sync applies the change; a second status is up to date",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/cli/cli.test.ts"
+  },
+  {
+    "name": "runCommand (integration) > unknown command prints usage and returns code 1",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/cli/cli.test.ts"
+  },
+  {
+    "name": "diffSchema > creates a table absent in the DB",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/diff.test.ts"
+  },
+  {
+    "name": "diffSchema > adds a missing column on an existing table",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/diff.test.ts"
+  },
+  {
+    "name": "diffSchema > reports type and nullability drift without altering",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/diff.test.ts"
+  },
+  {
+    "name": "diffSchema > reports a column present only in the DB (never drops)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/diff.test.ts"
+  },
+  {
+    "name": "emitChanges > renders ADD COLUMN + CREATE INDEX for additive changes",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/diff.test.ts"
+  },
+  {
+    "name": "emitCreateTable > emits the canonical scalar + array table",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "emitCreateTable > escapes single quotes in string defaults",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "emitIndexes > emits one CREATE INDEX per .index() column",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "emitIndexes > returns nothing when no column is indexed",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "emitEntity > joins the table and its indexes",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "composite unique / index (entity-level) > emits CREATE [UNIQUE] INDEX with resolved columns (reference → <field>_id)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "composite unique / index (entity-level) > defineEntity rejects an unknown / duplicate / empty / owned group member",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "duplicate-column guard (scalar *Id vs link column) > owned-array com scalar terminando em Id agora funciona (FK plural não colide com o singular)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "duplicate-column guard (scalar *Id vs link column) > owned-array cujo scalar bate no FK plural do child → aí sim erro claro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "duplicate-column guard (scalar *Id vs link column) > reference + scalar homônimo (fooId) → mesmo guard",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "duplicate-column guard (scalar *Id vs link column) > scalar *Id sem link homônimo passa (caso normal de entity raiz)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "emitCreateTable — partição por tempo > particiona por RANGE (ts) e move a PK pra (id, ts)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/emit.test.ts"
+  },
+  {
+    "name": "FK idempotência — re-sync de schema existente é no-op > 1º sync cria a FK; 2º sync não re-adiciona (sem erro, sem duplicata)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/fk-idempotency.test.ts"
+  },
+  {
+    "name": "FK idempotência — re-sync de schema existente é no-op > 3º sync também é estável (idempotente de verdade)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/fk-idempotency.test.ts"
+  },
+  {
+    "name": "clamp de índice / constraint (folha, separador _) > no-op quando cabe (fica idêntico)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de índice / constraint (folha, separador _) > estoura → <coluna>_<hash>_<tipo>: ≤63, sem leading, mantém coluna e sufixo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de índice / constraint (folha, separador _) > determinístico (mesmo input → mesmo nome, estável entre pushes)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de índice / constraint (folha, separador _) > par que colidiria no truncamento ingênuo → nomes DISTINTOS",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de índice / constraint (folha, separador _) > patológico (coluna gigante que sozinha estoura) ainda cabe em 63",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de tabela (caminho, separador __) > no-op quando cabe (fica idêntico)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de tabela (caminho, separador __) > estoura → <root>__<hash>__<leaf>: ≤63, sem leading, mantém entity e owned leaf",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de tabela (caminho, separador __) > mesmo root + mesmo leaf, MEIO diferente → nomes DISTINTOS (o hash do caminho todo distingue)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de tabela (caminho, separador __) > override explícito NÃO é clampado (escolha do usuário)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "clamp de tabela (caminho, separador __) > join table (N:N) clampa pela mesma regra",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/ident-clamp.test.ts"
+  },
+  {
+    "name": "N:N DDL > emits a join table (no id/timestamps), composite PK",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N DDL > both FKs cascade the link; target FK is indexed",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N DDL > renders the composite primary key (FK NÃO inline — vai como ALTER)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N DDL > as FKs da join saem como ALTER … ADD CONSTRAINT (ambas cascade)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N read compile > brings nothing by default",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N read compile > aggregates linked targets via the join table on expand",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/many-to-many.test.ts"
+  },
+  {
+    "name": "collectTables > produces one table per owned level, parent-first",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "collectTables > owned fields do not become columns on the parent",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "collectTables > child tables get the parent FK with cascade, named by parent segment",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "collectTables > auto-indexes each parent FK",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "emitEntity (owned tree) > matches the PRD canonical DDL",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "owned 1:1 and table override > 1:1 owned still gets a dedicated table",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "owned 1:1 and table override > { table } overrides the generated name",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "owned 1:1 and table override > supports scalar arrays alongside owned in the same shape",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/owned.test.ts"
+  },
+  {
+    "name": "partition — duração e bucket > parseDuration cobre s/min/h/d",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — duração e bucket > bucketStart faz epoch-floor no intervalo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — nome e sufixo > granularidade diária → YYYY_MM_DD",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — nome e sufixo > granularidade horária adiciona _HH",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — nome e sufixo > granularidade de minuto adiciona _HHMM",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — DDL nativa > CREATE … IF NOT EXISTS PARTITION OF … FOR VALUES (idempotente)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — DDL nativa > DROP de partição inteira (não DELETE)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "partition — DDL nativa > upperBoundEpoch extrai o TO do relpartbound",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/partition.test.ts"
+  },
+  {
+    "name": "reference DDL > emits an FK column (no cascade), auto-indexed",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "reference DDL > honors notNull and snake_cases the column",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "reference DDL > does not create a child table for the reference",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "reference read compile > includes <field>Id by default, no join",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "reference read compile > adds the expanded object subquery when expanded",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "reference read compile > expands references nested inside owned children",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/ddl/reference.test.ts"
+  },
+  {
+    "name": "driver > sync() creates the registered tables",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/client.test.ts"
+  },
+  {
+    "name": "driver > sync() is idempotent — second run is a no-op",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/client.test.ts"
+  },
+  {
+    "name": "driver > the table works end to end (defaults, array, uuid v7)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/client.test.ts"
+  },
+  {
+    "name": "driver > transaction() rolls back on throw",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/client.test.ts"
+  },
+  {
+    "name": "find (weave read) > returns the owned tree nested automatically",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/find.test.ts"
+  },
+  {
+    "name": "find (weave read) > returns [] when the filter matches nothing",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/find.test.ts"
+  },
+  {
+    "name": "N:N (reference array) > sync() created the join table despite registration order",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N (reference array) > writes the link set via tagsIds and reads nothing by default",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N (reference array) > aggregates linked targets on expand",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N (reference array) > replaces the link set on re-save",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/many-to-many.test.ts"
+  },
+  {
+    "name": "N:N (reference array) > deleting a tag cascades the link, not the post",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/many-to-many.test.ts"
+  },
+  {
+    "name": "sync diff / generate (integration) > sync() adds the new column and index on the existing table",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/migrate.test.ts"
+  },
+  {
+    "name": "sync diff / generate (integration) > generate() emits the additive SQL without applying (idempotent after sync)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/migrate.test.ts"
+  },
+  {
+    "name": "sync diff / generate (integration) > generate() reports drift for a column missing from the shape",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/migrate.test.ts"
+  },
+  {
+    "name": "nested filtering (integration) > array column: has",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/nested-filter.test.ts"
+  },
+  {
+    "name": "nested filtering (integration) > N:N some: post linked to the sql tag",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/nested-filter.test.ts"
+  },
+  {
+    "name": "nested filtering (integration) > owned some: post with an unapproved comment",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/nested-filter.test.ts"
+  },
+  {
+    "name": "nested filtering (integration) > owned every: post where all comments approved",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/nested-filter.test.ts"
+  },
+  {
+    "name": "nested filtering (integration) > composed: keyword has OR linked-to-ts",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/nested-filter.test.ts"
+  },
+  {
+    "name": "operators (integration) > gte/lt range",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "operators (integration) > in list",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "operators (integration) > ilike",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "operators (integration) > isNull",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "operators (integration) > or",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "operators (integration) > not",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/operators.test.ts"
+  },
+  {
+    "name": "orderBy aninhado + where por timestamp > ordena por category.name (reference N:1 aninhada)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/order-where-ext.test.ts"
+  },
+  {
+    "name": "orderBy aninhado + where por timestamp > filtra por createdAt (campo gerenciado no where)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/order-where-ext.test.ts"
+  },
+  {
+    "name": "orderBy / count / paginate (integration) > orderBy desc + limit",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/paginate.test.ts"
+  },
+  {
+    "name": "orderBy / count / paginate (integration) > count respects the filter",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/paginate.test.ts"
+  },
+  {
+    "name": "orderBy / count / paginate (integration) > paginate returns docs + totals (zodmongo ergonomics)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/paginate.test.ts"
+  },
+  {
+    "name": "orderBy / count / paginate (integration) > paginate honors the where filter in both docs and totals",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/paginate.test.ts"
+  },
+  {
+    "name": "named projections (integration) > publicEmployee hides salary/email",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/projection.test.ts"
+  },
+  {
+    "name": "named projections (integration) > hrEmployee exposes the full set",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/projection.test.ts"
+  },
+  {
+    "name": "named projections (integration) > role decides the view; where still types against the entity",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/projection.test.ts"
+  },
+  {
+    "name": "named projections (integration) > paginate works through a projection",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/projection.test.ts"
+  },
+  {
+    "name": "reference (association) > saves via cityId and reads cityId by default (no target)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/reference.test.ts"
+  },
+  {
+    "name": "reference (association) > brings the target only when expanded",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/reference.test.ts"
+  },
+  {
+    "name": "reference (association) > ignores a stowaway target object on write; never touches the target table",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/reference.test.ts"
+  },
+  {
+    "name": "save (shred) > inserts a new aggregate and returns the nested tree",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/save.test.ts"
+  },
+  {
+    "name": "save (shred) > upserts by id and replaces the owned subtree",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/save.test.ts"
+  },
+  {
+    "name": "save (shred) > omitting an owned collection clears it",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/save.test.ts"
+  },
+  {
+    "name": "select (integration) > returns only id + selected fields",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/select.test.ts"
+  },
+  {
+    "name": "select (integration) > prunes nested owned + reference",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/select.test.ts"
+  },
+  {
+    "name": "select (integration) > paginate honors select in docs",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/driver/select.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > inc/max/min mergeiam no DO UPDATE; setOnInsert fica de fora; ON CONFLICT no composto",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > setOnInsert grava só no INSERT — não aparece no DO UPDATE SET",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > op sobre uma coluna da CHAVE (ex.: ts) é no-op — não duplica a coluna no INSERT",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > chave que não casa com nenhum unique declarado → erro claro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > chave de UMA coluna com .unique() é aceita (árbitro do ON CONFLICT)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > chave por reference N:1 resolve pra <campo>_id",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAccumulate — upsert mergeável do tier histórico > campo desconhecido na op → erro (barreira anti-injection)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/accumulate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > count + groupBy campo + orderBy por alias",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > sum de coluna camelCase → coluna snake",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > timeBucket 5min (epoch-floor UTC) — a query de aceitação",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > agregação do conjunto inteiro (sem groupBy)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > distinct → count(distinct col)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > percentile → percentile_cont WITHIN GROUP, p bindado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: percentile p fora de (0,1) → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > acumulador com { where } → FILTER (WHERE …), params na ordem do SELECT",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > histogram → N fronteiras viram N+1 baldes (< b0 · [b0,b1) · >= b1), bindadas",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > histogram com { where } → AND-ado em cada balde",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: histogram sem fronteiras → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: histogram com fronteiras não-crescentes → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > having → HAVING sobre a expressão do acumulador (não o alias)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > having shorthand (valor cru → =)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: having sobre alias inexistente → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > página → LIMIT/OFFSET (top-N)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > ordem dos params: FILTER (SELECT) antes de WHERE antes de HAVING",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > expressão div('errors','total') → inlina os aliases + nullif + cast numeric",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > acumulador INLINE como operando: div(count({where}), count()) sem selecionar os dois",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > número como operando (bindado) + mul aninhado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > having sobre alias de EXPRESSÃO → inlina a div no HAVING",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: expressão referencia alias inexistente → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: campo desconhecido no acumulador → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: alias inválido → erro (anti-injection)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — count/sum + groupBy + orderBy > guard: intervalo de timeBucket inválido → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — dot-paths (Pedido 2) > groupBy por path reference→escalar → LEFT JOIN no alvo, agrupa pela coluna dele",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — dot-paths (Pedido 2) > avg por path owned-1:1 → LEFT JOIN na tabela filha, coluna snake",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — dot-paths (Pedido 2) > groupBy por reference MULTI-HOP → JOINs encadeados, agrupa pela FK do alvo final",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — dot-paths (Pedido 2) > prefixo compartilhado: dois campos do mesmo owned reusam UM join",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — dot-paths (Pedido 2) > guard: agregar através de owned LIST sem unnest → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — unnest owned-array (Pedido 1) > a lista vira INNER JOIN (fan-out), os hops 1:1 intermediários são LEFT JOIN",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — unnest owned-array (Pedido 1) > groupBy/avg/FILTER/first resolvem contra a coluna do ELEMENTO",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "compileAggregate — unnest owned-array (Pedido 1) > guard: unnest de algo que não é lista → erro",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/aggregate.test.ts"
+  },
+  {
+    "name": "array column operators > has → = ANY",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "array column operators > hasSome → && ARRAY, hasEvery → @> ARRAY",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "array column operators > isEmpty → cardinality",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "reference N:1 nested filter > nested → EXISTS on target",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "reference N:1 nested filter > <field>Id filters the FK directly, no join",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "owned 1:N quantifiers > some → EXISTS",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "owned 1:N quantifiers > none → NOT EXISTS",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "owned 1:N quantifiers > every → NOT EXISTS(... AND NOT ...)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "reference N:N quantifier > some → EXISTS over join",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "recursion + composition > nests quantifiers and combines with logic",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/nested-filter.test.ts"
+  },
+  {
+    "name": "scalar operators > bare value is eq",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > comparison operators",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > in / notIn expand to placeholder lists",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > empty in matches nothing; empty notIn matches everything",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > like / ilike (string only)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > isNull renders IS [NOT] NULL with no param",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "scalar operators > eq null becomes IS NULL",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "logical operators > and / or group conditions",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "logical operators > not negates",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "logical operators > top-level keys are AND-combined",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/operators.test.ts"
+  },
+  {
+    "name": "compileFind orderBy / limit / offset > defaults to created_at when no orderBy",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind orderBy / limit / offset > renders multi-column orderBy in insertion order",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind orderBy / limit / offset > parameterizes limit and offset",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileCount > counts with no filter",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileCount > counts with a filter (same where compiler)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileCount > latestPer conta GRUPOS distintos",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind latestPer (DISTINCT ON — greatest-n-per-group) > DISTINCT ON (cols) e prefixa as colunas do grupo no ORDER BY",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind latestPer (DISTINCT ON — greatest-n-per-group) > multi-coluna: DISTINCT ON (a, b) e ambas lideram o ORDER BY",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind latestPer (DISTINCT ON — greatest-n-per-group) > sem latestPer: nada de DISTINCT ON (inalterado)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind latestPer (DISTINCT ON — greatest-n-per-group) > guard: latestPer com campo desconhecido → erro (anti-injection)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/order-paginate.test.ts"
+  },
+  {
+    "name": "compileFind > nests owned via correlated JSON subqueries",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/read.test.ts"
+  },
+  {
+    "name": "compileFind > parameterizes a where filter on root columns",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/read.test.ts"
+  },
+  {
+    "name": "compileFind > compiles a 1:1 owned as a single-object subquery",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/read.test.ts"
+  },
+  {
+    "name": "rehydrate > restores Date, bigint, and system timestamps",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/rehydrate.test.ts"
+  },
+  {
+    "name": "rehydrate > leaves null scalars untouched",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/rehydrate.test.ts"
+  },
+  {
+    "name": "rehydrate > recurses into owned children (array and object)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/rehydrate.test.ts"
+  },
+  {
+    "name": "select projection > emits only id + selected columns (no timestamps)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "select projection > can opt timestamps back in",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "select projection > prunes an owned child to selected sub-fields",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "select projection > select on a reference brings the pruned target (no FK unless selected)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "select projection > can select the raw FK via <field>Id",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "select projection > select: true on owned brings the full child",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/select.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > id: string cru ≡ eq (o caso que discutimos)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > coluna text",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > coluna int",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > coluna bool",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > coluna timestamptz (Date)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > campos gerenciados createdAt / updatedAt",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > FK de reference (categoryId) cru ≡ eq",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > cru dentro de and / or / not",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > cru atravessando reference (category.name)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > cru dentro de quantificador owned (items.some.qty)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — { field: v } ≡ { field: { eq: v } } > múltiplos campos crus = AND de eqs",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — null ≡ eq:null ≡ isNull > valor null vira IS NULL",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — null ≡ eq:null ≡ isNull > também aninhado",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — SQL concreto > { id: '123abc' } → product.id = $1 com o param certo",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — SQL concreto > { price: null } → IS NULL, sem param",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "where shorthand — SQL concreto > { name: 'x', price: 5 } → dois eqs AND-combinados",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/where-shorthand.test.ts"
+  },
+  {
+    "name": "renderInsert > builds a parameterized insert returning id",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/write.test.ts"
+  },
+  {
+    "name": "renderInsert > uses DEFAULT VALUES when there are no columns",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/write.test.ts"
+  },
+  {
+    "name": "renderUpsert > upserts on id conflict and bumps updated_at",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/write.test.ts"
+  },
+  {
+    "name": "renderUpsert > still bumps updated_at when only id is given",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/query/write.test.ts"
+  },
+  {
+    "name": "column builder > starts nullable, scalar, no default",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "column builder > is immutable — modifiers return a new column",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "column builder > chains modifiers into config",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "column builder > nullable() reverses notNull()",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "array() > defaults to NOT NULL DEFAULT '{}'",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "array() > can be made nullable explicitly",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "defineEntity > captures name and user columns",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/column.test.ts"
+  },
+  {
+    "name": "int8 default — number|bigint, guardado como number (IR jsonb-safe) > .default(0) guarda o number 0",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/int8-default.test.ts"
+  },
+  {
+    "name": "int8 default — number|bigint, guardado como number (IR jsonb-safe) > .default(0n) coage bigint→number (senão o IR jsonb quebraria)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/int8-default.test.ts"
+  },
+  {
+    "name": "int8 default — number|bigint, guardado como number (IR jsonb-safe) > toIR emite default number e o IR serializa em JSON (o push manda jsonb)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/int8-default.test.ts"
+  },
+  {
+    "name": "int8 default — number|bigint, guardado como number (IR jsonb-safe) > gen emite int8().notNull().default(0) — o arquivo gerado compila sem edição",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/schema/int8-default.test.ts"
+  },
+  {
+    "name": "catalog entries > int2 has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > int4 has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > int8 has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > numeric has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > float4 has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > float8 has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > text has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > varchar has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > bpchar has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > timestamptz has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > timestamp has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > date has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > time has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > interval has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > bool has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > uuid has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > json has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > jsonb has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > bytea has the right sqlType / oid / tsLabel",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > covers exactly the expected set",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > each entry's name matches its catalog key",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "catalog entries > the phantom tsType is undefined at runtime",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/catalog.test.ts"
+  },
+  {
+    "name": "registry > byName resolves every catalog entry",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/registry.test.ts"
+  },
+  {
+    "name": "registry > byOid resolves every catalog entry",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/registry.test.ts"
+  },
+  {
+    "name": "registry > has one entry per catalog member",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/registry.test.ts"
+  },
+  {
+    "name": "registry > OIDs are unique (no collisions)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/registry.test.ts"
+  },
+  {
+    "name": "registry > returns undefined for unknown lookups",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/types/registry.test.ts"
+  },
+  {
+    "name": "camelToSnake > splits camelCase boundaries",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/naming.test.ts"
+  },
+  {
+    "name": "camelToSnake > leaves single words untouched",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/naming.test.ts"
+  },
+  {
+    "name": "camelToSnake > does not emit a leading underscore",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/naming.test.ts"
+  },
+  {
+    "name": "indexName > follows the table_column_idx convention",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/naming.test.ts"
+  },
+  {
+    "name": "uuidv7 > produces a canonical uuid string",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/uuid.test.ts"
+  },
+  {
+    "name": "uuidv7 > sets the version (7) and variant (10) nibbles",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/uuid.test.ts"
+  },
+  {
+    "name": "uuidv7 > is time-ordered (later ids sort after earlier ones)",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/uuid.test.ts"
+  },
+  {
+    "name": "uuidv7 > is unique across many calls",
+    "file": "/home/mauro/dev-projects/weave/.worktrees/2026-10-26-totp-2fa-dashboard/tests/util/uuid.test.ts"
+  }
+]

@@ -17,6 +17,14 @@ export async function setup(): Promise<void> {
     )
   `;
 
+  // 2FA do operador (TOTP + recovery codes). Idempotente — entra também em
+  // bancos JÁ EXISTENTES sem destruir nada: o secret fica cifrado (AES-256-GCM,
+  // ver control-plane/twofa.ts) e os códigos de recuperação apenas como hashes.
+  await sql`ALTER TABLE weave_users ADD COLUMN IF NOT EXISTS twofa_secret text`;
+  await sql`ALTER TABLE weave_users ADD COLUMN IF NOT EXISTS twofa_enabled boolean NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE weave_users ADD COLUMN IF NOT EXISTS twofa_last_step bigint`;
+  await sql`ALTER TABLE weave_users ADD COLUMN IF NOT EXISTS twofa_recovery jsonb`;
+
   // Metastore das entidades: a planta (IR) de cada entidade, em jsonb.
   await sql`
     CREATE TABLE IF NOT EXISTS weave_entities (
